@@ -6,6 +6,7 @@ GET /api/units          ranked list from data/batch/index.json (contract: contra
 GET /api/units/{sid}    engine result from data/cache/<sid>.json (contract: contracts/unit_result.example.json)
 GET /api/health         what data is loaded
 GET /api/aerial/{sid}[/findings]   cached Vexcel clip + labelled findings (engine/vexcel.py)
+GET /api/vision/{sid}[/{pano_id}]  cached panorama checks + the image each is based on (engine/vision.py)
 POST /api/chat, POST /api/approve   agent event stream and approval gate (agent/chat.py)
 
 ROLLIN_DATA_DIR overrides the data folder (default: <repo>/data).
@@ -145,6 +146,28 @@ def aerial_findings(sid: str) -> dict:
     """What is visible from above, every answer labelled 'from aerial, estimated'."""
     _, findings = _aerial(sid)
     return {"sid": sid, "image_url": f"/api/aerial/{sid}", **json.loads(findings.read_text())}
+
+
+@app.get("/api/vision/{sid}")
+def vision(sid: str) -> dict:
+    """Panorama checks for a unit (bathroom fixtures, thresholds); every answer is an estimate citing a pano id."""
+    if not SID.match(sid):
+        raise HTTPException(400, "bad model id")
+    p = data_dir() / "cache" / "vision" / f"{sid}.json"
+    if not p.exists():
+        raise HTTPException(404, f"no vision check cached for {sid}; run `python -m engine.vision {sid}`")
+    return json.loads(p.read_text())
+
+
+@app.get("/api/vision/{sid}/{pano_id}")
+def vision_image(sid: str, pano_id: str) -> FileResponse:
+    """The defurnished panorama views (2x2 grid) a vision answer is based on."""
+    if not SID.match(sid) or not re.match(r"^[A-Za-z0-9]{3,40}$", pano_id):
+        raise HTTPException(400, "bad id")
+    img = data_dir() / "cache" / "vision" / f"{sid}_{pano_id}.jpg"
+    if not img.exists():
+        raise HTTPException(404, "image not cached")
+    return FileResponse(img, media_type="image/jpeg", headers={"Cache-Control": "max-age=3600"})
 
 
 @lru_cache(maxsize=256)

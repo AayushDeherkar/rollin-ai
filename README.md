@@ -39,6 +39,12 @@ uvicorn agent.server:app --port 8000 --reload
 - To serve data from another folder, set `ROLLIN_DATA_DIR=/path/to/data`.
 - Without real data, the web app can build against the files in `contracts/`.
 
+## Vision check (defurnished panoramas)
+```bash
+python -m engine.vision demo-main demo-backup     # caches data/cache/vision/<sid>.json + images
+```
+For each bathroom and each blocked door the engine finds, the nearest panorama of the unit's **defurnished** view is shown to the vision model. It answers fixed questions: bathtub, roll-in shower or step-in shower; grab bars; step or raised threshold. Answers are validated to a fixed set, and anything not visible is `unclear`. Every answer cites its pano id and is labelled "from defurnished panorama, estimated". The live agent streams cached results as findings; it doesn't run vision during a chat.
+
 ## Offline demo pack
 ```bash
 python -m engine.demo_pack     # writes ~/rollin-share/rollin_demo_pack.zip (it refuses to write inside the repo)
