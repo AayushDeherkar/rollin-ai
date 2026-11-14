@@ -16,12 +16,27 @@ const sleep = (ms: number, signal: AbortSignal) =>
     signal.addEventListener("abort", onAbort, { once: true });
   });
 
+/**
+ * The synthetic contract run. next dev and next start run from web/ with the contracts beside it;
+ * a deployed function may run from the repo root instead (next.config traces the file in).
+ */
+async function readContractRun(): Promise<string> {
+  const name = path.join("contracts", "chat_events.example.jsonl");
+  const tried = [path.join(process.cwd(), "..", name), path.join(process.cwd(), name)];
+  for (const file of tried) {
+    try {
+      return await readFile(file, "utf8");
+    } catch {
+      /* try the next place */
+    }
+  }
+  throw new Error("the synthetic contract run (contracts/chat_events.example.jsonl) is not in this build");
+}
+
 export async function localReplayStream(pace: number, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> {
-  // next dev and next start run from web/; the contracts sit beside it
-  const file = path.join(process.cwd(), "..", "contracts", "chat_events.example.jsonl");
   type Ev = Record<string, unknown> & { type: string; id: string; ts?: string };
   const events: Ev[] = [];
-  for (const line of (await readFile(file, "utf8")).split("\n")) {
+  for (const line of (await readContractRun()).split("\n")) {
     if (!line.trim()) continue;
     try {
       events.push(JSON.parse(line) as Ev);

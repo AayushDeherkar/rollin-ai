@@ -28,6 +28,7 @@ import { ApartmentScene, modelCentre, modelToWorld } from "./apartment-scene";
 import { ApartmentLegend, EvidencePanel, RoomCard, RoomStrip, VerdictLine, type EvidenceKind } from "./apartment-overlay";
 import type { PoseGoal } from "./stage-canvas";
 import { StepBar } from "./step-bar";
+import { PublicBadge } from "@/components/public-badge";
 import { ChairPlate } from "./chair-plate";
 import { ChairScene } from "./chair-scene";
 
@@ -381,7 +382,10 @@ function Stage() {
         </StageCanvas>
       </div>
       <header className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-6 p-6">
-        <StepBar step={step} available={available} onStep={setStep} />
+        <div className="flex items-center gap-3">
+          <StepBar step={step} available={available} onStep={setStep} />
+          <PublicBadge />
+        </div>
         {step === "search" && (
           <AgentPill
             run={agent.run}

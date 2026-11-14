@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Workbench } from "@/components/workbench";
 import { FallbackNotice } from "@/components/fallback-notice";
+import { PublicBadge } from "@/components/public-badge";
 
 export const metadata: Metadata = { title: "Rollin' (classic)" };
 
@@ -13,6 +14,7 @@ export default function Classic() {
     <>
       <Workbench />
       <FallbackNotice />
+      <PublicBadge className="fixed right-6 bottom-6 z-50" />
     </>
   );
 }

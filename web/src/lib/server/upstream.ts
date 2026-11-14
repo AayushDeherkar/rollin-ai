@@ -6,10 +6,13 @@
  * ROLLIN_API_URL, e.g. http://localhost:8000 (see web/.env.example). Unset = replay only.
  */
 import { ORIGIN_HEADER, REPLAY_REASON_HEADER, type Origin } from "@/lib/contract";
+import { PUBLIC_REPLAY } from "@/lib/public";
 
 const TIMEOUT_MS = 4000;
 
 export function apiBase(): string | null {
+  // the public build is fixture-only, whatever the environment says
+  if (PUBLIC_REPLAY) return null;
   const url = process.env.ROLLIN_API_URL?.trim();
   return url ? url.replace(/\/+$/, "") : null;
 }
@@ -23,7 +26,7 @@ export type Upstream = { ok: true; res: Response } | { ok: false; status: number
  */
 export async function upstream(path: string, init?: RequestInit, timeoutMs = TIMEOUT_MS): Promise<Upstream> {
   const base = apiBase();
-  if (!base) return { ok: false, status: null, reason: "ROLLIN_API_URL is not set" };
+  if (!base) return { ok: false, status: null, reason: PUBLIC_REPLAY ? "public replay: synthetic data only" : "ROLLIN_API_URL is not set" };
   const connect = new AbortController();
   const timer = setTimeout(() => connect.abort(), timeoutMs);
   const signal = init?.signal ? AbortSignal.any([init.signal, connect.signal]) : connect.signal;
