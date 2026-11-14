@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { RotateCcw } from "lucide-react";
 import { MotionConfig } from "motion/react";
 import { countRooms } from "@/lib/contract";
-import { useUnitPair, useUnitsList } from "@/lib/data";
+import { useNoPlan, useUnitPair, useUnitsList } from "@/lib/data";
 import { useAgentRun } from "@/lib/agent";
 import type { Evidence } from "@/components/trace/timeline";
 import { fixtureUnit } from "@/lib/fixtures";
@@ -21,6 +21,8 @@ import { PlanLegend } from "@/components/plan/plan-legend";
 import { ChairLayer } from "@/components/plan/chair-layer";
 import { ChairCallout } from "@/components/plan/chair-callout";
 import { ScenarioToggle, type Scenario } from "@/components/plan/scenario-toggle";
+import { PlanStage } from "@/components/plan/plan-stage";
+import { useDriveProgress } from "@/lib/drive-progress";
 
 type Preview = PanelState | null;
 
@@ -75,7 +77,10 @@ function Sheet() {
   const list = useUnitsList();
   const rows = list.status === "ready" ? list.data.units : [];
   // a replayed list only has plans for the units the contract fixtures ship
-  const hasPlan = (s: string) => list.status !== "ready" || list.origin === "live" || fixtureUnit(s, false) !== null;
+  // and a live batch only has models cached for some units: the API's 404s are remembered
+  const noPlan = useNoPlan();
+  const hasPlan = (s: string) =>
+    !noPlan.includes(s) && (list.status !== "ready" || list.origin === "live" || fixtureUnit(s, false) !== null);
 
   const [chosen, setChosen] = useState<string | null>(null);
   const sid = chosen ?? forcedSid ?? (rows.find((r) => hasPlan(r.sid)) ?? rows[0])?.sid ?? null;
@@ -129,6 +134,8 @@ function Sheet() {
 
   const onStart = useCallback(() => setDriving(true), []);
   const onSettled = useCallback(() => setDriving(false), []);
+  // one drive, shared by the 3D model and the 2D plan
+  const { progress, s: route } = useDriveProgress(drive, runId, onStart, onSettled);
 
   // the list follows the scenario: with offset hinges it shows and ranks by the API's with_hinges figures,
   // in the API's own order (score, then fewer blocked, then nearer, then id)
@@ -153,7 +160,7 @@ function Sheet() {
     counts,
     summary,
     distanceKm: r.distance_km ?? null,
-    note: hasPlan(r.sid) ? null : "No plan in the replay",
+    note: hasPlan(r.sid) ? null : noPlan.includes(r.sid) ? "No model cached" : "No plan in the replay",
   }));
   if (sid && !rows.some((r) => r.sid === sid) && entry) {
     const shown = hingesOn && entry.hinges ? entry.hinges : entry.asScanned;
@@ -234,39 +241,43 @@ function Sheet() {
               {unit && floor && (
                 <div className="flex h-full flex-col">
                   <div className="min-h-0 flex-1">
-                    <FloorPlan
+                    <PlanStage
                       unit={unit}
-                      baseline={scenario === "hinges" ? entry?.asScanned : null}
+                      floor={floor}
+                      drive={drive}
+                      driving={driving}
+                      progress={progress}
+                      s={route}
                       selectedRoom={target}
                       onRoomSelect={driveTo}
-                      highlightDoor={drive?.kind === "blocked" && !driving ? (drive.door?.edge ?? null) : null}
-                      overlay={({ projection }) =>
-                        drive && (
-                          <ChairLayer
-                            key={`${unit.model}:${target}`}
-                            drive={drive}
-                            chairIn={unit.chair_in}
-                            projection={projection}
-                            runId={runId}
-                            onStart={onStart}
-                            onSettled={onSettled}
-                          />
-                        )
-                      }
-                      annotations={({ projection, size, gutter }) =>
-                        drive &&
-                        !driving && (
-                          <ChairCallout
-                            drive={drive}
-                            floor={floor}
-                            chairIn={unit.chair_in}
-                            projection={projection}
-                            size={size}
-                            gutter={gutter}
-                            scenario={unit.scenario}
-                          />
-                        )
-                      }
+                      renderPlan={(compact) => (
+                        <FloorPlan
+                          unit={unit}
+                          compact={compact}
+                          baseline={scenario === "hinges" ? entry?.asScanned : null}
+                          selectedRoom={compact ? null : target}
+                          onRoomSelect={compact ? undefined : driveTo}
+                          highlightDoor={drive?.kind === "blocked" && !driving ? (drive.door?.edge ?? null) : null}
+                          overlay={({ projection }) =>
+                            drive && <ChairLayer drive={drive} chairIn={unit.chair_in} projection={projection} progress={progress} s={route} />
+                          }
+                          annotations={({ projection, size, gutter }) =>
+                            !compact &&
+                            drive &&
+                            !driving && (
+                              <ChairCallout
+                                drive={drive}
+                                floor={floor}
+                                chairIn={unit.chair_in}
+                                projection={projection}
+                                size={size}
+                                gutter={gutter}
+                                scenario={unit.scenario}
+                              />
+                            )
+                          }
+                        />
+                      )}
                     />
                   </div>
                   <PlanLegend unit={unit} floor={floor} />
