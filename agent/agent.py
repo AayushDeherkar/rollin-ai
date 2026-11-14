@@ -322,6 +322,35 @@ def counts_of(rooms: list[dict]) -> dict:
     return {k: num(v, "estimated") for k, v in c.items()}
 
 
+VISION_WORDS = {"bathtub": "bathtub", "roll_in_shower": "roll-in shower", "step_in_shower": "step-in shower",
+                "unclear": "unclear", "yes": "yes", "no": "no"}
+
+
+def vision_findings(sid: str) -> list[dict]:
+    """Findings from data/cache/vision/<sid>.json (engine/vision.py). Missing or unreadable cache: none."""
+    try:
+        doc = json.loads((data_dir() / "cache" / "vision" / f"{sid}.json").read_text())
+    except (OSError, ValueError):
+        return []
+    out = []
+    for it in (doc.get("items") or []) if isinstance(doc, dict) else []:
+        if not isinstance(it, dict) or not it.get("pano_id"):
+            continue                                  # no panorama near the spot: nothing seen, nothing claimed
+        ans = it.get("answers") or {}
+        parts = [f"{k.replace('_', ' ')}: {VISION_WORDS.get(v.get('answer'), 'unclear')}" for k, v in ans.items()]
+        where = f"{it['room']} door" if it.get("kind") == "door" else it["room"]
+        numbers = {"pano_distance": num(it.get("pano_distance_m"), "measured", "m")}
+        if it.get("door_in") is not None:
+            numbers["door_width"] = num(it["door_in"], "measured", "in")
+        out.append({"sid": sid, "room_id": it.get("room_id"), "room": it["room"], "status": it.get("status"),
+                    "scenario": "panorama check", "label": "from defurnished panorama, estimated",
+                    "text": f"{where}: {'; '.join(parts)} (from defurnished panorama, estimated)",
+                    "numbers": numbers, "answers": ans,
+                    "evidence": {"kind": "pano", "pano_id": it["pano_id"],
+                                 "image_url": f"/api/vision/{sid}/{it['pano_id']}"}})
+    return out
+
+
 def findings_from_fit(res: dict, chair_w: float) -> list[dict]:
     """One finding per blocked/unknown room, numbers straight from the engine."""
     out = []
@@ -366,6 +395,7 @@ class Run:
         self.calls: dict[str, tuple[str, dict]] = {}
         self.fits: dict[tuple[str, str], dict] = {}          # (sid, scenario) -> raw room counts from run_fit
         self.found: dict[tuple[str, str, str], dict] = {}     # (sid, room_id, scenario) -> finding summary
+        self.vision_done: set[str] = set()
 
     def ev(self, type_: str, **body) -> dict:
         self.n += 1
@@ -388,6 +418,18 @@ class Run:
                                    args=wrap_args(tc["args"])))
         return out
 
+    def vision_events(self, sid: str) -> list[dict]:
+        """Cached panorama checks for a unit as findings (bathroom fixtures, thresholds), each citing its pano id."""
+        if sid in self.vision_done:
+            return []
+        self.vision_done.add(sid)
+        out = []
+        for item in vision_findings(sid):
+            self.found[(sid, f"pano:{item['evidence']['pano_id']}", "panorama check")] = {
+                "room": item["room"], "status": item["status"], "turning": False}
+            out.append(self.ev("finding", **item))
+        return out
+
     def fit_events(self, data: dict, args: dict) -> list[dict]:
         """A run_fit result as a tool event plus one finding per blocked/unknown room (deduplicated)."""
         raw = {s: sum(1 for r in data["rooms"] if r["status"] == s) for s in ("reachable", "blocked", "unknown")}
@@ -400,7 +442,7 @@ class Run:
                 self.seen_findings.add(key)
                 self.found[key] = {"room": f["room"], "status": f["status"], "turning": "turning_circle" in f["numbers"]}
                 out.append(self.ev(f.pop("type"), **f))
-        return out
+        return out + self.vision_events(data["sid"])
 
     def from_tool(self, m: Any) -> list[dict]:
         name, args = self.calls.get(getattr(m, "tool_call_id", "") or "", (getattr(m, "name", ""), {}))
@@ -474,6 +516,8 @@ class Run:
             out.append({"claim": "Offset hinges add about 1.75 in of clear width", "basis": "assumed"})
         if any(f.get("turning") for f in self.found.values()):
             out.append({"claim": "Bathroom turning circle", "basis": "estimated", "note": "walls only"})
+        if self.vision_done and any(k[2] == "panorama check" for k in self.found):
+            out.append({"claim": "Bathroom fixtures and thresholds from defurnished panoramas", "basis": "estimated"})
         if any(f["status"] == "unknown" for f in self.found.values()):
             out.append({"claim": "Rooms with no measured door", "basis": "unknown"})
         return out
