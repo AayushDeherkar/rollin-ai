@@ -32,10 +32,11 @@ export function PlanLegend({ unit, floor }: { unit: UnitResult; floor: Floor }) 
         </span>
         {floor.rooms.some((r) => r.turning_space?.center) && (
           <span className="flex items-center gap-2">
-            <svg aria-hidden viewBox="0 0 20 20" className="size-5">
-              <circle cx="10" cy="10" r="8" fill="none" stroke="var(--block)" strokeWidth="1.75" strokeDasharray="4 3" />
+            <svg aria-hidden viewBox="0 0 44 20" className="h-5 w-11">
+              <circle cx="10" cy="10" r="8" fill="none" stroke="var(--reach)" strokeWidth="1.75" />
+              <circle cx="34" cy="10" r="8" fill="none" stroke="var(--block)" strokeWidth="1.75" strokeDasharray="4 3" />
             </svg>
-            60 in turning circle, walls only
+            60 in turning circle fits / does not, walls only
           </span>
         )}
       </div>
