@@ -326,8 +326,9 @@ VISION_WORDS = {"bathtub": "bathtub", "roll_in_shower": "roll-in shower", "step_
                 "unclear": "unclear", "yes": "yes", "no": "no"}
 
 
-def vision_findings(sid: str) -> list[dict]:
-    """Findings from data/cache/vision/<sid>.json (engine/vision.py). Missing or unreadable cache: none."""
+def vision_findings(sid: str, chair_in: list[float] | None = None) -> list[dict]:
+    """Findings from data/cache/vision/<sid>.json (engine/vision.py). Missing or unreadable cache: none.
+    Door checks depend on which doors block, i.e. on the chair: they are shown only for the chair they were made for."""
     try:
         doc = json.loads((data_dir() / "cache" / "vision" / f"{sid}.json").read_text())
     except (OSError, ValueError):
@@ -336,18 +337,24 @@ def vision_findings(sid: str) -> list[dict]:
     for it in (doc.get("items") or []) if isinstance(doc, dict) else []:
         if not isinstance(it, dict) or not it.get("pano_id"):
             continue                                  # no panorama near the spot: nothing seen, nothing claimed
+        made_for = doc.get("chair_in") or [27.0, 42.0]
+        if it.get("kind") == "door" and chair_in and [float(x) for x in chair_in] != [float(x) for x in made_for]:
+            continue
         ans = it.get("answers") or {}
         parts = [f"{k.replace('_', ' ')}: {VISION_WORDS.get(v.get('answer'), 'unclear')}" for k, v in ans.items()]
         where = f"{it['room']} door" if it.get("kind") == "door" else it["room"]
-        numbers = {"pano_distance": num(it.get("pano_distance_m"), "measured", "m")}
+        numbers = {"pano_distance": num(it.get("pano_distance_m"), "estimated", "m")}
         if it.get("door_in") is not None:
             numbers["door_width"] = num(it["door_in"], "measured", "in")
-        out.append({"sid": sid, "room_id": it.get("room_id"), "room": it["room"], "status": it.get("status"),
+        image_url = f"/api/vision/{sid}/{it['pano_id']}"
+        out.append({"sid": sid, "room_id": it.get("room_id"), "room": it["room"],
                     "scenario": "panorama check", "label": "from defurnished panorama, estimated",
                     "text": f"{where}: {'; '.join(parts)} (from defurnished panorama, estimated)",
-                    "numbers": numbers, "answers": ans,
-                    "evidence": {"kind": "pano", "pano_id": it["pano_id"],
-                                 "image_url": f"/api/vision/{sid}/{it['pano_id']}"}})
+                    "numbers": numbers, "image_url": image_url,
+                    "findings": [{"item": k, "question": v.get("question", ""), "answer": v.get("answer", "unclear"),
+                                  "note": v.get("note", ""), "basis": "estimated",
+                                  "label": "from defurnished panorama, estimated"} for k, v in ans.items()],
+                    "evidence": {"kind": "pano", "pano_id": it["pano_id"], "image_url": image_url}})
     return out
 
 
@@ -418,15 +425,15 @@ class Run:
                                    args=wrap_args(tc["args"])))
         return out
 
-    def vision_events(self, sid: str) -> list[dict]:
+    def vision_events(self, sid: str, chair_in: list[float] | None = None) -> list[dict]:
         """Cached panorama checks for a unit as findings (bathroom fixtures, thresholds), each citing its pano id."""
         if sid in self.vision_done:
             return []
         self.vision_done.add(sid)
         out = []
-        for item in vision_findings(sid):
+        for item in vision_findings(sid, chair_in):
             self.found[(sid, f"pano:{item['evidence']['pano_id']}", "panorama check")] = {
-                "room": item["room"], "status": item["status"], "turning": False}
+                "room": item["room"], "status": "panorama", "turning": False}
             out.append(self.ev("finding", **item))
         return out
 
@@ -442,7 +449,7 @@ class Run:
                 self.seen_findings.add(key)
                 self.found[key] = {"room": f["room"], "status": f["status"], "turning": "turning_circle" in f["numbers"]}
                 out.append(self.ev(f.pop("type"), **f))
-        return out + self.vision_events(data["sid"])
+        return out + self.vision_events(data["sid"], data.get("chair_in"))
 
     def from_tool(self, m: Any) -> list[dict]:
         name, args = self.calls.get(getattr(m, "tool_call_id", "") or "", (getattr(m, "name", ""), {}))

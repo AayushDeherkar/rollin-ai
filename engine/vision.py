@@ -143,6 +143,8 @@ def check_unit(sid: str, refresh: bool = False) -> dict:
     path = vision_dir() / f"{sid}.json"
     if path.exists() and not refresh:
         return json.loads(path.read_text())
+    if len(get_model(sid).get("floors") or []) > 1:
+        return {"sid": sid, "error": "multi-floor unit: panoramas cannot be matched to a storey, not checked"}
     view = ((query(Q_VIEW, {"id": sid}).get("model") or {}).get("view") or {}).get("id")
     if not view:
         return {"sid": sid, "error": "no defurnished view for this model"}
@@ -152,21 +154,24 @@ def check_unit(sid: str, refresh: bool = False) -> dict:
     for t in targets(sid):
         hit = nearest_pano(panos, t)
         if not hit:
-            items.append({**{k: t[k] for k in ("kind", "room_id", "room", "status")}, "pano_id": None,
+            items.append({**{k: t[k] for k in ("kind", "room_id", "room")}, "pano_id": None,
                           "answers": {k: {"question": q, "answer": "unclear", "note": "no panorama near this spot"}
                                       for k, (q, _) in QUESTIONS[t["kind"]].items()}, "label": LABEL})
             continue
         pano, dist = hit
         grid, floor = fetch_faces(pano)
         name = f"{sid}_{pano['id']}.jpg"
-        if name not in images:
-            grid.save(vision_dir() / name, quality=80)
+        if name not in images:                        # evidence = exactly what the model saw: sides grid + floor
+            sheet = Image.new("RGB", (3 * FACE_PX, 2 * FACE_PX), "white")
+            sheet.paste(grid, (0, 0))
+            sheet.paste(floor, (2 * FACE_PX, FACE_PX // 2))
+            sheet.save(vision_dir() / name, quality=80)
             images.append(name)
-        items.append({**{k: t[k] for k in ("kind", "room_id", "room", "status")},
+        items.append({**{k: t[k] for k in ("kind", "room_id", "room")},
                       **({"door_in": t["door_in"]} if "door_in" in t else {}),
                       "pano_id": pano["id"], "pano_distance_m": round(dist, 2), "image": name,
                       "answers": ask(t["kind"], t["room"], [grid, floor]), "label": LABEL})
-    res = {"sid": sid, "view": "matterport.model.defurnished", "model": os.environ.get("MODEL_NAME"),
+    res = {"sid": sid, "view": "matterport.model.defurnished", "model": os.environ.get("MODEL_NAME"), "chair_in": [27.0, 42.0],
            "items": items, "images": images}
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(res, indent=1))
