@@ -30,6 +30,11 @@ No real Matterport, CoStar or Vexcel data is ever stored here. Lat/lon values ar
   - `assumed`: a fixed assumption (offset hinges add ~1.75 in).
   - `asked`: told to us by a person, with `source` (`user` for the chair size; `landlord` for answers).
   - `unknown`: not in the data; becomes a question.
+- Fields the live agent adds (additive):
+  - `plan` has a `source`: `orchestrator` for the fixed pipeline it always emits first, or `model` when the model writes its own todo list.
+  - `tool` events can carry `subagent` (for `task`), `agent` and `status` (`called` or `done`).
+  - `finding` events carry `scenario` (`as scanned` or `offset hinges on every door`) and `evidence.edge` for the door that stops the chair.
+  - `final.shortlist[]` can carry `with_hinges` counts.
 - Replayed runs (`POST /api/chat?replay=1`) add `replay: true` and `recorded_ts` (the original time) to every event, and suffix `action_id` with the replay's `run_id`. Live runs never set `replay`.
 - `approval_needed` carries an `action_id`; the stream then ends with `final` listing `awaiting_approval`. The web/iMessage side calls `POST /api/approve {action_id, approved}`.
 
