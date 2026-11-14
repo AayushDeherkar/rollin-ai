@@ -47,6 +47,8 @@ export function resultsText(
   chair: [number, number] | null,
   webUrl: string,
   fromThisSearch = true,
+  /** the listed unit whose plan opens (checked by the caller); null when none of them has one */
+  planSid: string | null = units[0]?.sid ?? null,
 ): string {
   const lines: string[] = [];
   if (run.replay) lines.push("This is a replayed run, not a live search.");
@@ -67,7 +69,11 @@ export function resultsText(
     ? `Top ${top.length} for ${who}, estimated from the floor plans:`
     : `The search returned no shortlist. Top ${top.length} of the latest ranked list (not specific to your message), estimated from the floor plans:`;
   lines.push(`${title}\n${rows.join("\n")}`);
-  lines.push(`See the plans: ${webUrl.replace(/\/+$/, "")}/?sid=${encodeURIComponent(top[0].sid)}`);
+  const web = webUrl.replace(/\/+$/, "");
+  const at = planSid === null ? -1 : top.findIndex((u) => u.sid === planSid);
+  if (at === 0) lines.push(`See the plans: ${web}/?sid=${encodeURIComponent(top[0].sid)}`);
+  else if (at > 0) lines.push(`See the plans (I couldn't open the floor plan for ${at === 1 ? "unit 1" : "units 1 and 2"}, so this opens unit ${at + 1}): ${web}/?sid=${encodeURIComponent(top[at].sid)}`);
+  else lines.push(`I couldn't open the floor plans for these ${top.length}. Browse the units whose plans open: ${web}`);
   return lines.join("\n\n");
 }
 
@@ -164,7 +170,11 @@ export class Conversations {
     const run = await this.rollin.run(text, chair ? { sender_id: sender, chair_in: chair } : { sender_id: sender });
     const shortlist = shortlistOf(run);
     const units = shortlist ?? (await this.rollin.units());
-    await say(resultsText(run, units, chair, this.webUrl, shortlist !== null));
+    // link to a unit whose plan opens: a ranked unit may have no model cached
+    const top = units.slice(0, 3);
+    const opens = await Promise.all(top.map((u) => this.rollin.hasPlan(u.sid)));
+    const planSid = top.find((_, i) => opens[i])?.sid ?? null;
+    await say(resultsText(run, units, chair, this.webUrl, shortlist !== null, planSid));
     const ask = approvalText(run);
     if (ask) {
       await say(ask.text);
