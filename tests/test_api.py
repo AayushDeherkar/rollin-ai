@@ -48,6 +48,8 @@ def test_units_hinges_reranks(client):
     assert demo["scenario"] == "offset hinges on every door"
     assert demo["counts"] == demo["with_hinges"]["counts"]
     assert demo["score"] > next(u for u in plain if u["sid"] == "synthetic_demo")["score"]
+    assert demo["summary"] == demo["with_hinges"]["summary"] and "Bedroom" not in demo["summary"]
+    assert plain[0]["sid"] == "synthetic_1br" and hinged[0]["sid"] == "synthetic_demo"   # order follows hinges
 
 
 def test_units_filters(client):

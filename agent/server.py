@@ -93,7 +93,9 @@ def units(lat: float | None = None, lon: float | None = None, radius_km: float |
         if beds is not None and beds_of(u.get("name")) != beds:
             continue
         if hinges and u.get("with_hinges"):
-            u["score"], u["counts"] = u["with_hinges"]["score"], u["with_hinges"]["counts"]
+            h = u["with_hinges"]
+            u["score"], u["counts"] = h["score"], h["counts"]
+            u["summary"] = h.get("summary") or "with offset hinges (summary not computed; rerun the batch)"
             u["scenario"] = "offset hinges on every door"
         rows.append(u)
     rows.sort(key=lambda r: (-r["score"], r["counts"]["blocked"], r.get("distance_km") or 0, r["sid"]))

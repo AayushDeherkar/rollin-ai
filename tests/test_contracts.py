@@ -56,6 +56,7 @@ def test_units_list_shape_and_ranking():
     for u in d["units"]:
         assert {"sid", "name", "lat", "lon", "score", "counts", "summary", "basis", "source",
                 "distance_km", "with_hinges", "usable"} <= set(u)
+        assert set(u["with_hinges"]) == {"score", "counts", "summary"}
         assert set(u["with_hinges"]["counts"]) == {"reachable", "blocked", "unknown"}
         assert set(u["counts"]) == {"reachable", "blocked", "unknown"}
         assert set(u["basis"].values()) <= BASIS

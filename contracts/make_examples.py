@@ -15,7 +15,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from engine.batch import km  # noqa: E402
-from engine.summary import rank, room_counts, score, unit_row  # noqa: E402
+from engine.summary import rank, room_counts, score, sentence, unit_row  # noqa: E402
 
 C = ROOT / "contracts"
 CHAIR = (27.0, 42.0)
@@ -36,7 +36,8 @@ def batch_row(scanned: dict, hinged: dict) -> dict:
     row = unit_row(scanned, lat, lon, source="batch")
     hc = room_counts(hinged)
     row.update({"distance_km": round(km(29.7106, -95.3990, lat, lon), 2),
-                "with_hinges": {"score": score(hc), "counts": hc}, "usable": True, "synthetic": True})
+                "with_hinges": {"score": score(hc), "counts": hc, "summary": sentence(hinged, hc)},
+                "usable": True, "synthetic": True})
     row["basis"]["distance_km"] = "estimated"
     return row
 
