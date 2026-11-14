@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { RotateCcw } from "lucide-react";
 import { MotionConfig } from "motion/react";
-import type { UnitResult } from "@/lib/contract";
-import { FIXTURE_LABEL, fixtureAsScanned, fixtureHinges } from "@/lib/fixtures";
+import { countRooms } from "@/lib/contract";
+import { useUnitPair, useUnitsList } from "@/lib/data";
+import { fixtureUnit } from "@/lib/fixtures";
 import { buildDrive, defaultTarget } from "@/lib/chair";
 import type { PanelState } from "@/components/sheet/panel";
 import { PatternDefs } from "@/components/sheet/status";
 import { TitleBlock } from "@/components/sheet/title-block";
 import { UnitList, type UnitListItem } from "@/components/panels/unit-list";
+import { ReplayTag } from "@/components/sheet/replay-tag";
 import { PlanPanel } from "@/components/panels/plan-panel";
 import { TracePanel } from "@/components/panels/trace-panel";
 import { FloorPlan } from "@/components/plan/floor-plan";
@@ -17,14 +19,6 @@ import { PlanLegend } from "@/components/plan/plan-legend";
 import { ChairLayer } from "@/components/plan/chair-layer";
 import { ChairCallout } from "@/components/plan/chair-callout";
 import { ScenarioToggle, type Scenario } from "@/components/plan/scenario-toggle";
-
-interface UnitEntry {
-  asScanned: UnitResult;
-  hinges: UnitResult | null;
-  source: string;
-}
-
-const UNITS: UnitEntry[] = [{ asScanned: fixtureAsScanned, hinges: fixtureHinges, source: FIXTURE_LABEL }];
 
 type Preview = PanelState | null;
 
@@ -37,6 +31,15 @@ const noSubscribe = () => () => {};
 
 function usePreviewState(): Preview {
   return useSyncExternalStore(noSubscribe, readPreview, () => null);
+}
+
+/** `?sid=<model id>` opens one unit by id, whether or not it is in the ranked list. */
+function readForcedSid(): string | null {
+  const s = new URLSearchParams(window.location.search).get("sid");
+  return s && /^[A-Za-z0-9_]{3,40}$/.test(s) ? s : null;
+}
+function useForcedSid(): string | null {
+  return useSyncExternalStore(noSubscribe, readForcedSid, () => null);
 }
 
 /**
@@ -66,13 +69,24 @@ export function Workbench() {
 
 function Sheet() {
   const preview = usePreviewState();
-  const [selected, setSelected] = useState<string | null>(UNITS[0]?.asScanned.model ?? null);
+  const forcedSid = useForcedSid();
+  const list = useUnitsList();
+  const rows = list.status === "ready" ? list.data.units : [];
+  // a replayed list only has plans for the units the contract fixtures ship
+  const hasPlan = (s: string) => list.status !== "ready" || list.origin === "live" || fixtureUnit(s, false) !== null;
+
+  const [chosen, setChosen] = useState<string | null>(null);
+  const sid = chosen ?? forcedSid ?? (rows.find((r) => hasPlan(r.sid)) ?? rows[0])?.sid ?? null;
+  const pair = useUnitPair(sid);
+  const entry = pair.status === "ready" ? pair.data : null;
+
   const [scenario, setScenario] = useState<Scenario>("scanned");
-  const entry = UNITS.find((u) => u.asScanned.model === selected) ?? null;
   const unit = entry ? (scenario === "hinges" && entry.hinges ? entry.hinges : entry.asScanned) : null;
   const floor = unit?.floors[0] ?? null;
 
-  const [target, setTarget] = useState<string | null>(() => (entry ? defaultTarget(entry.asScanned.floors[0]) : null));
+  // the room the chair heads for: picked by the user for this unit, else the unit's default
+  const [pick, setPick] = useState<{ sid: string; room: string } | null>(null);
+  const target = pick && pick.sid === sid ? pick.room : entry ? defaultTarget(entry.asScanned.floors[0]) : null;
   const [runId, setRunId] = useState(0);
   const [glideRunning, setDriving] = useState(true);
 
@@ -90,22 +104,34 @@ function Sheet() {
     setRunId((n) => n + 1);
   }, [drive?.kind]);
 
-  const driveTo = useCallback((roomId: string) => {
-    setTarget(roomId);
-    setDriving(true);
-    setRunId((n) => n + 1);
-  }, []);
+  const driveTo = useCallback(
+    (roomId: string) => {
+      if (!sid) return;
+      setPick({ sid, room: roomId });
+      setDriving(true);
+      setRunId((n) => n + 1);
+    },
+    [sid],
+  );
   const onStart = useCallback(() => setDriving(true), []);
   const onSettled = useCallback(() => setDriving(false), []);
 
-  const listState: PanelState = preview ?? "ready";
-  const planState: PanelState = preview ?? (unit ? "ready" : "empty");
-  const traceState: PanelState = preview ?? "empty";
-  const [w, l] = (unit ?? fixtureAsScanned).chair_in;
-  const listItems: UnitListItem[] = UNITS.map((u) => ({
-    unit: u.asScanned.model === selected && unit ? unit : u.asScanned,
-    source: u.source,
+  const listItems: UnitListItem[] = rows.map((r) => ({
+    sid: r.sid,
+    name: r.name,
+    counts: r.counts,
+    note: hasPlan(r.sid) ? null : "No plan in the replay",
   }));
+  if (sid && !rows.some((r) => r.sid === sid) && entry) {
+    listItems.unshift({ sid, name: entry.asScanned.name, counts: countRooms(entry.asScanned), note: "Opened by id, not in the ranked list" });
+  }
+
+  const listState: PanelState = preview ?? (list.status === "loading" ? "loading" : listItems.length ? "ready" : "empty");
+  const planState: PanelState = preview ?? (pair.status === "loading" && sid ? "loading" : unit ? "ready" : "empty");
+  const traceState: PanelState = preview ?? "empty";
+  const chair = unit?.chair_in ?? (list.status === "ready" ? ([list.data.query.w, list.data.query.l] as const) : null);
+  const listReplay = list.status === "ready" && list.origin === "replay" ? list.reason : null;
+  const planReplay = pair.status === "ready" && pair.origin === "replay" ? pair.reason : null;
 
   return (
     <div className="flex h-full flex-col p-3">
@@ -116,18 +142,23 @@ function Sheet() {
           <UnitList
             state={listState}
             items={listItems}
-            selected={selected}
-            onSelect={(m) => {
-              setSelected(m);
-              const e = UNITS.find((u) => u.asScanned.model === m);
-              const t = e ? defaultTarget(e.asScanned.floors[0]) : null;
-              if (t) driveTo(t);
+            selected={sid}
+            replayReason={listReplay}
+            emptyNote={list.status === "error" ? `The unit list could not be loaded: ${list.message}` : null}
+            onSelect={(next) => {
+              // the unit already on the plan: nothing to load or drive
+              if (next === sid) return;
+              setChosen(next);
+              setScenario("scanned");
+              setDriving(true);
             }}
           />
           <div className="flex min-h-0 border-x border-rule-strong">
             <PlanPanel
               state={planState}
               title={unit && unit.floors.length > 1 && floor ? `Plan, ${floor.floor}` : "Plan"}
+              tag={planReplay !== null ? <ReplayTag reason={planReplay} /> : null}
+              emptyNote={pair.status === "error" ? { title: "This plan could not be loaded", body: pair.message } : null}
               className="flex-1"
               aside={
                 unit && (
@@ -202,9 +233,26 @@ function Sheet() {
         <TitleBlock
           cells={[
             { label: "Unit", value: unit ? unit.name : "None selected" },
-            { label: "Chair (width × length)", value: `${w.toFixed(1)} × ${l.toFixed(1)} in`, measure: true },
+            { label: "Chair (width × length)", value: chair ? `${chair[0].toFixed(1)} × ${chair[1].toFixed(1)} in` : "Not set", measure: true },
             { label: "Scenario", value: unit ? unit.scenario : "None" },
-            { label: "Data", value: unit ? FIXTURE_LABEL : "Contract fixtures only" },
+            {
+              label: "Data",
+              // the plan on screen decides; with no plan, the list does
+              value:
+                pair.status === "ready" ? (
+                  planReplay !== null ? (
+                    <span title={planReplay}>Replay: synthetic contract fixture</span>
+                  ) : (
+                    "Rollin’ API, live"
+                  )
+                ) : listReplay !== null ? (
+                  <span title={listReplay}>Replay: synthetic contract fixture</span>
+                ) : list.status === "ready" ? (
+                  "Rollin’ API, live"
+                ) : (
+                  "Loading"
+                ),
+            },
           ]}
         />
       </main>

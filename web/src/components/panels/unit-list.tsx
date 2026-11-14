@@ -1,13 +1,18 @@
 "use client";
 
-import { countRooms, type RoomStatus, type UnitResult } from "@/lib/contract";
+import type { ReactNode } from "react";
+import type { RoomStatus, StatusCounts } from "@/lib/contract";
 import { cn } from "@/lib/utils";
 import { EmptyNote, Panel, type PanelState } from "@/components/sheet/panel";
 import { STATUS, StatusIcon } from "@/components/sheet/status";
+import { ReplayTag } from "@/components/sheet/replay-tag";
 
 export interface UnitListItem {
-  unit: UnitResult;
-  source: string;
+  sid: string;
+  name: string;
+  counts: StatusCounts;
+  /** a line under the name (e.g. why the unit is listed) */
+  note: ReactNode;
 }
 
 const ORDER: RoomStatus[] = ["reachable", "blocked", "unknown"];
@@ -16,40 +21,50 @@ export function UnitList({
   state,
   items,
   selected,
+  replayReason,
+  emptyNote,
   onSelect,
 }: {
   state: PanelState;
   items: UnitListItem[];
   selected: string | null;
-  onSelect: (model: string) => void;
+  /** set when the list is the replayed contract fixture */
+  replayReason?: string | null;
+  emptyNote?: string | null;
+  onSelect: (sid: string) => void;
 }) {
   return (
-    <Panel title="Units" labelledBy="units-heading" aside={state === "ready" ? <span className="text-sm text-ink-soft">{items.length} found</span> : null}>
+    <Panel
+      title="Units"
+      labelledBy="units-heading"
+      tag={state === "ready" && replayReason !== undefined && replayReason !== null ? <ReplayTag reason={replayReason} /> : null}
+      aside={state === "ready" ? <span className="text-sm text-ink-soft">{items.length} found</span> : null}
+    >
       {state === "loading" && <UnitListLoading />}
-      {state === "empty" && (
+      {state === "empty" && emptyNote && <EmptyNote title="No units to show">{emptyNote}</EmptyNote>}
+      {state === "empty" && !emptyNote && (
         <EmptyNote title="No units yet">
           Units appear here after a search. Each one is ranked by how many rooms your chair can reach.
         </EmptyNote>
       )}
       {state === "ready" && (
         <ul className="h-full overflow-y-auto">
-          {items.map(({ unit, source }) => {
-            const counts = countRooms(unit);
-            const isSelected = selected === unit.model;
+          {items.map(({ sid, name, counts, note }) => {
+            const isSelected = selected === sid;
             return (
-              <li key={unit.model} className="border-b border-rule">
+              <li key={sid} className="border-b border-rule">
                 <button
                   type="button"
                   aria-pressed={isSelected}
-                  onClick={() => onSelect(unit.model)}
+                  onClick={() => onSelect(sid)}
                   className={cn(
                     "relative flex w-full flex-col gap-2 py-4 pr-5 pl-6 text-left transition-colors transition-draft",
                     "hover:bg-paper-deep",
                     isSelected && "bg-paper-deep before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-ink",
                   )}
                 >
-                  <span className="text-lg font-semibold">{unit.name}</span>
-                  <span className="text-sm text-ink-soft">{source}</span>
+                  <span className="text-lg font-semibold">{name}</span>
+                  {note && <span className="text-sm text-ink-soft">{note}</span>}
                   <span className="flex gap-5" aria-label={ORDER.map((s) => `${counts[s]} ${STATUS[s].word.toLowerCase()}`).join(", ")}>
                     {ORDER.map((s) => (
                       <span key={s} className={cn("measure flex items-center gap-1.5 text-base font-medium", STATUS[s].text)}>

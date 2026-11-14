@@ -31,8 +31,22 @@ export interface Drive {
   enginePath?: boolean;
 }
 
-const SAME = 1e-6;
-const samePoint = (a: Point, b: Point) => Math.abs(a[0] - b[0]) < SAME && Math.abs(a[1] - b[1]) < SAME;
+/** room and floor door centres are rounded separately; real scans differ by under a millimetre */
+const SAME_DOOR_M = 0.02;
+
+/** The floor door a room lists, by nearest centre. */
+function floorDoorFor(floor: Floor, d: { center: Point }): Door | null {
+  let best: Door | null = null;
+  let bestDist = SAME_DOOR_M;
+  for (const fd of floor.doors) {
+    const dist = Math.hypot(fd.center[0] - d.center[0], fd.center[1] - d.center[1]);
+    if (dist <= bestDist) {
+      best = fd;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
 
 /** The room the drive should open on: first blocked room with a measured door, else any blocked, else first non-start room. */
 export function defaultTarget(floor: Floor): string | null {
@@ -55,7 +69,7 @@ export function buildDrive(unit: UnitResult, floor: Floor, roomId: string): Driv
     const route = room.path?.length ? room.path : [[...centroid(room.polygon), 0] as PathStep];
     const isStart = room.room_id === floor.start_room;
     const widest = !isStart && room.doors.length ? room.doors.reduce((a, b) => (b.clear_in_est > a.clear_in_est ? b : a)) : null;
-    const door = widest ? (floor.doors.find((d) => samePoint(d.center, widest.center)) ?? null) : null;
+    const door = widest ? floorDoorFor(floor, widest) : null;
     const spareIn = door ? Math.round((door.clear_in_est - unit.chair_in[0]) * 10) / 10 : null;
     return { room, kind: "arrive", route, drawnFrom: null, door, shortfallIn: null, spareIn, enginePath: Boolean(room.path?.length) };
   }
@@ -65,14 +79,14 @@ export function buildDrive(unit: UnitResult, floor: Floor, roomId: string): Driv
   }
 
   // blocked: the reason names the widest door; that is the one we stop at
-  const widest = room.doors.reduce((a, b) => (b.clear_in_est > a.clear_in_est ? b : a));
-  const door = floor.doors.find((d) => samePoint(d.center, widest.center)) ?? null;
+  const door = floorDoorFor(floor, room.doors.reduce((a, b) => (b.clear_in_est > a.clear_in_est ? b : a)));
   if (!door || door.passable || base.length === 0) {
     // the widest door fits but the route is too tight (or the door can't be matched)
     return { room, kind: "tight", route: base, drawnFrom: null, door, shortfallIn: null };
   }
 
   const [chairW, chairL] = unit.chair_in;
+  const shortfall = Math.round((chairW - door.clear_in_est) * 10) / 10;
   const wall = floor.walls.find((w) => w.edge === door.edge);
   const along: Point = wall ? geom.unit(geom.sub(wall.b, wall.a)) : [1, 0];
   let n: Point = [-along[1], along[0]];
@@ -83,8 +97,7 @@ export function buildDrive(unit: UnitResult, floor: Floor, roomId: string): Driv
   const stop = geom.add(door.center, geom.mul(n, (chairL * M_PER_IN) / 2 + 0.06));
   const theta = normHeading(Math.atan2(n[1], n[0]));
   const route: PathStep[] = [...base, [stop[0], stop[1], theta]];
-  const shortfallIn = Math.round((chairW - door.clear_in_est) * 10) / 10;
-  return { room, kind: "blocked", route, drawnFrom: base.length - 1, door, shortfallIn };
+  return { room, kind: "blocked", route, drawnFrom: base.length - 1, door, shortfallIn: shortfall };
 }
 
 /** Heading folded into [0, π). */
