@@ -5,6 +5,8 @@ import { RotateCcw } from "lucide-react";
 import { MotionConfig } from "motion/react";
 import { countRooms } from "@/lib/contract";
 import { useUnitPair, useUnitsList } from "@/lib/data";
+import { useAgentRun } from "@/lib/agent";
+import type { Evidence } from "@/components/trace/timeline";
 import { fixtureUnit } from "@/lib/fixtures";
 import { buildDrive, defaultTarget } from "@/lib/chair";
 import type { PanelState } from "@/components/sheet/panel";
@@ -113,6 +115,18 @@ function Sheet() {
     },
     [sid],
   );
+  const agent = useAgentRun();
+  const [shownEvidence, setShownEvidence] = useState<string | null>(null);
+  // a finding opens its evidence: its unit, in the scenario it was found under, with the chair driven to its room
+  const showEvidence = useCallback((e: Evidence) => {
+    setShownEvidence(e.eventId);
+    setChosen(e.sid);
+    setScenario(e.hinges ? "hinges" : "scanned");
+    setPick({ sid: e.sid, room: e.roomId });
+    setDriving(true);
+    setRunId((n) => n + 1);
+  }, []);
+
   const onStart = useCallback(() => setDriving(true), []);
   const onSettled = useCallback(() => setDriving(false), []);
 
@@ -159,7 +173,7 @@ function Sheet() {
 
   const listState: PanelState = preview ?? (list.status === "loading" ? "loading" : listItems.length ? "ready" : "empty");
   const planState: PanelState = preview ?? (pair.status === "loading" && sid ? "loading" : unit ? "ready" : "empty");
-  const traceState: PanelState = preview ?? "empty";
+  const traceState: PanelState = preview ?? "ready";
   const chair = unit?.chair_in ?? (list.status === "ready" ? ([list.data.query.w, list.data.query.l] as const) : null);
   const listReplay = list.status === "ready" && list.origin === "replay" ? list.reason : null;
   const planReplay = pair.status === "ready" && pair.origin === "replay" ? pair.reason : null;
@@ -260,7 +274,21 @@ function Sheet() {
               )}
             </PlanPanel>
           </div>
-          <TracePanel state={traceState} />
+          <TracePanel
+            state={traceState}
+            run={agent.run}
+            decisions={agent.decisions}
+            acting={agent.acting}
+            defaultMessage="Find units near the Medical Center my 27 × 42 in chair can live in. Check bedroom and bathroom access."
+            onRun={(message) => {
+              setShownEvidence(null);
+              agent.start(message, { chair_in: chair ? [chair[0], chair[1]] : null });
+            }}
+            onStop={agent.stop}
+            onDecide={agent.decide}
+            onEvidence={showEvidence}
+            shownEvidence={shownEvidence}
+          />
         </div>
         <TitleBlock
           cells={[
