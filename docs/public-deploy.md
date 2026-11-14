@@ -10,7 +10,7 @@ The public site is fixture-only. It shows the synthetic contract apartment and t
 
 1. Log in once: run `npx vercel login`.
 2. Run `web/scripts/deploy-public.sh`.
-3. First run only: the CLI sets up a project. Set its **Root Directory** to `web`; the web app imports `../contracts`, so the upload holds both folders. The project link is kept in `~/.config/rollin-public/.vercel`, outside the repo.
+3. First run only: the script runs `vercel link` without defaults. When the CLI asks which directory your code is in, answer `web`. The web app imports `../contracts`, so the upload holds both folders, and with the default `./` the site would serve raw files. If a project was ever linked with the wrong root, set **Root Directory** to `web` in its settings. The link is kept in `~/.config/rollin-public/.vercel`, outside the repo.
 4. Later runs: re-run the script.
 
 To check the public build locally:
