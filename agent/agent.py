@@ -237,6 +237,13 @@ INTERRUPT_ON = {"send_message": {"allowed_decisions": ["approve", "reject"]}}
 ORCHESTRATOR_TOOLS = [search_units, get_unit, check_units, draft_landlord_message, send_message]
 
 
+def memory_permissions() -> list:
+    """The agent's file tools may not read or write /memories/ (other senders' profiles); only agent.memory does.
+    Subagents inherit these rules because none of them sets its own."""
+    from deepagents.middleware.filesystem import FilesystemPermission
+    return [FilesystemPermission(operations=["read", "write"], paths=["/memories/**", "/memories"], mode="deny")]
+
+
 def configured() -> bool:
     prov = os.environ.get("MODEL_PROVIDER", "").lower()
     return prov in PROVIDERS and bool(os.environ.get("MODEL_NAME")) and bool(os.environ.get(KEYS[prov]))
@@ -261,7 +268,7 @@ def get_agent():
                                    routes={"/memories/": FilesystemBackend(root_dir=memory_root(), virtual_mode=True)})
         _agent = create_deep_agent(model=model, tools=ORCHESTRATOR_TOOLS, system_prompt=SYSTEM,
                                    subagents=subagents(model), interrupt_on=INTERRUPT_ON, backend=backend,
-                                   checkpointer=InMemorySaver(), name="rollin")
+                                   permissions=memory_permissions(), checkpointer=InMemorySaver(), name="rollin")
     return _agent
 
 
@@ -570,7 +577,8 @@ async def run_agent(message: str, profile: dict, run_id: str) -> AsyncIterator[d
     if mem:
         yield r.ev("memory", **memory_event(profile["sender_id"], mem))
     note = (" (chair size from this person's saved profile)" if mem and mem["source"] == "memory" else "")
-    prompt = message if not profile else f"{message}\n\nProfile{note}: {json.dumps(profile)}"
+    for_model = {k: v for k, v in profile.items() if k != "sender_id"}      # the model never sees who is asking
+    prompt = message if not for_model else f"{message}\n\nProfile{note}: {json.dumps(for_model)}"
     async for ns, chunk in agent.astream({"messages": [{"role": "user", "content": prompt}]}, thread,
                                          stream_mode="updates", subgraphs=True):
         for node, upd in chunk.items():

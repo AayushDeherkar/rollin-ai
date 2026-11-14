@@ -83,7 +83,7 @@ def chat_events(demo: dict, demo_h: dict, other: dict, rows: list[dict]) -> list
                    "run_id": "run_example_001", "type": type_, **body})
 
     add("plan", text="Find units near the Medical Center the chair can live in; check bedroom and bathroom access.",
-        profile={"sender_id": PROFILE["sender_id"], "chair_in": [num(v, "asked", "in", source="user") for v in PROFILE["chair_in"]]},
+        profile={"sender_id": PROFILE["sender_id"], "chair_in": [num(v, "asked", "in", source="memory") for v in PROFILE["chair_in"]]},
         todos=[{"id": "t1", "text": "Search units within 8 km of the Medical Center", "status": "in_progress"},
                {"id": "t2", "text": "Drive the 27x42 in chair through each floor plan", "status": "pending"},
                {"id": "t3", "text": "Try offset hinges on blocked doors", "status": "pending"},

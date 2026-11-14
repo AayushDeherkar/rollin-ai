@@ -1,11 +1,13 @@
-"""Profile memory per sender, kept in the agent's filesystem memory.
+"""Chair-size memory per sender, kept in the agent's filesystem memory.
 
-The agent's virtual path /memories/ is a deepagents FilesystemBackend rooted at data/memory/ (gitignored), so a
-profile saved here is the file the agent sees at /memories/profiles/<key>.json. <key> is a hash of sender_id, so
-raw phone handles never become filenames.
+The agent's virtual path /memories/ is a deepagents FilesystemBackend rooted at data/memory/ (gitignored); a sender's
+profile is the file /memories/profiles/<key>.json there, where <key> is a hash of sender_id (raw handles never become
+filenames). Only this module reads and writes those files: the agent's own file tools are denied on /memories/ (see
+agent.get_agent), so no request can list, read or edit another sender's profile.
 
-Rules: a chair size stated now (profile.chair_in or in the message) wins and is saved; otherwise the saved size is
-reused and reported. Nothing is remembered without a sender_id.
+What is remembered: the chair size only. A size stated now (a valid profile.chair_in, or a size clearly given for the
+chair in the message) wins and is saved; otherwise the saved size is reused and reported. Nothing is remembered
+without a string sender_id. Bad input is ignored, never saved.
 """
 from __future__ import annotations
 
@@ -19,11 +21,15 @@ from datetime import datetime, timezone
 
 from agent.chat import data_dir
 
-FIELDS = ("chair_in", "turning_in", "needs", "budget", "area", "beds")
-# "27 x 42", "27x42 in", "27 by 42 inches", "27 inches wide and 42 inches long"
-SIZE_PAIR = re.compile(r"(\d{2}(?:\.\d+)?)\s*(?:in(?:ch(?:es)?)?|\"|”)?\s*(?:wide\s*)?(?:x|×|by)\s*(\d{2}(?:\.\d+)?)", re.I)
-SIZE_WORDS = re.compile(r"(\d{2}(?:\.\d+)?)\s*(?:in(?:ch(?:es)?)?|\"|”)\s*wide\b.*?(\d{2}(?:\.\d+)?)\s*(?:in(?:ch(?:es)?)?|\"|”)\s*long",
+NUM = r"(?<![\d.#])(\d{2}(?:\.\d+)?)(?![\d.])"
+INCH = r"(?:\s*(?:in(?:ch(?:es)?)?\b|\"|”))?"
+NOT_CHAIR_UNIT = r"(?!\s*(?:ft|feet|foot|'|cm|mm|m\b|meters?|sq|square|min|minutes?|mi|miles?|km|%|\$))"
+# "26x40", "26 x 40 in", "26 by 40 inches"
+SIZE_PAIR = re.compile(NUM + INCH + NOT_CHAIR_UNIT + r"\s*(?:wide\s*)?(?:x|×|by)\s*" + NUM + INCH + NOT_CHAIR_UNIT, re.I)
+# "26 inches wide and 40 inches long" (the two halves within 30 characters)
+SIZE_WORDS = re.compile(NUM + r"\s*(?:in(?:ch(?:es)?)?|\"|”)\s*wide\b(?:(?!\bwide\b)\D){0,30}?" + NUM + r"\s*(?:in(?:ch(?:es)?)?|\"|”)\s*long\b",
                         re.I | re.S)
+CHAIR_WORD = re.compile(r"\b(?:chair|wheelchair|power ?chair|scooter|mobility device|walker)\b", re.I)
 
 
 def memory_root() -> pathlib.Path:
@@ -38,58 +44,81 @@ def path_for(sender_id: str) -> pathlib.Path:
     return memory_root() / "profiles" / f"{key_for(sender_id)}.json"
 
 
+def valid_chair(value: object) -> list[float] | None:
+    """[width, length] in inches if plausible for a wheelchair, else None."""
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        return None
+    try:
+        w, l = float(value[0]), float(value[1])
+    except (TypeError, ValueError):
+        return None
+    return [w, l] if 15 <= w <= 45 and 25 <= l <= 70 and w < l else None
+
+
 def chair_from_message(message: str) -> list[float] | None:
-    """A chair size the person states in plain words, as [width, length] inches; None if not stated."""
+    """A chair size the person states in plain words, as [width, length] inches; None if not clearly stated.
+    Only a plausible size within 40 characters of a chair word counts (so shower, patio or room sizes don't)."""
+    text = message or ""
     for rx in (SIZE_WORDS, SIZE_PAIR):
-        m = rx.search(message or "")
-        if m:
-            w, l = float(m.group(1)), float(m.group(2))
-            if 15 <= w <= 45 and 25 <= l <= 70 and w < l:     # plausible wheelchair sizes only
-                return [w, l]
+        for m in rx.finditer(text):
+            size = valid_chair([m.group(1), m.group(2)])
+            near = text[max(0, m.start() - 40): m.end() + 40]
+            if size and CHAIR_WORD.search(near):
+                return size
     return None
 
 
-def load(sender_id: str) -> dict:
-    p = path_for(sender_id)
+def load(sender_id: str) -> list[float] | None:
+    """The saved chair size, or None if there is none or the file is unusable."""
     try:
-        return json.loads(p.read_text()) if p.exists() else {}
-    except (ValueError, OSError):
-        return {}
+        rec = json.loads(path_for(sender_id).read_text())
+    except (OSError, ValueError):
+        return None
+    return valid_chair(rec.get("chair_in")) if isinstance(rec, dict) else None
 
 
-def save(sender_id: str, profile: dict) -> None:
+def save(sender_id: str, chair: list[float]) -> str:
     p = path_for(sender_id)
     p.parent.mkdir(parents=True, exist_ok=True)
-    rec = {k: profile[k] for k in FIELDS if profile.get(k) is not None}
-    rec["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
     tmp = p.with_suffix(f".{uuid.uuid4().hex[:6]}.tmp")
-    tmp.write_text(json.dumps(rec, indent=1))
+    tmp.write_text(json.dumps({"chair_in": chair, "updated_at": stamp}, indent=1))
     os.replace(tmp, p)
+    return stamp
+
+
+def saved_at(sender_id: str) -> str | None:
+    try:
+        rec = json.loads(path_for(sender_id).read_text())
+        return rec.get("updated_at") if isinstance(rec, dict) else None
+    except (OSError, ValueError):
+        return None
 
 
 def resolve(message: str, profile: dict | None) -> tuple[dict, dict | None]:
     """The profile to use for this run, and what memory did ("saved", "updated", "used") or None."""
-    profile = dict(profile or {})
+    profile = dict(profile) if isinstance(profile, dict) else {}
+    given = valid_chair(profile.get("chair_in"))
+    profile.pop("chair_in", None)                     # re-added below only if valid
     sender = profile.get("sender_id")
-    stated = profile.get("chair_in") or chair_from_message(message)
-    if not sender:
-        if stated:
-            profile["chair_in"] = stated
-        return profile, None
-    saved = load(sender)
-    merged = {**{k: v for k, v in saved.items() if k in FIELDS},
-              **{k: v for k, v in profile.items() if k in FIELDS and v is not None}, "sender_id": sender}
+    if not isinstance(sender, str) or not sender.strip():
+        profile.pop("sender_id", None)
+        sender = None
+    stated = given or chair_from_message(message)
     if stated:
-        merged["chair_in"] = [float(x) for x in stated]
-        before = saved.get("chair_in")
-        action = "saved" if not before else "updated" if before != merged["chair_in"] else "used"
+        profile["chair_in"] = stated
+    if not sender:
+        return profile, None
+    before = load(sender)
+    if stated:
+        action = "saved" if not before else "updated" if before != stated else "used"
         if action != "used":
-            save(sender, merged)
-        out = {"action": action, "chair_in": merged["chair_in"], "source": "user"}
+            save(sender, stated)
+        out = {"action": action, "chair_in": stated, "source": "user"}
         if action == "updated":
             out["previous"] = before
-        return merged, out
-    if saved.get("chair_in"):
-        return merged, {"action": "used", "chair_in": saved["chair_in"], "source": "memory",
-                        "saved_at": saved.get("updated_at")}
-    return merged, None
+        return profile, out
+    if before:
+        profile["chair_in"] = before
+        return profile, {"action": "used", "chair_in": before, "source": "memory", "saved_at": saved_at(sender)}
+    return profile, None
