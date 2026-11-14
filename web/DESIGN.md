@@ -37,7 +37,9 @@ Status is never colour alone. Every status has a colour, a fill pattern (`Patter
 - Built only from the contract: each wall is extruded from `a` to `b` at its thickness to 2.4 m, with gaps at doors from `width_in` and `center`. Model coordinates are metres with Z up; three.js gets `(x, z, -y)`.
 - Floors are lit by status with the same patterns as the plan. The chair is sized from `chair_in`; its footprint rectangle is the shape the engine tested.
 - The camera orbits slowly at rest and follows the chair while it drives. The blocking door's frame lights up in the blocked colour, and the callout gives clear width, chair width and shortfall, marked est.
+- Doors the chair cannot pass have a block-coloured frame and a dashed sill across the opening (dashed means "does not fit", as for turning circles).
 - "With offset hinges": door leaves swing clear and rooms take the engine's hinges result.
+- Drawing proportions, not data: wall height 2.4 m, door head 2.03 m, leaf thickness and swing angles, and the chair's seat, back and wheels. Only the walls' plan positions and thickness, door widths and centres, room shapes and statuses, the route and the chair's width × length footprint come from the contract. Nothing on screen reads the drawn proportions as measurements.
 - Lazy-loaded. The pixel ratio is capped at 1.5. The 2D plan is the inset, and it becomes the main view when WebGL is missing, the model fails, or it runs under 24 fps. `?view=2d` and `?view=3d` force a view.
 - Reduced motion: a fixed camera, no drive animation (the chair is shown where it ends), and door leaves set without swinging.
 

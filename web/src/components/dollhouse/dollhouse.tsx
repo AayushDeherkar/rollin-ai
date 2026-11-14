@@ -351,8 +351,12 @@ function DoorFrame({ floor, door, palette, hinges, lit }: { floor: Floor; door: 
   });
   const frameColour = door.passable ? palette.ink : palette.block;
   const mid: Point = [(g.j0[0] + g.j1[0]) / 2, (g.j0[1] + g.j1[1]) / 2];
+  // not passable is never colour alone: a dashed sill across the opening, as dashed means
+  // "does not fit" for turning circles too
+  const sill = useMemo(() => [v3(g.j0[0], g.j0[1], 0.03), v3(g.j1[0], g.j1[1], 0.03)], [g]);
   return (
     <group>
+      {!door.passable && <Line points={sill} color={palette.block} lineWidth={4} dashed dashSize={0.06} gapSize={0.05} />}
       {/* jambs and head */}
       {[g.j0, g.j1].map((j, i) => (
         <mesh key={i} position={v3(j[0], j[1], DOOR_H / 2)} rotation={[0, angle, 0]}>
