@@ -146,6 +146,8 @@ function Sheet() {
             replayReason={listReplay}
             emptyNote={list.status === "error" ? `The unit list could not be loaded: ${list.message}` : null}
             onSelect={(next) => {
+              // the unit already on the plan: nothing to load or drive
+              if (next === sid) return;
               setChosen(next);
               setScenario("scanned");
               setDriving(true);
