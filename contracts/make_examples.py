@@ -89,6 +89,9 @@ def chat_events(demo: dict, demo_h: dict, other: dict, rows: list[dict]) -> list
                {"id": "t3", "text": "Try offset hinges on blocked doors", "status": "pending"},
                {"id": "t4", "text": "Verify every claim and label its basis", "status": "pending"},
                {"id": "t5", "text": "Draft questions for the leasing office (needs approval)", "status": "pending"}])
+    add("memory", sender_id=PROFILE["sender_id"], action="used", text="Using the 27x42 in chair from your last request.",
+        path="/memories/profiles/synthetic.json",
+        profile={"chair_in": [num(v, "asked", "in", source="memory") for v in PROFILE["chair_in"]]})
     add("tool", name="search_units", status="done",
         args={"radius_km": num(8, "asked", "km", source="user"), "chair": chair},
         result={"candidates": num(len(rows), "measured"), "sids": [r["sid"] for r in rows]})
