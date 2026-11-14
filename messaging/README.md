@@ -7,7 +7,8 @@ iPhone ──iMessage──► Photon 2.0 ──Socket.IO──► messaging/ �
        ◄─────────── messaging API ◄───────────┘
 ```
 
-- The first reply in a conversation says it is an AI agent.
+- Every request gets an immediate acknowledgement ("Checking units now…"); the shortlist follows when the run finishes, about half a minute later. The first acknowledgement in a conversation also says it is an AI agent.
+- Each run sends `sender_id` in the profile (contract v3): `imsg_` plus a hash of the conversation, so the agent's memory carries across texts (the chair size from an earlier text is reused) and the phone number never reaches the agent. A chair size in the text wins; without one, none is sent and memory may supply it.
 - Nothing is sent to a third party without a "yes" in the same conversation. Any other text starts a new search, and the open question lapses.
 - When the web app has no live agent, it replays a recorded run. The bridge then says "This is a replayed run, not a live search", and a "yes" answers "Not sent".
 - Counts are labelled as estimates from the floor plans.
@@ -39,8 +40,13 @@ Type as the case manager, for example `27 x 42 in chair near the Medical Center`
    npm start
    ```
    It should print "Listening for iMessages".
-6. From the phone in step 3, text the agent's number first. A shared line cannot send the first message. You should get the AI introduction, a "Checking units" note, the top three, and the approval question.
-7. For links that open on a phone, set `ROLLIN_PUBLIC_WEB_URL` to an address the phone can reach. Otherwise the link points at the laptop's localhost.
+6. From the phone in step 3, text the agent's number first. A shared line cannot send the first message. You should get the AI introduction with the "Checking units" acknowledgement at once, then the top three, and the approval question. Text again without a chair size: the agent should reuse the chair it remembered.
+7. For links that open on a phone, set `ROLLIN_PUBLIC_WEB_URL` to an address the phone can reach. Otherwise the link points at the laptop's localhost. A quick tunnel works well, against a production build (the dev server refuses other origins):
+   ```sh
+   cd web && npm run build && npx next start -p 3200   # with ROLLIN_API_URL set, as for dev
+   cloudflared tunnel --url http://localhost:3200      # prints https://<random>.trycloudflare.com
+   ```
+   Put the printed URL in `ROLLIN_PUBLIC_WEB_URL` and restart the bridge. Anyone with that URL can open the app while the tunnel runs; stop it after the demo.
 
 The beta supports text and images only, so the bridge sends plain text.
 
