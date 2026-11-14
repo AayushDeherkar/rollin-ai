@@ -30,8 +30,8 @@ def test_analyze_model_matches_contract(hinges, example):
 def test_candidates_filters_units_by_radius(tmp_path, monkeypatch):
     csv = tmp_path / "idx.csv"
     csv.write_text("sid,name,lat,lon\n"
-                   "near1,\"<unit name>\",29.71,-95.40\n"
-                   "near2,<unit name>,29.72,-95.40\n"
+                   "near1,\"1 Br, 1 Ba - Synthetic A\",29.71,-95.40\n"
+                   "near2,Studio - Synthetic B,29.72,-95.40\n"
                    "amenity,Clubroom,29.71,-95.40\n"
                    "far,2BR 2BA,30.30,-97.70\n"
                    "nocoord,1BR 1BA,,\n")

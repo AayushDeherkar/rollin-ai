@@ -182,7 +182,8 @@ def check_unit(sid: str, refresh: bool = False) -> dict:
 def main(argv: list[str]) -> int:
     from dotenv import load_dotenv
     load_dotenv(os.environ.get("ROLLIN_ENV_FILE") or ROOT / ".env")
-    for sid in argv:
+    from engine.demo_units import resolve
+    for sid in map(resolve, argv):
         try:
             r = check_unit(sid)
             print(sid, r.get("error") or [(i["kind"], i["room"], i["pano_id"],

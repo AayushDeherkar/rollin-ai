@@ -1,6 +1,6 @@
 """Outside check from Vexcel aerial imagery (PLAN 7.1 `outside`, CoStar track).
 
-    python -m engine.vexcel demo-backup demo-pass demo-sparse      # clip + findings for units in the index
+    python -m engine.vexcel demo-main demo-backup      # clip + findings for units in the index
 
 aerial_check(lat, lon) clips a Vexcel orthophoto (7.5 cm/px class) around the point, caches the JPEG in
 data/cache/, and asks a vision model a fixed set of questions about what is visible from above. Every finding
@@ -134,7 +134,9 @@ def aerial_check_unit(sid: str) -> dict:
 
 
 def main(argv: list[str]) -> int:
-    for sid in argv:
+    sys.path.insert(0, str(ROOT))
+    from engine.demo_units import resolve
+    for sid in map(resolve, argv):
         try:
             res = aerial_check_unit(sid)
             print(sid, res.get("error") or [(f["item"], f["answer"]) for f in res["findings"]])

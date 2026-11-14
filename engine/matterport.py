@@ -131,7 +131,8 @@ def get_model(sid: str, refresh: bool = False) -> dict:
 
 def main(argv: list[str]) -> int:
     refresh = "--refresh" in argv
-    sids = [a for a in argv if a != "--refresh"]
+    from engine.demo_units import resolve
+    sids = [resolve(a) for a in argv if a != "--refresh"]
     if not sids:
         print(__doc__)
         return 1

@@ -5,12 +5,13 @@ Your wheelchair just test-drove 200 Houston apartments. Rollin' finds the ones y
 Built at HackPrinceton Fall 2026. Plan: `PLAN.md`. Agent rules: `CLAUDE.md`. API contracts and examples (synthetic data only): `contracts/`.
 
 ## Quick start
+Real units are referenced by alias (`demo-main`, `demo-backup`, `demo-pass`, `demo-sparse`). The alias-to-id map is the gitignored `data/demo_units.json`: get it from a teammate. No real model id, floor plan or property data is in this repo.
 ```bash
 pip install -r requirements.txt
 cp .env.example .env   # fill in keys from /costar-keys (never commit .env)
-python -m engine.matterport demo-backup                           # fetch + cache (needs keys in .env)
-python engine/fit.py --file data/cache/demo-backup.json            # cached demo unit
-python engine/fit.py --file data/cache/demo-backup.json --hinges   # what-if: offset hinges
+python -m engine.matterport demo-main                           # fetch + cache (needs keys in .env)
+python engine/fit.py --file data/cache/<demo-main sid>.json            # cached demo unit
+python engine/fit.py --file data/cache/<demo-main sid>.json --hinges   # what-if: offset hinges
 pytest -q
 ```
 
@@ -19,7 +20,7 @@ The API serves only local data: `data/cache/<sid>.json` (one file per fetched mo
 
 ```bash
 # 1. data (once; needs keys in .env; about 25 min for the full Houston batch)
-python -m engine.matterport demo-backup demo-pass redacted-unit-03   # demo units
+python -m engine.matterport demo-main demo-backup demo-pass demo-sparse   # demo units (aliases)
 python -m engine.batch                                            # units within 8 km of Texas Medical Center
 
 # 2. server on http://localhost:8000 (CORS open for http://localhost:3000)
