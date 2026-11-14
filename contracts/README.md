@@ -30,6 +30,7 @@ No real Matterport, CoStar or Vexcel data is ever stored here. Lat/lon values ar
   - `assumed`: a fixed assumption (offset hinges add ~1.75 in).
   - `asked`: told to us by a person, with `source` (`user` for the chair size; `landlord` for answers).
   - `unknown`: not in the data; becomes a question.
+- Replayed runs (`POST /api/chat?replay=1`) add `replay: true` and `recorded_ts` (the original time) to every event, and suffix `action_id` with the replay's `run_id`. Live runs never set `replay`.
 - `approval_needed` carries an `action_id`; the stream then ends with `final` listing `awaiting_approval`. The web/iMessage side calls `POST /api/approve {action_id, approved}`.
 
 ## Changing a contract
