@@ -92,7 +92,7 @@ async def stream(events: AsyncIterator[dict]) -> AsyncIterator[str]:
 
 @router.post("/api/chat")
 async def chat(req: ChatRequest | None = None, replay: bool = False, pace: float = Query(1.0, ge=0, le=10),
-               speed: float | None = Query(None, gt=0, le=100)):
+               speed: float | None = Query(None, ge=0.1, le=100)):
     req = req or ChatRequest()                      # replay needs no body
     if speed is not None:                           # ?speed=4 plays 4x faster; events stay marked replay
         pace = 1.0 / speed

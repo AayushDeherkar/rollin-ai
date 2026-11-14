@@ -213,3 +213,37 @@ def test_unusable_vision_answer_is_not_cached(data, monkeypatch):
     with pytest.raises(RuntimeError):
         V.aerial_check(29.7, -95.4)
     assert not img.with_suffix(".findings.json").exists()
+
+
+def test_check_units_batches_both_scenarios_and_caches(data):
+    res = A.check_units(["synthetic_demo", "nope"])
+    demo = res["units"][0]
+    assert demo["reachable"] == "1/4" and demo["with_hinges"] == "2/4"
+    bed = next(p for p in demo["problems"] if p["room"] == "Bedroom")
+    assert bed == {"room": "Bedroom", "status": "blocked", "with_hinges": "reachable", "door_in": 28.0, "short_in_est": 1.0}
+    assert res["units"][1] == {"sid": "nope", "error": "model not cached"}
+    cached = list((data / "cache" / "fit").glob("synthetic_demo_27x42_*.json"))
+    assert len(cached) == 2
+    f = data / f"cache/fit/synthetic_demo_27x42_0_v{A.FIT_CACHE_V}.json"
+    assert A.run_fit("synthetic_demo") == json.loads(f.read_text())
+    f.write_text('{"half')                                   # a torn write is recomputed, not raised
+    assert A.run_fit("synthetic_demo")["rooms"] and json.loads(f.read_text())["sid"] == "synthetic_demo"
+    many = A.check_units(["synthetic_demo"] * 7)
+    assert len(many["units"]) == A.MAX_CHECK and many["skipped"] == ["synthetic_demo"]
+
+
+def test_check_units_events_come_from_engine_output(data):
+    r = A.Run("run_c")
+    r.calls["c1"] = ("check_units", {"sids": ["synthetic_demo"]})
+    evs = r.from_tool(_tool_msg("c1", A.check_units(["synthetic_demo"])))
+    fits = [e for e in evs if e["type"] == "tool" and e["name"] == "run_fit"]
+    assert [e["result"]["scenario"] for e in fits] == ["as scanned", "offset hinges on every door"]
+    assert {e["room"] for e in evs if e["type"] == "finding" and e["scenario"] == "as scanned"} == {"Bedroom", "Bathroom", "Closet"}
+    assert r.final("")["shortlist"][0]["sid"] == "synthetic_demo"
+
+
+def test_search_is_compact_and_includes_named_units(data):
+    s = A.search_units(radius_km=0.01, include=["synthetic_demo"])
+    assert s["candidates"] == 0 and [u["sid"] for u in s["units"]] == ["synthetic_demo"]
+    assert set(s["units"][0]) == {"sid", "name", "km", "reachable", "with_hinges"}
+    assert A.search_units(beds=1)["candidates"] == A.search_units(beds=[1])["candidates"] == 2

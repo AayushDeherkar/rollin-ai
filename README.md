@@ -40,7 +40,7 @@ uvicorn agent.server:app --port 8000 --reload
 - Without real data, the web app can build against the files in `contracts/`.
 
 ## The agent (live `/api/chat`)
-`agent/agent.py` is a deepagents 0.7.38 orchestrator with four subagents (`search`, `geometry`, `verifier`, `outreach`) and five tools (`search_units`, `get_unit`, `run_fit`, `draft_landlord_message`, `send_message`).
+`agent/agent.py` is a deepagents 0.7.38 orchestrator with four subagents (`search`, `geometry`, `verifier`, `outreach`) and five orchestrator tools (`search_units`, `get_unit`, `check_units`, `draft_landlord_message`, `send_message`); subagents also use `aerial_check`.
 - **Model:** `MODEL_PROVIDER` (`google` or `anthropic`) and `MODEL_NAME` from `.env`; we use `gemini-3.8-flash`. When these are set, the server attaches the agent to `POST /api/chat` automatically.
 - **Approval:** `send_message` is held by the orchestrator only and is listed in `interrupt_on`. The run pauses and emits `approval_needed`, and continues only when `POST /api/approve` is called. Every outbound text starts by saying it comes from an AI. An approved message is queued in `data/outbox/` (gitignored) for the iMessage bridge; the agent itself delivers nothing.
 - **Tracing:** LangSmith traces go to the `LANGSMITH_PROJECT` set in `.env`.

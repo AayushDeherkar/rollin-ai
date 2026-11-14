@@ -138,3 +138,5 @@ def test_replay_speed_plays_faster_and_stays_marked(client):
     assert time.time() - t0 < 3 and all(e["data"]["replay"] is True for e in events)
     with client.stream("POST", "/api/chat?replay=1&speed=0", json={}) as r:
         assert r.status_code == 422
+    with client.stream("POST", "/api/chat?replay=1&speed=0.0001", json={}) as r:
+        assert r.status_code == 422                                # cannot slow a replay below pace 10

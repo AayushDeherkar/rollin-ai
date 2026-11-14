@@ -56,7 +56,7 @@ def _row(u: dict) -> dict:
             "reachable": f"{c['reachable']}/{total}", "with_hinges": f"{h['reachable']}/{total}"}
 
 
-def search_units(radius_km: float = 8.0, beds: list[int] | None = None, top: int = 3,
+def search_units(radius_km: float = 8.0, beds: list[int] | int | None = None, top: int = 3,
                  include: list[str] | None = None) -> dict:
     """Best units near the Texas Medical Center from the precomputed batch (27x42 in chair), compact.
 
@@ -68,6 +68,8 @@ def search_units(radius_km: float = 8.0, beds: list[int] | None = None, top: int
     """
     idx = _index()
     units = idx.get("units", [])
+    if isinstance(beds, int):                    # the model sometimes passes a single count
+        beds = [beds]
     rows = [u for u in units if (u.get("distance_km") or 99) <= radius_km
             and (not beds or _beds(u.get("name")) in beds)]
     rows.sort(key=lambda u: (-u["score"], u["counts"]["blocked"], u.get("distance_km") or 99))
@@ -91,9 +93,13 @@ def run_fit(sid: str, chair_width_in: float = 27.0, chair_length_in: float = 42.
     path = data_dir() / "cache" / f"{sid}.json"
     if not path.exists():
         return {"sid": sid, "error": "model not cached"}
-    fit_cache = data_dir() / "cache" / "fit" / f"{sid}_{chair_width_in:g}x{chair_length_in:g}_{int(hinges)}.json"
-    if fit_cache.exists() and fit_cache.stat().st_mtime >= path.stat().st_mtime:
-        return json.loads(fit_cache.read_text())
+    fit_cache = data_dir() / "cache" / "fit" / f"{sid}_{chair_width_in:g}x{chair_length_in:g}_{int(hinges)}_v{FIT_CACHE_V}.json"
+    engine_src = ROOT / "engine" / "fit.py"
+    if fit_cache.exists() and fit_cache.stat().st_mtime >= max(path.stat().st_mtime, engine_src.stat().st_mtime):
+        try:                                                     # stale if the model or the engine changed since
+            return json.loads(fit_cache.read_text())
+        except (ValueError, OSError):                            # unreadable: recompute and overwrite
+            pass
     res = analyze_model(json.loads(path.read_text())["data"]["model"], sid, chair_width_in, chair_length_in, hinges)
     rooms = []
     for f in res["floors"]:
@@ -107,16 +113,22 @@ def run_fit(sid: str, chair_width_in: float = 27.0, chair_length_in: float = 42.
                           "turning_circle_in": (r["turning_space"] or {}).get("max_circle_in")})
     out = {"sid": sid, "name": res["name"], "scenario": res["scenario"], "chair_in": res["chair_in"], "rooms": rooms}
     fit_cache.parent.mkdir(parents=True, exist_ok=True)
-    fit_cache.write_text(json.dumps(out))
+    tmp = fit_cache.with_suffix(f".{uuid.uuid4().hex[:6]}.tmp")    # atomic: parallel subagents may write the same key
+    tmp.write_text(json.dumps(out))
+    os.replace(tmp, fit_cache)
     return out
 
 
+MAX_CHECK = 6
+FIT_CACHE_V = 1                      # bump when run_fit's output shape changes
+
+
 def check_units(sids: list[str], chair_width_in: float = 27.0, chair_length_in: float = 42.0) -> dict:
-    """Drive the wheelchair through up to 4 units at once, as scanned and with offset hinges. Returns, per unit,
+    """Drive the wheelchair through up to 6 units at once, as scanned and with offset hinges. Returns, per unit,
     rooms reachable in each scenario and only the rooms that are blocked or unknown (with the measured width of
     the door that stops the chair and the estimated shortfall)."""
     out = []
-    for sid in sids[:4]:
+    for sid in sids[:MAX_CHECK]:
         a, h = run_fit(sid, chair_width_in, chair_length_in), run_fit(sid, chair_width_in, chair_length_in, True)
         if "error" in a:
             out.append({"sid": sid, "error": a["error"]})
@@ -137,7 +149,10 @@ def check_units(sids: list[str], chair_width_in: float = 27.0, chair_length_in: 
         out.append({"sid": sid, "name": a["name"],
                     "reachable": f"{sum(r['status'] == 'reachable' for r in a['rooms'])}/{n}",
                     "with_hinges": f"{sum(r['status'] == 'reachable' for r in h['rooms'])}/{n}", "problems": problems})
-    return {"chair_in": [chair_width_in, chair_length_in], "units": out}
+    res = {"chair_in": [chair_width_in, chair_length_in], "units": out}
+    if len(sids) > MAX_CHECK:
+        res["skipped"] = sids[MAX_CHECK:]           # say so; never drop a named unit silently
+    return res
 
 
 def aerial_check(sid: str) -> dict:
