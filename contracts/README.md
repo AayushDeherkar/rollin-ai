@@ -22,7 +22,8 @@ No real Matterport, CoStar or Vexcel data is ever stored here. Lat/lon values ar
 
 ## Chat events
 - Every event has `id`, `ts` (ISO 8601 UTC), `run_id`, `type`.
-- `type` is one of `plan`, `tool`, `finding`, `verify`, `approval_needed`, `final`.
+- `type` is one of `plan`, `tool`, `finding`, `verify`, `aerial`, `approval_needed`, `final`.
+- `aerial` events give `sid`, `text` (a one-line summary the trace shows), `image_url` (`GET /api/aerial/{sid}`), `label: "from aerial, estimated"` and `findings[]` of `{item, question, answer: yes|no|unclear, note, basis: estimated, label}`. A top-down photo cannot show steps at doors, door widths or elevators, so those are never claimed.
 - Every number is wrapped: `{"value": 26.0, "unit": "in", "basis": "estimated"}`. An unknown number is `{"value": null, "basis": "unknown"}`.
 - `basis` is one of:
   - `measured`: straight from the scan (door widths, walls, coordinates).

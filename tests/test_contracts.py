@@ -9,7 +9,7 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 C = ROOT / "contracts"
 BASIS = {"measured", "estimated", "assumed", "asked", "unknown"}
-EVENT_TYPES = {"plan", "tool", "finding", "verify", "approval_needed", "final"}
+EVENT_TYPES = {"plan", "tool", "finding", "verify", "aerial", "approval_needed", "final"}
 
 
 def run_fit(name, hinges=False):
