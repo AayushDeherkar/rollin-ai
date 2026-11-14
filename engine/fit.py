@@ -350,7 +350,7 @@ def main(argv):
             turn = r["turning_space"]
             tstr = f" | turn circle {turn['max_circle_in']}\" ({'ok' if turn['meets_60in'] else 'under 60'})" if turn else ""
             print(f"  {r['label']:<12} {r['status']:<10} doors: {doors}{tstr}" + (f" | {r['reason']}" if r["reason"] else ""))
-    print(f"\nSaved out/{mid}_fit.json and floor plan PNG(s)")
+    print(f"\nSaved out/{mid}_fit{tag}.json and floor plan PNG(s)")
 
 
 if __name__ == "__main__":

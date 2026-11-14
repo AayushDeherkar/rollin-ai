@@ -3,10 +3,10 @@
 Project: **Rollin'** (HackPrinceton Fall 2026). Full plan: `PLAN.md` — read sections 4, 5, 7, 8, 9 before writing code.
 Deadline: Sunday Nov 15, 8:00 AM ET. Feature freeze: Sunday 2:00 AM ET.
 
-## Ownership (do not edit outside your owner's directories)
-- Person A: `engine/`, `agent/`, `data/` scripts, `requirements.txt`
-- Person B: `web/`, `messaging/`, `docs/devpost/`, `docs/peri/`, all `package.json` / lockfiles
-- Shared (PR + tell the other person): `contracts/`, `README.md`, `PLAN.md`, `CLAUDE.md`, `.gitignore`
+## Ownership (do not edit outside your owner's paths)
+- Person A = **Aayush** (engine, agent, data, Python): `engine/`, `agent/`, `data/`, `tests/`, `requirements.txt`, `contracts/`, `README.md`, `PLAN.md`, `CLAUDE.md`, `.gitignore`, `.env.example`
+- Person B = **Aarohi** (web, messaging, TypeScript): `web/`, `messaging/`, `docs/` (including all `package.json` / lockfiles inside them). Aarohi edits nothing else; she requests changes to shared files (`contracts/`, `README.md`, `PLAN.md`, `CLAUDE.md`) through the manager.
+- Before every merge: `git diff --name-only origin/main...HEAD` must list only paths you own.
 If your task needs a change in another area, stop and say so instead of making it.
 
 ## Git
@@ -15,11 +15,14 @@ If your task needs a change in another area, stop and say so instead of making i
 - Only the owner edits lockfiles / dependency lists.
 
 ## Secrets
-- Keys live only in `.env` (gitignored): `MATTERPORT_API_KEY`, `MATTERPORT_API_TOKEN`, `VEXCEL_API_KEY`, `COSTAR_ZIP_PASSWORD`, `COSTAR_KIT_URL`.
+- Keys live only in `.env` (gitignored); names are listed in `.env.example` (Matterport, Vexcel, CoStar, LangSmith, model provider).
 - Never print, log, commit, or hardcode them. Call the Matterport and Vexcel APIs from server-side code only.
+- ChatOverflow notes must never include keys, addresses, model ids, or any CoStar/Matterport/Vexcel data.
 
 ## Data contract
 - Engine output shape = `contracts/unit_result.example.json`. Do not change field names without a shared PR.
+- Contract examples are generated from synthetic apartments only: `python contracts/make_examples.py` (see `contracts/README.md`).
+- Real data lives only in gitignored `data/cache/`, `data/raw/`, `data/batch/`, `out/`.
 - Matterport: split queries (walls+doors / rooms / dimensions), retry `error.internal` up to 4×, cache to `data/cache/<sid>.json`.
 - Ignore opening `height`/`lowerElevation`. Openings < 18 in are artifacts. Rooms labelled `Void` are skipped.
 - Coordinates: metres, model frame. Showcase SDK frame: `api_to_sdk(x, y, z) = (x, z, -y)`.

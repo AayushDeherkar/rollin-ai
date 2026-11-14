@@ -1,0 +1,25 @@
+{"data":{"model":{"name":"Synthetic 1BR (narrow bedroom door)","floors":[{"id":"f1","label":"Floor 1",
+"vertices":[
+{"id":"a","position":{"x":0,"y":0}},{"id":"b","position":{"x":6,"y":0}},{"id":"c","position":{"x":6,"y":4}},{"id":"d","position":{"x":0,"y":4}},
+{"id":"e","position":{"x":6,"y":7}},{"id":"f","position":{"x":3,"y":7}},{"id":"g","position":{"x":3,"y":4}},
+{"id":"h","position":{"x":0,"y":7}},{"id":"i","position":{"x":1.5,"y":7}},{"id":"j","position":{"x":1.5,"y":4}}],
+"edges":[
+{"id":"e_ab","type":"wall","thickness":0.15,"vertices":[{"id":"a"},{"id":"b"}],"openings":[{"width":0.91,"type":"doorway","relativeCenter":0.5}]},
+{"id":"e_bc","type":"wall","thickness":0.15,"vertices":[{"id":"b"},{"id":"c"}],"openings":[]},
+{"id":"e_da","type":"wall","thickness":0.15,"vertices":[{"id":"d"},{"id":"a"}],"openings":[]},
+{"id":"e_cg","type":"wall","thickness":0.12,"vertices":[{"id":"c"},{"id":"g"}],"openings":[{"width":0.71,"type":"doorway","relativeCenter":0.5}]},
+{"id":"e_gj","type":"wall","thickness":0.12,"vertices":[{"id":"g"},{"id":"j"}],"openings":[{"width":0.66,"type":"doorway","relativeCenter":0.5}]},
+{"id":"e_jd","type":"wall","thickness":0.12,"vertices":[{"id":"j"},{"id":"d"}],"openings":[]},
+{"id":"e_ce","type":"wall","thickness":0.15,"vertices":[{"id":"c"},{"id":"e"}],"openings":[]},
+{"id":"e_ef","type":"wall","thickness":0.15,"vertices":[{"id":"e"},{"id":"f"}],"openings":[]},
+{"id":"e_fg","type":"wall","thickness":0.12,"vertices":[{"id":"f"},{"id":"g"}],"openings":[]},
+{"id":"e_fi","type":"wall","thickness":0.15,"vertices":[{"id":"f"},{"id":"i"}],"openings":[]},
+{"id":"e_ij","type":"wall","thickness":0.12,"vertices":[{"id":"i"},{"id":"j"}],"openings":[]},
+{"id":"e_ih","type":"wall","thickness":0.15,"vertices":[{"id":"i"},{"id":"h"}],"openings":[]},
+{"id":"e_hd","type":"wall","thickness":0.15,"vertices":[{"id":"h"},{"id":"d"}],"openings":[]}]}],
+"rooms":[
+{"id":"living","floor":{"id":"f1"},"classifications":[{"label":"Living Room","confidence":0.9}],"boundary":{"edges":[{"id":"e_ab"},{"id":"e_bc"},{"id":"e_cg"},{"id":"e_gj"},{"id":"e_jd"},{"id":"e_da"}]},"dimensions":{"areaFloor":24}},
+{"id":"bed","floor":{"id":"f1"},"classifications":[{"label":"Bedroom","confidence":0.9}],"boundary":{"edges":[{"id":"e_cg"},{"id":"e_ce"},{"id":"e_ef"},{"id":"e_fg"}]},"dimensions":{"areaFloor":9}},
+{"id":"bath","floor":{"id":"f1"},"classifications":[{"label":"Bathroom","confidence":0.9}],"boundary":{"edges":[{"id":"e_gj"},{"id":"e_fg"},{"id":"e_fi"},{"id":"e_ij"}]},"dimensions":{"areaFloor":4.5}},
+{"id":"closet","floor":{"id":"f1"},"classifications":[{"label":"Closet","confidence":0.9}],"boundary":{"edges":[{"id":"e_jd"},{"id":"e_ij"},{"id":"e_ih"},{"id":"e_hd"}]},"dimensions":{"areaFloor":4.5}}
+]}}}

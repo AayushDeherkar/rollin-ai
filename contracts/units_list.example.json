@@ -1,0 +1,64 @@
+{
+ "query": {
+  "lat": 29.7106,
+  "lon": -95.399,
+  "radius_km": 8.0,
+  "beds": null,
+  "w": 27.0,
+  "l": 42.0,
+  "hinges": false
+ },
+ "total": 2,
+ "units": [
+  {
+   "sid": "synthetic_1br",
+   "name": "Synthetic 1BR",
+   "lat": 29.7203,
+   "lon": -95.3891,
+   "score": 0.5,
+   "counts": {
+    "reachable": 2,
+    "blocked": 1,
+    "unknown": 1
+   },
+   "summary": "2 of 4 rooms reachable; blocked: Bathroom; 1 unknown (no measured door)",
+   "chair_in": [
+    27.0,
+    42.0
+   ],
+   "scenario": "as scanned",
+   "basis": {
+    "score": "estimated",
+    "counts": "estimated",
+    "lat_lon": "estimated"
+   },
+   "source": "cache",
+   "synthetic": true
+  },
+  {
+   "sid": "synthetic_demo",
+   "name": "Synthetic 1BR (narrow bedroom door)",
+   "lat": 29.7101,
+   "lon": -95.4012,
+   "score": 0.25,
+   "counts": {
+    "reachable": 1,
+    "blocked": 2,
+    "unknown": 1
+   },
+   "summary": "1 of 4 rooms reachable; blocked: Bedroom, Bathroom; 1 unknown (no measured door)",
+   "chair_in": [
+    27.0,
+    42.0
+   ],
+   "scenario": "as scanned",
+   "basis": {
+    "score": "estimated",
+    "counts": "estimated",
+    "lat_lon": "estimated"
+   },
+   "source": "cache",
+   "synthetic": true
+  }
+ ]
+}

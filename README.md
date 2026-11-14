@@ -2,7 +2,7 @@
 
 Your wheelchair just test-drove 200 Houston apartments. Rollin' finds the ones you can actually live in, shows exactly which door stops you, and asks the landlord about the rest.
 
-Built at HackPrinceton Fall 2026. Plan: `PLAN.md`. Agent rules: `CLAUDE.md`.
+Built at HackPrinceton Fall 2026. Plan: `PLAN.md`. Agent rules: `CLAUDE.md`. API contracts and examples (synthetic data only): `contracts/`.
 
 ## Quick start
 ```bash

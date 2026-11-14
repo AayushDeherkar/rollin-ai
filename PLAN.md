@@ -238,13 +238,13 @@ None of these is a blocker. L6 and L12 are the ones to prepare answers / mitigat
 ### 7.2 API (FastAPI, owned by A, consumed by B)
 | Method | Path | Returns |
 |---|---|---|
-| GET | `/api/units?lat=&lon=&radius_km=&beds=&w=&l=` | ranked list `[{sid,name,lat,lon,score,counts:{reachable,blocked,unknown},summary}]` |
+| GET | `/api/units?lat=&lon=&radius_km=&beds=&w=&l=` | `{query, total, units:[{sid,name,lat,lon,score,counts:{reachable,blocked,unknown},summary,chair_in,scenario,basis,source}]}` ranked; see `contracts/units_list.example.json` |
 | GET | `/api/units/{sid}?w=&l=&hinges=` | the engine JSON (section 5) |
-| POST | `/api/chat` `{message, profile}` | **SSE stream** of agent events: `{type:"plan"|"tool"|"finding"|"verify"|"approval_needed"|"final", ...}` |
+| POST | `/api/chat` `{message, profile}` | **SSE stream** of agent events `{id, ts, run_id, type:"plan"|"tool"|"finding"|"verify"|"approval_needed"|"final", ...}`; every number is `{value, unit?, basis}`; see `contracts/chat_events.example.jsonl` |
 | POST | `/api/approve` `{action_id, approved}` | result of the gated action |
 | GET | `/api/tour/{sid}/nearest-pano?x=&y=` | `{pano_id, sdk_position}` for the 3D tour jump |
 
-Person B builds against `contracts/*.example.json` fixtures until these endpoints exist.
+Person B builds against `contracts/*.example.json(l)` fixtures until these endpoints exist. Field-by-field notes: `contracts/README.md`.
 
 ### 7.3 Web UI (owned by B)
 Layout (one screen, projector-first, ≥16 px body text, high contrast, one accent colour):
@@ -264,7 +264,7 @@ Layout (one screen, projector-first, ≥16 px body text, high contrast, one acce
 
 ## 8. Task breakdown
 
-### Person A — data, engine, agent (Python)
+### Person A (Aayush) — data, engine, agent (Python)
 | # | Task | Done when | Est. |
 |---|---|---|---|
 | A1 | Create repo, push starter folder, add `.env.example`, `.gitignore`, `requirements.txt` | Both can clone & run engine on `data/cache/demo-backup.json` | 0.5 h |
@@ -278,7 +278,7 @@ Layout (one screen, projector-first, ≥16 px body text, high contrast, one acce
 | A9 | Tests: engine on synthetic + 3 real units; fixtures for B | `pytest` green | 0.5 h |
 | A10 | README technical sections, "what we built vs used", AI disclosure | Done | 0.5 h |
 
-### Person B — product, UI, messaging, story (TypeScript)
+### Person B (Aarohi) — product, UI, messaging, story (TypeScript)
 | # | Task | Done when | Est. |
 |---|---|---|---|
 | B1 | `web/` scaffold: Next.js + Tailwind + shadcn/ui + Motion; design tokens; 3-panel layout | Renders with fixtures | 1 h |
@@ -302,20 +302,19 @@ Layout (one screen, projector-first, ≥16 px body text, high contrast, one acce
 
 ## 9. Git workflow (no stepping on each other)
 
-**Ownership by directory** (enforce with `.github/CODEOWNERS` for visibility; we review our own areas):
+**Ownership by path** (CLAUDE.md is the source of truth):
 | Path | Owner |
 |---|---|
-| `engine/`, `agent/`, `data/` scripts, `requirements.txt` | A |
-| `web/`, `messaging/`, `docs/devpost/`, `docs/peri/`, `package.json` files | B |
-| `contracts/`, `README.md`, `PLAN.md`, `CLAUDE.md`, `.gitignore` | Shared — change only via PR, tell the other person |
+| `engine/`, `agent/`, `data/`, `tests/`, `requirements.txt`, `contracts/`, `README.md`, `PLAN.md`, `CLAUDE.md`, `.gitignore`, `.env.example` | A (Aayush) |
+| `web/`, `messaging/`, `docs/` (and their `package.json` / lockfiles) | B (Aarohi) — requests shared-file changes through the manager |
 
 **Branches**
 - `main` is always demoable. Never force-push `main`. Never commit directly to `main` except the very first commit.
 - Short-lived branches: `a/<task>` and `b/<task>` (e.g. `a/batch-ranker`, `b/plan-svg`).
 - Each Claude Code session / parallel agent works in its **own git worktree**:
   ```bash
-  git worktree add ../thr-a-agent -b a/agent-loop
-  git worktree add ../thr-b-plan  -b b/plan-svg
+  git worktree add ../rollin-a-agent -b a/agent-loop
+  git worktree add ../rollin-b-plan  -b b/plan-svg
   ```
 - Loop (every ~30–60 min):
   ```bash
@@ -330,7 +329,7 @@ Layout (one screen, projector-first, ≥16 px body text, high contrast, one acce
 
 **Secrets**
 - `.env` (gitignored) holds keys; commit `.env.example` with names only. Never paste keys into code, notebooks, commits, Devpost, or screenshots. If a key leaks, run `/costar-keys` again for a new pair.
-- `.gitignore` must include: `.env`, `out/`, `node_modules/`, `.next/`, `__pycache__/`, `*.ply`, `*.zip`, `data/raw/`.
+- `.gitignore` must include: `.env`, `out/`, `node_modules/`, `.next/`, `__pycache__/`, `*.ply`, `*.zip`, `data/raw/`, `data/cache/`, `data/batch/`.
 - **Never commit CoStar / Matterport / Vexcel data** (it is "hackathon use only"). Real model JSON lives in `data/cache/` (gitignored); share it between the two of you directly (e.g. a Discord DM zip), not through GitHub. Contract examples in `contracts/` are generated from the synthetic test apartment.
 
 ---
@@ -393,7 +392,7 @@ Sleep in shifts; at least 4 hours each.
 ## 13. Adopted from the CareSpace spec (decided Sat 04:45)
 
 1. **Voice call to the leasing office (B, stretch, checkpoint Sat 18:00).** After approval, the agent calls the leasing office (a teammate in the demo) through a Photon number + ElevenLabs voice agent over SIP and asks only what the scan can't answer: step-free building entrance? elevator? door widths of the rooms marked unknown? would they install offset hinges on the bedroom door? It logs answers via a server tool, and the room statuses update from `unknown` to `asked`. This fixes limitation L6 on stage, and lets us also enter Photon's **Best Voice Agent**. Setup references: Photon voice quickstart (photon.codes/docs/beta/get-started/voice) and the Photon + ElevenLabs cookbook (photon.codes/docs/beta/cookbooks/voice/elevenlabs) — **VERIFY both in the first hour of B's voice work**. Guardrails: the first sentence says it is an AI and who it represents; it announces the call is recorded for notes; no commitments; it calls only numbers the user entered, after approval. **If the call isn't working by 18:00, cut it** and keep the iMessage outreach.
-2. **Basis labels on every number:** `measured` (door widths, walls), `estimated` (clear width, aerial), `assumed` (hinge gain), `asked` (answers from the call/landlord).
+2. **Basis labels on every number:** `measured` (door widths, walls), `estimated` (clear width, aerial, scores), `assumed` (hinge gain), `asked` (told to us by a person: the user's chair size, answers from the call/landlord), `unknown`.
 3. **deepagents human-in-the-loop needs a checkpointer.** Pattern from the teammate's spec (verify against the installed version): `create_deep_agent(..., interrupt_on={"send_message": {...}, "start_call": {...}}, checkpointer=MemorySaver())`, then resume with a `Command(resume=...)`.
 4. **LangSmith tracing** (`LANGSMITH_TRACING=true`, `LANGSMITH_API_KEY`) — show the trace to LangChain judges.
 5. **Keep Matterport requests under 10/s** (shared keys); our batch job sleeps between calls.
