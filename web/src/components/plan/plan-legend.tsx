@@ -4,13 +4,15 @@ import { STATUS, StatusIcon, StatusSwatch } from "@/components/sheet/status";
 
 const ORDER: RoomStatus[] = ["reachable", "blocked", "unknown"];
 
-/** Key to the drawing: status fills, the dimension convention, and what is estimated. */
+/**
+ * Key to the drawing: status fills, the dimension convention, and what is estimated.
+ * Per-room reasons live in the room tooltips and in the callout for the room being driven to.
+ */
 export function PlanLegend({ unit, floor }: { unit: UnitResult; floor: Floor }) {
-  const notes = floor.rooms.filter((r) => r.reason || r.turning_space);
   return (
-    <div className="flex flex-col gap-2 border-t border-rule-strong px-5 py-3 text-sm">
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <ul className="flex flex-wrap gap-x-5 gap-y-2" aria-label="Room status key">
+    <div className="flex shrink-0 flex-col gap-1.5 border-t border-rule-strong px-5 py-2.5 text-sm">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5">
+        <ul className="flex flex-wrap gap-x-5 gap-y-1.5" aria-label="Room status key">
           {ORDER.map((s) => (
             <li key={s} className="flex items-center gap-2">
               <StatusSwatch status={s} />
@@ -29,29 +31,11 @@ export function PlanLegend({ unit, floor }: { unit: UnitResult; floor: Floor }) 
           <span className="font-semibold">too narrow</span>
         </span>
       </div>
-      {notes.length > 0 && (
-        <ul className="flex flex-col gap-0.5" aria-label="Room notes">
-          {notes.map((r) => (
-            <li key={r.room_id} className="flex gap-2">
-              <StatusIcon status={r.status} />
-              <span>
-                <span className="font-semibold">{r.label}:</span> {r.reason ?? STATUS[r.status].word.toLowerCase()}
-                {r.turning_space && (
-                  <>
-                    {r.reason ? ". " : "; "}Turning circle <span className="measure">{r.turning_space.max_circle_in.toFixed(1)} in</span>,{" "}
-                    {r.turning_space.meets_60in ? "meets" : "under"} the 60 in needed (walls only)
-                  </>
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
       <p className="text-ink-soft">
-        Door figures are clear width, <strong className="font-semibold text-ink">est.</strong> from the opening minus about 5 cm
-        {unit.scenario !== "as scanned" ? "; hinge gain is assumed, not measured" : ""}.{" "}
-        <span className="measure">{floor.openings_found}</span> openings found,{" "}
-        <span className="measure">{floor.artifacts_ignored}</span> scan artifacts ignored.
+        Door figures are clear width, <strong className="font-semibold text-ink">est.</strong> (opening minus about 5 cm)
+        {unit.scenario !== "as scanned" ? "; hinge gain assumed" : ""}. Chair track: solid is the engine’s route, dotted a drawn
+        approach. <span className="measure">{floor.openings_found}</span> openings,{" "}
+        <span className="measure">{floor.artifacts_ignored}</span> artifacts ignored.
       </p>
     </div>
   );

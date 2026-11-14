@@ -19,8 +19,8 @@ export function Panel({
 }) {
   return (
     <section aria-labelledby={labelledBy} className={cn("flex min-h-0 min-w-0 flex-col", className)}>
-      <header className="flex min-h-16 items-end justify-between gap-4 border-b border-rule-strong px-5 pb-3">
-        <h2 id={labelledBy} className="display text-2xl font-semibold">
+      <header className="flex min-h-16 shrink-0 items-end justify-between gap-4 border-b border-rule-strong px-5 pb-3">
+        <h2 id={labelledBy} className="display min-w-0 truncate text-2xl font-semibold">
           {title}
         </h2>
         {aside}

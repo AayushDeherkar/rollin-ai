@@ -147,6 +147,27 @@
     stroke-width: 5px;
     stroke-linejoin: round;
   }
+  /* room hit areas on the plan: invisible until hovered, focused or selected */
+  .plan-hit {
+    fill: transparent;
+    stroke: transparent;
+    stroke-width: 3px;
+    cursor: pointer;
+    outline: none;
+    transition: stroke var(--dur-1) var(--ease-draft);
+  }
+  .plan-hit:hover {
+    stroke: var(--ink-soft);
+    stroke-dasharray: 6 5;
+  }
+  .plan-hit[aria-pressed="true"] {
+    stroke: var(--ink);
+    stroke-dasharray: 6 5;
+  }
+  .plan-hit:focus-visible {
+    stroke: var(--agent);
+    stroke-dasharray: none;
+  }
   .transition-draft {
     transition-timing-function: var(--ease-draft);
     transition-duration: var(--dur-2);
