@@ -14,6 +14,21 @@ No real Matterport, CoStar or Vexcel data is ever stored here. Lat/lon values ar
 | `unit_result.hinges.example.json` | `GET /api/units/{sid}?hinges=1` | Same unit with offset hinges: bedroom flips to **reachable**; bathroom stays blocked; closet stays unknown. |
 | `units_list.example.json` | `GET /api/units` | `{query, total, units:[...], source}`, ranked by `score` (share of rooms reachable; unknown counts as not reached), ties: fewer blocked first. Each unit also has `distance_km` (from the query point), `with_hinges: {score, counts, summary}` (same unit with offset hinges) and `usable`. `?hinges=true` ranks by the hinges scores. `source` says where the list came from (batch run time, units processed, scans with no data). |
 | `chat_events.example.jsonl` | `POST /api/chat` (SSE) | One full agent run, one JSON event per line. |
+| `unit_result.synthetic_1br.example.json` (+ `.hinges.`) | `GET /api/units/synthetic_1br` | The second shortlisted unit's plan. Every unit named in `final.shortlist` has a plan example (`unit_result.example.json` for `synthetic_demo`, `unit_result.<sid>.example.json` otherwise); fixture mode can open them once the web fixture loader reads that name. |
+| `profile.example.json` | `POST /api/chat` body `profile` | The person's profile; see "Chat profile" below. |
+
+## Chat profile (request body of `POST /api/chat`: `{message, profile}`)
+| Field | Type | Meaning |
+|---|---|---|
+| `sender_id` | string, optional | Stable id of who is asking (iMessage handle hash, web session). Profile memory is used only when it is present; without it every request stands alone. |
+| `chair_in` | `[width, length]` or `null` | Mobility device size in inches; `null` or missing means "not given" (memory or the message may supply it). |
+| `turning_in` | number | Turning circle needed, in inches (60 = ADA). |
+| `needs` | string[] | Must-haves, from: `bedroom`, `bathroom`, `roll_in_shower`, `step_free_entry`, `elevator`, `parking`. |
+| `budget` | `{max_monthly_usd}` | Optional rent ceiling. |
+| `area` | `{label, lat, lon, radius_km}` | Where to search. |
+| `beds` | int[] | Acceptable bedroom counts (0 = studio). |
+
+Every field is optional. Numbers the person gives are reported back in events with `basis: "asked", source: "user"`.
 
 ## Unit result fields added in contract v2 (additive)
 - `rooms[].path` is still `[[x, y, heading_rad], ...]` for reachable rooms. For **blocked** rooms it is now the chair's drive up to the door that stops it, ending at the chair centre nearest that door on the reachable side. It is `null` (and so is `blocking_door_edge`) when no measured door on the way connects to a room the chair reached. That happens when the room is unknown, when the chair fits nowhere in the start room, when the room is reached only through an open passage that is too tight, or when its only door leads outside the unit.
@@ -21,6 +36,8 @@ No real Matterport, CoStar or Vexcel data is ever stored here. Lat/lon values ar
 - `rooms[].turning_space.center` is the `[x, y]` (metres, model frame) of the largest turning circle (walls only).
 
 ## Chat events
+- `final.shortlist[]` only names units the run checked with `run_fit` (so each has a plan).
+- `plan.profile` (optional) echoes the profile the run uses: `{sender_id, chair_in: [Num, Num]}`. The live agent sends it once profile memory lands (round 3, task 3); until then only the example has it.
 - Every event has `id`, `ts` (ISO 8601 UTC), `run_id`, `type`.
 - `type` is one of `plan`, `tool`, `finding`, `verify`, `aerial`, `approval_needed`, `final`.
 - `aerial` events give `sid`, `text` (a one-line summary the trace shows), `image_url` (`GET /api/aerial/{sid}`), `label: "from aerial, estimated"` and `findings[]` of `{item, question, answer: yes|no|unclear, note, basis: estimated, label}`. A top-down photo cannot show steps at doors, door widths or elevators, so those are never claimed.

@@ -51,7 +51,7 @@ uvicorn agent.server:app --port 8000 --reload
 - **Replay:** `data/replay/run.jsonl` holds one recorded real run (gitignored, because it contains real data). `POST /api/chat?replay=1` streams it.
 
 ## Built with
-Matterport Model API (wall graph, openings, rooms, panoramas), Vexcel aerial imagery, CoStar records, LangChain deepagents, LangChain, LangGraph, LangSmith, Google Gemini (gemini-3.8-flash via langchain-google-genai), Photon 2.0 (@photon-ai/api), NumPy, SciPy, Shapely, Pillow, Matplotlib, FastAPI, Uvicorn, HTTPX (tests), Requests, python-dotenv, pytest, Next.js, Tailwind, shadcn/ui, Radix, Motion, Lucide; fonts Big Shoulders, Public Sans, IBM Plex Mono.
+Matterport Model API (wall graph, openings, rooms, panoramas), Vexcel aerial imagery, CoStar records, LangChain deepagents, LangChain, LangGraph, LangSmith, Google Gemini (gemini-3.8-flash via langchain-google-genai), Photon 2.0 (@photon-ai/api), NumPy, SciPy, Shapely, Pillow, Matplotlib, FastAPI, Uvicorn, HTTPX (tests), Requests, python-dotenv, pytest, Next.js, Tailwind, shadcn/ui, Radix, Motion, Lucide, socket.io-client, tsx; fonts Big Shoulders, Public Sans, IBM Plex Mono.
 
 ## What we built vs. what we used
 (fill in before submission; disclose AI-assisted coding)
