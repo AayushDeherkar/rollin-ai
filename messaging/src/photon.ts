@@ -4,6 +4,7 @@
  * Docs: https://photon.codes/docs/beta/message-delivery/websocket and
  *       https://photon.codes/docs/beta/get-started/imessage
  */
+import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Photon } from "@photon-ai/api";
@@ -28,6 +29,8 @@ export interface Inbound {
   text: string;
   /** when Photon received it (ISO 8601) */
   createdAt: string;
+  /** when this process received it (local clock) */
+  arrivedAt: number;
 }
 
 /** Older texts are not acted on, e.g. a "yes" redelivered after a restart. */
@@ -49,6 +52,7 @@ export function inboundFrom(event: unknown): Inbound | null {
     from: String(m.sentBy.handle ?? ""),
     text: m.content.text,
     createdAt: String(m.createdAt ?? ""),
+    arrivedAt: Date.now(),
   };
 }
 
@@ -57,10 +61,13 @@ export function photonClient(cfg: PhotonConfig) {
   const cursorFile = path.join(cfg.stateDir, "photon-cursor.json");
   /** Send the `n`th plain-text reply to `to`, into the conversation it came from. */
   async function reply(to: Inbound, text: string, n: number): Promise<void> {
+    // the text is part of the key: after a restart the n-th reply may differ, and must not be
+    // rejected as a reused key; an identical retry is still deduplicated
+    const digest = createHash("sha256").update(text).digest("hex").slice(0, 16);
     await photon.projects.sendMessage({
       path: { id: cfg.projectId },
       // stable per inbound message and reply number, so a retry never double-sends
-      headers: { "idempotency-key": `rollin:${to.messageId}:${n}` },
+      headers: { "idempotency-key": `rollin:${to.messageId}:${n}:${digest}` },
       body: { spaceId: to.spaceId, senderId: to.agentId, parentMessageId: to.messageId, content: { type: "text", format: "plain", text } },
     });
   }
@@ -103,11 +110,18 @@ export function photonClient(cfg: PhotonConfig) {
       });
     });
     socket.on("connect_error", (err: Error) => log(`Photon connection failed: ${err.message}`));
+    socket.on("disconnect", (why: string) => {
+      log(`Photon disconnected (${why}).`);
+      // socket.io reconnects by itself except after a server-side disconnect
+      if (why === "io server disconnect" && !stopped) socket.connect();
+    });
     socket.on("delivery_error", (err: unknown) => log(`Photon delivery error: ${JSON.stringify(err)}`));
     socket.on("delivery", (event: unknown, meta: { seq: number }) => {
+      // parse on arrival, so arrivedAt is when it reached us, not when the queue got to it
+      const m = inboundFrom(event);
       queue = queue.then(async () => {
-        if (stopped) return;
-        const m = inboundFrom(event);
+        // already handled (a redelivery after reconnecting), or stopped
+        if (stopped || (cursor > 0 && meta.seq <= cursor)) return;
         const allowed = m && (cfg.allowedSenders.length === 0 || cfg.allowedSenders.includes(m.from));
         const age = m ? Date.now() - Date.parse(m.createdAt) : 0;
         if (m && !allowed) log("Ignored a message from a sender not in PHOTON_ALLOWED_SENDERS.");
@@ -124,7 +138,7 @@ export function photonClient(cfg: PhotonConfig) {
             return;
           }
         }
-        cursor = meta.seq;
+        cursor = Math.max(cursor, meta.seq);
         await saveCursor(cursor);
       });
     });

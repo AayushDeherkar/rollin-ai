@@ -12,7 +12,7 @@ export const INTRO =
   "Hi, I'm Rollin', an AI agent, not a person. I check whether apartments fit a specific wheelchair, " +
   "using measured floor plans. Room counts are estimates from those plans, and I can be wrong.";
 
-const YES = /^(yes|y|yeah|yep|sure|ok|okay|send|send it|go ahead)$/i;
+const YES = /^(yes|y|yeah|yep|send|send it|go ahead)$/i;
 const NO = /^(no|n|nope|don'?t|do not|don'?t send|cancel|stop)$/i;
 
 export function yesNo(text: string): boolean | null {
@@ -84,6 +84,8 @@ export function approvalText(run: AgentRun): { actionId: string; text: string } 
 interface State {
   introduced: boolean;
   pending: string | null;
+  /** local time the open question went out; only answers that arrived after it count */
+  askedAt: number;
   /** serialises messages within one conversation */
   chain: Promise<void>;
 }
@@ -98,15 +100,17 @@ export class Conversations {
   ) {}
 
   /**
-   * Handle one inbound text; replies go out through `say`, in order. Rejects if the text could
-   * not be handled (after trying to say so), so a transport knows not to mark it done.
+   * Handle one inbound text; replies go out through `say`, in order. `arrivedAt` is when the
+   * transport received it (local clock), so a "yes" typed while the agent was still working is
+   * not taken as an answer to a question asked later. Rejects if the text could not be handled
+   * (after trying to say so), so a transport knows not to mark it done.
    */
-  handle(key: string, text: string, say: Say): Promise<void> {
-    const s = this.states.get(key) ?? { introduced: false, pending: null, chain: Promise.resolve() };
+  handle(key: string, text: string, say: Say, arrivedAt: number = Date.now()): Promise<void> {
+    const s = this.states.get(key) ?? { introduced: false, pending: null, askedAt: 0, chain: Promise.resolve() };
     this.states.set(key, s);
     const next = s.chain.then(async () => {
       try {
-        await this.step(s, text, say);
+        await this.step(s, text, say, arrivedAt);
       } catch (err) {
         // never leave a question open that the person may not have seen
         s.pending = null;
@@ -118,12 +122,16 @@ export class Conversations {
     return next;
   }
 
-  private async step(s: State, text: string, say: Say): Promise<void> {
+  private async step(s: State, text: string, say: Say, arrivedAt: number): Promise<void> {
     if (!s.introduced) {
       s.introduced = true;
       await say(INTRO);
     }
     const answer = s.pending ? yesNo(text) : null;
+    if (s.pending && answer !== null && arrivedAt < s.askedAt) {
+      // sent before the question existed: not an answer to it
+      return say("I asked something after that message. Please answer the question above with yes or no.");
+    }
     if (s.pending && answer !== null) {
       const actionId = s.pending;
       s.pending = null;
@@ -146,6 +154,7 @@ export class Conversations {
       await say(ask.text);
       // open only once the question has gone out
       s.pending = ask.actionId;
+      s.askedAt = Date.now();
     }
   }
 }

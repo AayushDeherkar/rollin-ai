@@ -29,9 +29,9 @@ function fake(events: AgentEvent[] = contractRun, replay = true) {
   return { rollin, calls };
 }
 
-async function talk(c: Conversations, text: string): Promise<string[]> {
+async function talk(c: Conversations, text: string, arrivedAt?: number): Promise<string[]> {
   const out: string[] = [];
-  await c.handle("k", text, async (t) => void out.push(t));
+  await c.handle("k", text, async (t) => void out.push(t), arrivedAt);
   return out;
 }
 
@@ -95,12 +95,25 @@ test("a question that failed to send is not left open, and the failure reaches t
   assert.equal(calls.approve.length, 0);
 });
 
+test("a yes that arrived before the question was asked does not approve", async () => {
+  const { rollin, calls } = fake();
+  const c = new Conversations(rollin, "http://web.test");
+  const typedDuringRun = Date.now();
+  await talk(c, "27 x 42 chair");
+  const out = await talk(c, "yes", typedDuringRun - 1);
+  assert.equal(calls.approve.length, 0);
+  assert.match(out[0], /answer the question above/);
+  await talk(c, "yes");
+  assert.equal(calls.approve.length, 1);
+});
+
 test("parsers", () => {
   assert.deepEqual(chairFrom("my 27 × 42 in chair"), [27, 42]);
   assert.deepEqual(chairFrom('27" by 42"'), [27, 42]);
   assert.equal(chairFrom("a 27 inch chair"), null);
   assert.equal(yesNo(" Yes. "), true);
   assert.equal(yesNo("don't send"), false);
+  assert.equal(yesNo("ok"), null);
   assert.equal(yesNo("yes but ask about parking"), null);
 });
 
@@ -120,7 +133,9 @@ test("only plain-text iMessages from a person to the agent are handled", () => {
       },
     },
   };
-  assert.deepEqual(inboundFrom(msg), { messageId: "msg_1", spaceId: "spc_1", agentId: "usr_agent", from: "+15550100", text: "hi", createdAt: "2026-11-14T15:00:00Z" });
+  const { arrivedAt, ...got } = inboundFrom(msg)!;
+  assert.ok(Math.abs(arrivedAt - Date.now()) < 1000);
+  assert.deepEqual(got, { messageId: "msg_1", spaceId: "spc_1", agentId: "usr_agent", from: "+15550100", text: "hi", createdAt: "2026-11-14T15:00:00Z" });
   assert.equal(inboundFrom({ ...msg, type: "message.delivered" }), null);
   const fromAgent = structuredClone(msg);
   fromAgent.data.object.sentBy.kind = "agent";

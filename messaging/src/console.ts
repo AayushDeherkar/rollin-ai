@@ -12,10 +12,13 @@ const conversations = new Conversations(webRollin(webUrl), process.env.ROLLIN_PU
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 
 console.log(`Texting the agent through ${webUrl}. Ctrl+D to stop.\n`);
-for await (const line of rl) {
-  if (!line.trim()) continue;
-  await conversations.handle("console", line, async (text) => {
-    console.log(`\nRollin':\n${text}\n`);
-  });
-  rl.prompt();
-}
+// stamp each line when typed, the way the bridge stamps a text when it arrives
+let last: Promise<void> = Promise.resolve();
+rl.on("line", (line) => {
+  if (!line.trim()) return;
+  const arrivedAt = Date.now();
+  last = conversations
+    .handle("console", line, async (text) => void console.log(`\nRollin':\n${text}\n`), arrivedAt)
+    .catch(() => {});
+});
+rl.on("close", () => void last.then(() => process.exit(0)));

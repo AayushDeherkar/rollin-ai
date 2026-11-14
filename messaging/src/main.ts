@@ -37,7 +37,10 @@ const log = (s: string) => console.log(`${new Date().toISOString()} ${s}`);
 await photon.listen(async (m) => {
   log(`Message ${m.messageId} received.`);
   let n = 0;
-  await conversations.handle(m.spaceId, m.text, async (text) => {
+  await conversations.handle(
+    m.spaceId,
+    m.text,
+    async (text) => {
     n += 1;
     try {
       await photon.reply(m, text, n);
@@ -45,5 +48,7 @@ await photon.listen(async (m) => {
       log(err instanceof ApiError ? `Photon API error ${err.status} (request ${err.requestId ?? "unknown"}).` : `Send failed: ${String(err)}`);
       throw err;
     }
-  });
+    },
+    m.arrivedAt,
+  );
 }, log, () => process.exit(1));
