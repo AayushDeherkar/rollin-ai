@@ -33,7 +33,7 @@ function readView(): View | null {
 
 let webgl: boolean | undefined;
 /** whether this browser can make a WebGL context; checked once */
-function readWebgl(): boolean {
+export function readWebgl(): boolean {
   if (webgl === undefined) {
     try {
       const c = document.createElement("canvas");

@@ -22,7 +22,7 @@ import { readPalette, type Palette } from "@/lib/tokens";
 import { STATUS } from "@/components/sheet/status";
 import { CalloutBody } from "@/components/plan/chair-callout";
 
-const WALL_H = 2.4;
+export const WALL_H = 2.4;
 const DOOR_H = 2.03;
 const LEAF_T = 0.035;
 /** below this, sustained over two windows, the model hands over to the 2D plan */
@@ -32,7 +32,7 @@ const LEAF_OPEN = Math.PI / 2;
 const LEAF_CLEAR = (165 * Math.PI) / 180;
 
 /** model (x, y, height) → three.js */
-const v3 = (x: number, y: number, h = 0): [number, number, number] => [x, h, -y];
+export const v3 = (x: number, y: number, h = 0): [number, number, number] => [x, h, -y];
 
 export interface DollhouseProps {
   unit: UnitResult;
@@ -54,7 +54,6 @@ export function Dollhouse(props: DollhouseProps) {
   const centre: Point = [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2];
   const span = Math.max(b.maxX - b.minX, b.maxY - b.minY, 4);
   const camPos: [number, number, number] = [span * 0.5, span * 1.0, span * 0.75];
-  const hinges = props.unit.scenario !== "as scanned";
   const label = `3D model of ${props.unit.name}. ${props.floor.rooms.map((r) => `${r.label}: ${STATUS[r.status].word.toLowerCase()}`).join("; ")}.`;
 
   return (
@@ -66,24 +65,39 @@ export function Dollhouse(props: DollhouseProps) {
           <directionalLight position={[-span, span * 1.6, span * 0.8]} intensity={1.1} color={palette.ink} />
           <Guards onFallback={props.onFallback} />
           <Rig {...props} centre={centre} span={span} />
-          {/* everything in model coordinates, centred on the base board */}
-          <group position={[-centre[0], 0, centre[1]]}>
-            <BaseBoard floor={props.floor} palette={palette} />
-            <Floors floor={props.floor} palette={palette} selected={props.selectedRoom} onSelect={props.onRoomSelect} />
-            <Walls floor={props.floor} palette={palette} />
-            <Doors floor={props.floor} palette={palette} hinges={hinges} drive={props.drive} driving={props.driving} onOpen={props.onDoorOpen} />
-            <TurningCircles floor={props.floor} palette={palette} />
-            <RoomLabels floor={props.floor} />
-            {props.drive && <Chair chairIn={props.unit.chair_in} drive={props.drive} progress={props.progress} s={props.s} palette={palette} />}
-            {props.drive && !props.driving && <Callout drive={props.drive} chairIn={props.unit.chair_in} hinges={hinges} />}
-          </group>
+          <Model {...props} />
         </Canvas>
       </Boundary>
     </div>
   );
 }
 
-class Boundary extends Component<{ onError: (message: string) => void; children: ReactNode }, { failed: boolean }> {
+export interface ModelProps extends Omit<DollhouseProps, "onFallback"> {
+  /** the pinned callout where the drive ends (the stage draws its own ruler instead) */
+  callout?: boolean;
+}
+
+/** The model itself, in model coordinates centred on the base board: shared by the classic view and the stage. */
+export function Model({ callout = true, ...props }: ModelProps) {
+  const [palette] = useState(readPalette);
+  const b = useMemo(() => floorBounds(props.floor), [props.floor]);
+  const centre: Point = [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2];
+  const hinges = props.unit.scenario !== "as scanned";
+  return (
+    <group position={[-centre[0], 0, centre[1]]}>
+      <BaseBoard floor={props.floor} palette={palette} />
+      <Floors floor={props.floor} palette={palette} selected={props.selectedRoom} onSelect={props.onRoomSelect} />
+      <Walls floor={props.floor} palette={palette} />
+      <Doors floor={props.floor} palette={palette} hinges={hinges} drive={props.drive} driving={props.driving} onOpen={props.onDoorOpen} />
+      <TurningCircles floor={props.floor} palette={palette} />
+      <RoomLabels floor={props.floor} />
+      {props.drive && <Chair chairIn={props.unit.chair_in} drive={props.drive} progress={props.progress} s={props.s} palette={palette} />}
+      {callout && props.drive && !props.driving && <Callout drive={props.drive} chairIn={props.unit.chair_in} hinges={hinges} />}
+    </group>
+  );
+}
+
+export class Boundary extends Component<{ onError: (message: string) => void; children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
@@ -97,7 +111,7 @@ class Boundary extends Component<{ onError: (message: string) => void; children:
 }
 
 /** Hands over to the 2D plan when the context is lost or the frame rate stays under MIN_FPS. */
-function Guards({ onFallback }: { onFallback: (reason: string) => void }) {
+export function Guards({ onFallback }: { onFallback: (reason: string) => void }) {
   const gl = useThree((st) => st.gl);
   const acc = useRef({ t: 0, frames: 0, warm: 0, low: 0, done: false });
   useEffect(() => {
@@ -506,8 +520,6 @@ function Chair({
   s: RouteSampler;
   palette: Palette;
 }) {
-  const W = chairIn[0] * M_PER_IN;
-  const L = chairIn[1] * M_PER_IN;
   const body = useRef<THREE.Group>(null);
   const mats = useRef<THREE.MeshStandardMaterial[]>([]);
   const colours = useMemo(
@@ -516,17 +528,6 @@ function Chair({
       still: new THREE.Color(palette.ink),
     }),
     [palette],
-  );
-  const footprint = useMemo(
-    () =>
-      [
-        [-L / 2, 0.02, -W / 2],
-        [L / 2, 0.02, -W / 2],
-        [L / 2, 0.02, W / 2],
-        [-L / 2, 0.02, W / 2],
-        [-L / 2, 0.02, -W / 2],
-      ] as [number, number, number][],
-    [W, L],
   );
   const track = useMemo(() => drive.route.map(([x, y]) => v3(x, y, 0.015)), [drive.route]);
   useFrame(() => {
@@ -540,10 +541,46 @@ function Chair({
     const c = p < 1 ? colours.moving : colours.still;
     for (const m of mats.current) m.color.copy(c);
   });
+  return (
+    <>
+      <Line points={track} color={palette.ruleStrong} lineWidth={1.5} dashed dashSize={0.15} gapSize={0.1} />
+      <group ref={body}>
+        <ChairBody chairIn={chairIn} palette={palette} mats={mats} />
+      </group>
+    </>
+  );
+}
+
+/**
+ * The chair drawn on its width × length footprint (the shape the engine tests). Seat, back and
+ * wheels are drawing proportions, not measurements. `mats` collects the materials for recolouring.
+ */
+export function ChairBody({
+  chairIn,
+  palette,
+  mats,
+}: {
+  chairIn: [number, number];
+  palette: Palette;
+  mats?: { current: THREE.MeshStandardMaterial[] };
+}) {
+  const W = chairIn[0] * M_PER_IN;
+  const L = chairIn[1] * M_PER_IN;
+  const footprint = useMemo(
+    () =>
+      [
+        [-L / 2, 0.02, -W / 2],
+        [L / 2, 0.02, -W / 2],
+        [L / 2, 0.02, W / 2],
+        [-L / 2, 0.02, W / 2],
+        [-L / 2, 0.02, -W / 2],
+      ] as [number, number, number][],
+    [W, L],
+  );
   const mat = (i: number) => (
     <meshStandardMaterial
       ref={(m) => {
-        if (m) mats.current[i] = m;
+        if (m && mats) mats.current[i] = m;
       }}
       color={palette.ink}
       roughness={0.6}
@@ -552,33 +589,30 @@ function Chair({
   const wheelR = Math.min(0.3, W / 2);
   return (
     <>
-      <Line points={track} color={palette.ruleStrong} lineWidth={1.5} dashed dashSize={0.15} gapSize={0.1} />
-      <group ref={body}>
-        <Line points={footprint} color={palette.ink} lineWidth={1.5} />
-        {/* seat */}
-        <mesh position={[0, 0.5, 0]}>
-          <boxGeometry args={[L * 0.6, 0.07, W * 0.8]} />
-          {mat(0)}
+      <Line points={footprint} color={palette.ink} lineWidth={1.5} />
+      {/* seat */}
+      <mesh position={[0, 0.5, 0]}>
+        <boxGeometry args={[L * 0.6, 0.07, W * 0.8]} />
+        {mat(0)}
+      </mesh>
+      {/* back, at one end: the engine's chair has no front, so this is only a picture */}
+      <mesh position={[-L * 0.3, 0.78, 0]}>
+        <boxGeometry args={[0.06, 0.5, W * 0.8]} />
+        {mat(1)}
+      </mesh>
+      {/* drive wheels and casters */}
+      {[-1, 1].map((k) => (
+        <mesh key={`w${k}`} position={[-L * 0.15, wheelR, (k * (W - 0.05)) / 2]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[wheelR, wheelR, 0.04, 28]} />
+          {mat(2 + (k + 1) / 2)}
         </mesh>
-        {/* back, at one end: the engine's chair has no front, so this is only a picture */}
-        <mesh position={[-L * 0.3, 0.78, 0]}>
-          <boxGeometry args={[0.06, 0.5, W * 0.8]} />
-          {mat(1)}
+      ))}
+      {[-1, 1].map((k) => (
+        <mesh key={`c${k}`} position={[L * 0.4, 0.08, (k * (W - 0.12)) / 2]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.08, 0.08, 0.04, 16]} />
+          {mat(4 + (k + 1) / 2)}
         </mesh>
-        {/* drive wheels and casters */}
-        {[-1, 1].map((k) => (
-          <mesh key={`w${k}`} position={[-L * 0.15, wheelR, (k * (W - 0.05)) / 2]} rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[wheelR, wheelR, 0.04, 28]} />
-            {mat(2 + (k + 1) / 2)}
-          </mesh>
-        ))}
-        {[-1, 1].map((k) => (
-          <mesh key={`c${k}`} position={[L * 0.4, 0.08, (k * (W - 0.12)) / 2]} rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.08, 0.08, 0.04, 16]} />
-            {mat(4 + (k + 1) / 2)}
-          </mesh>
-        ))}
-      </group>
+      ))}
     </>
   );
 }
