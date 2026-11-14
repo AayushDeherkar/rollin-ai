@@ -91,9 +91,11 @@ def _fit_many(sids: list[str], w: float, l: float) -> None:
         procs = [subprocess.Popen([sys.executable, "-m", "agent.agent", "--fit", f"{w:g}", f"{l:g}", *todo[i::n]],
                                   cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                  for i in range(n)]
+        import time
+        deadline = time.monotonic() + 120              # one shared budget, not 120 s per worker
         for p in procs:
             try:
-                p.wait(timeout=120)
+                p.wait(timeout=max(0.1, deadline - time.monotonic()))
             except subprocess.TimeoutExpired:
                 p.kill()
     for s in todo:                                   # anything a worker did not finish is done here
@@ -122,7 +124,8 @@ def search_units(radius_km: float = 8.0, beds: list[int] | int | None = None, to
         radius_km: max distance from the Texas Medical Center.
         beds: acceptable bedroom counts (0 = studio), or None for any.
         top: how many units to return (max 5).
-        include: unit ids the person named; always returned, even outside the radius.
+        include: unit ids the person named; always returned, even outside the radius (in `not_cached` if their
+            floor plan is not downloaded).
         chair_width_in: the person's chair width in inches.
         chair_length_in: the person's chair length in inches.
     """
@@ -135,11 +138,15 @@ def search_units(radius_km: float = 8.0, beds: list[int] | int | None = None, to
     rows.sort(key=lambda u: (-u["score"], u["counts"]["blocked"], u.get("distance_km") or 99))
     n_top = max(1, min(top, 5))
     named = [u for u in units if u["sid"] in (include or [])]
+    asked = list(dict.fromkeys(include or []))
+    indexed = {u["sid"] for u in units}
+    extra = {k: v for k, v in {"not_cached": [s for s in asked if not _cached(s)],          # named, cannot be driven
+                               "not_in_index": [s for s in asked if _cached(s) and s not in indexed]}.items() if v}
     if (w, l) == BATCH_CHAIR:
         picked = rows[:n_top]
         out = [_row(u) for u in picked + [u for u in named if u not in picked]]
         return {"candidates": len(rows), "chair_in": [w, l], "ranked_by": "precomputed batch (27x42 in chair)",
-                "units": out}
+                "units": out, **extra}
     pool = rows[:max(RERANK_POOL, n_top)]
     _fit_many([u["sid"] for u in pool + named], w, l)
     live = {u["sid"]: _fit_row(u["sid"], w, l) for u in pool + named}
@@ -149,7 +156,7 @@ def search_units(radius_km: float = 8.0, beds: list[int] | int | None = None, to
             "reachable": live[u["sid"]]["reachable"], "with_hinges": live[u["sid"]]["with_hinges"]}
            for u in picked + [u for u in named if u not in picked]]
     return {"candidates": len(rows), "chair_in": [w, l],
-            "ranked_by": f"live fit with this chair over the batch's top {len(pool)}", "units": out}
+            "ranked_by": f"live fit with this chair over the batch's top {len(pool)}", "units": out, **extra}
 
 
 def get_unit(sid: str) -> dict:
@@ -593,18 +600,23 @@ class Run:
                 + (f"; {unknown} room(s) with no measured door stay unknown and became questions." if unknown else "."))
         return self.ev("verify", text=text, source="code", checked=checked, questions=qs)
 
-    def ensure_shortlist(self, chair: tuple[float, float]) -> list[dict]:
-        """A live run always ends with a shortlist. If the model never had the fit engine check a unit, the
-        orchestrator checks the search's units itself (same engine and cache) and labels it as such."""
+    def ensure_shortlist(self, chair: tuple[float, float], chair_asked: bool = True) -> list[dict]:
+        """A live run always ends with a shortlist when any unit matches. If the model never had the fit engine check
+        a unit, the orchestrator checks the units its search returned (same filters, engine and cache) and labels it
+        as such. A search that matched nothing stays empty; with no search at all, the default search is used.
+        Blocking (fits may run): call it off the event loop."""
         if any(sc == "as scanned" for _, sc in self.fits):
             return []
         w, l = chair
-        sids = [u["sid"] for u in (self.last_search or {}).get("units", []) if _cached(u["sid"])]
-        if not sids:
+        if self.last_search is not None:
+            sids = [u["sid"] for u in self.last_search.get("units", []) if _cached(u["sid"])]
+        else:
             sids = [u["sid"] for u in search_units(chair_width_in=w, chair_length_in=l)["units"]]
         if not sids:
             return []
-        args = {"sids": sids, "chair_width_in": w, "chair_length_in": l}
+        args = {"sids": sids, **wrap_args({"chair_width_in": w, "chair_length_in": l})}
+        if not chair_asked:                          # no chair given: the batch chair is our assumption, not theirs
+            args.update({k: num(v, "assumed", "in") for k, v in (("chair_width_in", w), ("chair_length_in", l))})
         return self.check_events(check_units(sids, w, l), args,
                                  note="run by the orchestrator in code: the agent finished without checking floor plans")
 
@@ -621,7 +633,7 @@ class Run:
             return [self.ev("tool", name="search_units", status="done", args=wrap_args(args),
                             result={"candidates": num(data["candidates"], "measured"),
                                     "sids": [u["sid"] for u in data["units"]],
-                                    **({"ranked_by": data["ranked_by"]} if data.get("ranked_by") else {})})]
+                                    **{k: data[k] for k in ("ranked_by", "not_cached", "not_in_index") if data.get(k)}})]
         if name == "check_units" and isinstance(data, dict) and "units" in data:
             return self.check_events(data, args)
         if name == "task":
@@ -781,7 +793,8 @@ async def run_agent(message: str, profile: dict, run_id: str) -> AsyncIterator[d
     from agent import memory
     profile, mem = memory.resolve(message, profile)
     chair = profile.get("chair_in") or []
-    chair = (float(chair[0]), float(chair[1])) if len(chair) == 2 else BATCH_CHAIR
+    chair_asked = len(chair) == 2
+    chair = (float(chair[0]), float(chair[1])) if chair_asked else BATCH_CHAIR
     _CHAIR.set(chair)                           # tools default to this run's chair if the model omits it
     r = Run(run_id)
     plan = {"text": "Orchestrator pipeline", "source": "orchestrator",
@@ -811,7 +824,7 @@ async def run_agent(message: str, profile: dict, run_id: str) -> AsyncIterator[d
     state = await agent.aget_state(thread)
     msgs = state.values.get("messages", [])
     last = next((text_of(m.content) for m in reversed(msgs) if type(m).__name__ == "AIMessage" and text_of(m.content)), "")
-    for e in r.ensure_shortlist(chair):
+    for e in await asyncio.to_thread(r.ensure_shortlist, chair, chair_asked):     # fits may run: off the event loop
         yield e
     yield r.final(last)
 
