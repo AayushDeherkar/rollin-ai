@@ -80,8 +80,8 @@ export function webRollin(baseUrl: string, runTimeoutMs = 180_000): Rollin {
       let buffer = "";
       for (;;) {
         const { value, done } = await reader.read();
-        if (done) break;
-        const { payloads, rest } = takeMessages(buffer + value);
+        // at the end, a last event without its blank line still counts
+        const { payloads, rest } = takeMessages(done ? `${buffer}\n\n` : buffer + value);
         buffer = rest;
         for (const p of payloads) {
           try {
@@ -92,6 +92,7 @@ export function webRollin(baseUrl: string, runTimeoutMs = 180_000): Rollin {
             /* skip a malformed event */
           }
         }
+        if (done) break;
       }
       return { events, replay, reason };
     },

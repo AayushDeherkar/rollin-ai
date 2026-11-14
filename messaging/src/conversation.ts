@@ -38,7 +38,13 @@ function shortlistOf(run: AgentRun): ShortlistUnit[] | null {
   return [...(list as (ShortlistUnit & { rank?: unknown })[])].sort((a, b) => (num(a.rank) ?? 1e9) - (num(b.rank) ?? 1e9));
 }
 
-export function resultsText(run: AgentRun, units: ShortlistUnit[], chair: [number, number] | null, webUrl: string): string {
+export function resultsText(
+  run: AgentRun,
+  units: ShortlistUnit[],
+  chair: [number, number] | null,
+  webUrl: string,
+  fromThisSearch = true,
+): string {
   const lines: string[] = [];
   if (run.replay) lines.push("This is a replayed run, not a live search.");
   const final = run.events.find((e) => e.type === "final");
@@ -54,7 +60,10 @@ export function resultsText(run: AgentRun, units: ShortlistUnit[], chair: [numbe
     const where = km === null ? "" : ` (${km.toFixed(1)} km)`;
     return `${i + 1}. ${u.name ?? u.sid}${where}: ${u.summary ?? "no summary"}`;
   });
-  lines.push(`Top ${top.length} for ${who}, estimated from the floor plans:\n${rows.join("\n")}`);
+  const title = fromThisSearch
+    ? `Top ${top.length} for ${who}, estimated from the floor plans:`
+    : `The search returned no shortlist. Top ${top.length} of the latest ranked list (not specific to your message), estimated from the floor plans:`;
+  lines.push(`${title}\n${rows.join("\n")}`);
   lines.push(`See the plans: ${webUrl.replace(/\/+$/, "")}/?sid=${encodeURIComponent(top[0].sid)}`);
   return lines.join("\n\n");
 }
@@ -88,14 +97,24 @@ export class Conversations {
     private readonly webUrl: string,
   ) {}
 
-  /** Handle one inbound text; replies go out through `say`, in order. */
+  /**
+   * Handle one inbound text; replies go out through `say`, in order. Rejects if the text could
+   * not be handled (after trying to say so), so a transport knows not to mark it done.
+   */
   handle(key: string, text: string, say: Say): Promise<void> {
     const s = this.states.get(key) ?? { introduced: false, pending: null, chain: Promise.resolve() };
     this.states.set(key, s);
-    const next = s.chain.then(() => this.step(s, text, say)).catch(async (err) => {
-      await say(`Something went wrong on my side: ${err instanceof Error ? err.message : String(err)}`).catch(() => {});
+    const next = s.chain.then(async () => {
+      try {
+        await this.step(s, text, say);
+      } catch (err) {
+        // never leave a question open that the person may not have seen
+        s.pending = null;
+        await say(`Something went wrong on my side: ${err instanceof Error ? err.message : String(err)}`).catch(() => {});
+        throw err;
+      }
     });
-    s.chain = next;
+    s.chain = next.catch(() => {});
     return next;
   }
 
@@ -119,12 +138,14 @@ export class Conversations {
     await say("Checking units now. This takes about a minute.");
     const chair = chairFrom(text);
     const run = await this.rollin.run(text, chair ? { chair_in: chair } : {});
-    const units = shortlistOf(run) ?? (await this.rollin.units());
-    await say(resultsText(run, units, chair, this.webUrl));
+    const shortlist = shortlistOf(run);
+    const units = shortlist ?? (await this.rollin.units());
+    await say(resultsText(run, units, chair, this.webUrl, shortlist !== null));
     const ask = approvalText(run);
     if (ask) {
-      s.pending = ask.actionId;
       await say(ask.text);
+      // open only once the question has gone out
+      s.pending = ask.actionId;
     }
   }
 }

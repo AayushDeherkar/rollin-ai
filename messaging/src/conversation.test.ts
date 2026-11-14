@@ -84,6 +84,17 @@ test("no declines; any other text is a new request and the question lapses", asy
   assert.deepEqual(calls.run.at(-1), { chair_in: [30, 44] });
 });
 
+test("a question that failed to send is not left open, and the failure reaches the transport", async () => {
+  const { rollin, calls } = fake();
+  const c = new Conversations(rollin, "http://web.test");
+  const failing = async (t: string) => {
+    if (t.endsWith("Reply yes or no.")) throw new Error("send failed");
+  };
+  await assert.rejects(c.handle("k", "27 x 42 chair", failing));
+  await talk(c, "ok");
+  assert.equal(calls.approve.length, 0);
+});
+
 test("parsers", () => {
   assert.deepEqual(chairFrom("my 27 × 42 in chair"), [27, 42]);
   assert.deepEqual(chairFrom('27" by 42"'), [27, 42]);
@@ -105,10 +116,11 @@ test("only plain-text iMessages from a person to the agent are handled", () => {
         receivedBy: { kind: "agent", id: "usr_agent" },
         space: { id: "spc_1" },
         content: { type: "text", format: "plain", text: "hi" },
+        createdAt: "2026-11-14T15:00:00Z",
       },
     },
   };
-  assert.deepEqual(inboundFrom(msg), { messageId: "msg_1", spaceId: "spc_1", agentId: "usr_agent", from: "+15550100", text: "hi" });
+  assert.deepEqual(inboundFrom(msg), { messageId: "msg_1", spaceId: "spc_1", agentId: "usr_agent", from: "+15550100", text: "hi", createdAt: "2026-11-14T15:00:00Z" });
   assert.equal(inboundFrom({ ...msg, type: "message.delivered" }), null);
   const fromAgent = structuredClone(msg);
   fromAgent.data.object.sentBy.kind = "agent";

@@ -46,4 +46,4 @@ await photon.listen(async (m) => {
       throw err;
     }
   });
-}, log);
+}, log, () => process.exit(1));

@@ -26,7 +26,12 @@ export interface Inbound {
   agentId: string;
   from: string;
   text: string;
+  /** when Photon received it (ISO 8601) */
+  createdAt: string;
 }
+
+/** Older texts are not acted on, e.g. a "yes" redelivered after a restart. */
+export const MAX_AGE_MS = 10 * 60_000;
 
 /** Narrow a `message.received` event to a plain-text iMessage from a person; anything else is null. */
 export function inboundFrom(event: unknown): Inbound | null {
@@ -37,7 +42,14 @@ export function inboundFrom(event: unknown): Inbound | null {
   if (m.sentBy?.kind !== "human" || m.receivedBy?.kind !== "agent") return null;
   if (m.content?.type !== "text" || typeof m.content.text !== "string") return null;
   if (typeof m.id !== "string" || typeof m.space?.id !== "string" || typeof m.receivedBy?.id !== "string") return null;
-  return { messageId: m.id, spaceId: m.space.id, agentId: m.receivedBy.id, from: String(m.sentBy.handle ?? ""), text: m.content.text };
+  return {
+    messageId: m.id,
+    spaceId: m.space.id,
+    agentId: m.receivedBy.id,
+    from: String(m.sentBy.handle ?? ""),
+    text: m.content.text,
+    createdAt: String(m.createdAt ?? ""),
+  };
 }
 
 export function photonClient(cfg: PhotonConfig) {
@@ -68,12 +80,15 @@ export function photonClient(cfg: PhotonConfig) {
 
   /**
    * Subscribe to the project's events and call `onText` for each allowed inbound text, one at a
-   * time. The cursor is saved only after a message is handled, so a restart resumes there.
+   * time. The cursor is saved only after a message is handled. If handling fails, the stream
+   * stops (Photon's guidance) and `onStop` is called; a restart resumes from the saved cursor.
+   * startSeq 0 means new events only; to resume, Photon takes the last processed cursor itself.
    */
-  async function listen(onText: (m: Inbound) => Promise<void>, log: (s: string) => void): Promise<void> {
+  async function listen(onText: (m: Inbound) => Promise<void>, log: (s: string) => void, onStop: () => void): Promise<void> {
     let cursor = await loadCursor();
     const seen = new Set<string>();
     let queue = Promise.resolve();
+    let stopped = false;
     const socket = io("https://api.photon.codes", {
       path: `/v1/projects/${cfg.projectId}/events/ws`,
       addTrailingSlash: false,
@@ -91,17 +106,27 @@ export function photonClient(cfg: PhotonConfig) {
     socket.on("delivery_error", (err: unknown) => log(`Photon delivery error: ${JSON.stringify(err)}`));
     socket.on("delivery", (event: unknown, meta: { seq: number }) => {
       queue = queue.then(async () => {
+        if (stopped) return;
         const m = inboundFrom(event);
         const allowed = m && (cfg.allowedSenders.length === 0 || cfg.allowedSenders.includes(m.from));
-        if (m && allowed && !seen.has(m.messageId)) {
+        const age = m ? Date.now() - Date.parse(m.createdAt) : 0;
+        if (m && !allowed) log("Ignored a message from a sender not in PHOTON_ALLOWED_SENDERS.");
+        else if (m && !(age <= MAX_AGE_MS)) log(`Ignored message ${m.messageId}: older than ${MAX_AGE_MS / 60_000} minutes.`);
+        else if (m && !seen.has(m.messageId)) {
           seen.add(m.messageId);
-          await onText(m);
-        } else if (m && !allowed) {
-          log("Ignored a message from a sender not in PHOTON_ALLOWED_SENDERS.");
+          try {
+            await onText(m);
+          } catch (err) {
+            stopped = true;
+            socket.disconnect();
+            log(`Stopped: could not handle message ${m.messageId} (${err instanceof Error ? err.message : String(err)}). Restart to retry from cursor ${cursor}.`);
+            onStop();
+            return;
+          }
         }
         cursor = meta.seq;
         await saveCursor(cursor);
-      }).catch((err: unknown) => log(`Could not handle a message: ${err instanceof Error ? err.message : String(err)}`));
+      });
     });
     socket.connect();
   }
