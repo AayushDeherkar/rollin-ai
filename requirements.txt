@@ -8,4 +8,5 @@ python-dotenv
 fastapi
 uvicorn
 pytest
+httpx        # FastAPI TestClient
 # deepagents  # pin the exact version you install (fast-moving beta)

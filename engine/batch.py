@@ -28,13 +28,13 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from engine.fit import analyze_model  # noqa: E402
 from engine.matterport import MatterportError, get_model  # noqa: E402
-from engine.summary import rank, room_counts, score, unit_row  # noqa: E402
+from engine.summary import rank, room_counts, score, sentence, unit_row  # noqa: E402
 
 INDEX_CSV = ROOT / "data" / "raw" / "models_index.csv"
 OUT = ROOT / "data" / "batch"
 RESULTS = OUT / "results"
 TMC = (29.7095, -95.3982)
-ENGINE_REV = 2                       # bump when engine output changes; stale results are recomputed
+ENGINE_REV = 3                       # bump when engine output changes; stale results are recomputed
 UNIT_NAME = re.compile(r"^\s*(studio|\d+\s*br\b|\d+\s*bed)", re.I)
 
 
@@ -69,7 +69,8 @@ def run_one(c: dict, w: float, l: float) -> dict:
     hinged = analyze_model(model, c["sid"], w, l, hinges=True)
     row = unit_row(scanned, c["lat"], c["lon"], source="batch")
     hc = room_counts(hinged)
-    row.update({"distance_km": c["distance_km"], "with_hinges": {"score": score(hc), "counts": hc}})
+    row.update({"distance_km": c["distance_km"],
+                "with_hinges": {"score": score(hc), "counts": hc, "summary": sentence(hinged, hc)}})
     row["basis"]["distance_km"] = "estimated"
     notes = [f["note"] for f in scanned["floors"] if f.get("note")]
     row["usable"] = sum(row["counts"].values()) > 0       # no measured rooms -> no verdict, never "score 0"

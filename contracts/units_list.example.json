@@ -30,9 +30,21 @@
    "basis": {
     "score": "estimated",
     "counts": "estimated",
-    "lat_lon": "estimated"
+    "lat_lon": "estimated",
+    "distance_km": "estimated"
    },
-   "source": "cache",
+   "source": "batch",
+   "distance_km": 1.44,
+   "with_hinges": {
+    "score": 0.5,
+    "counts": {
+     "reachable": 2,
+     "blocked": 1,
+     "unknown": 1
+    },
+    "summary": "2 of 4 rooms reachable; blocked: Bathroom; 1 unknown (no measured door)"
+   },
+   "usable": true,
    "synthetic": true
   },
   {
@@ -55,10 +67,28 @@
    "basis": {
     "score": "estimated",
     "counts": "estimated",
-    "lat_lon": "estimated"
+    "lat_lon": "estimated",
+    "distance_km": "estimated"
    },
-   "source": "cache",
+   "source": "batch",
+   "distance_km": 0.22,
+   "with_hinges": {
+    "score": 0.5,
+    "counts": {
+     "reachable": 2,
+     "blocked": 1,
+     "unknown": 1
+    },
+    "summary": "2 of 4 rooms reachable; blocked: Bathroom; 1 unknown (no measured door)"
+   },
+   "usable": true,
    "synthetic": true
   }
- ]
+ ],
+ "source": {
+  "kind": "synthetic example",
+  "updated_at": null,
+  "processed": 2,
+  "no_data": 0
+ }
 }
