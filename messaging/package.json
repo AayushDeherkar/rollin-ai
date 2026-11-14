@@ -1,0 +1,25 @@
+{
+  "name": "rollin-messaging",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "iMessage bridge for Rollin' on Photon 2.0 (beta): texts in, shortlist and approval out.",
+  "scripts": {
+    "start": "tsx --env-file-if-exists=.env src/main.ts",
+    "console": "tsx --env-file-if-exists=.env src/console.ts",
+    "check": "tsc --noEmit",
+    "test": "tsx --test src/*.test.ts"
+  },
+  "engines": {
+    "node": ">=20.12"
+  },
+  "dependencies": {
+    "@photon-ai/api": "^0.6.0",
+    "socket.io-client": "^4.8.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
