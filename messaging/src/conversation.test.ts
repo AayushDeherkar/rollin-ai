@@ -191,3 +191,16 @@ test("the plans link opens a listed unit that has a plan, or the app when none d
   assert.match(none, /I couldn't open the floor plans for these \d\. Browse the units whose plans open: http:\/\/web\.test$/m);
   assert.doesNotMatch(none, /\?sid=/);
 });
+
+test("each shortlisted unit takes two short lines: name and distance, then its room count marked est.", async () => {
+  const { rollin } = fake();
+  const out = await talk(new Conversations(rollin, "http://web.test/"), "27 x 42 chair");
+  const block = out.find((t) => t.includes("Top "))!.split("\n\n").find((p) => p.startsWith("Top "))!;
+  const [, ...rows] = block.split("\n");
+  assert.equal(rows.length % 2, 0);
+  for (let i = 0; i < rows.length; i += 2) {
+    assert.match(rows[i], new RegExp(`^${i / 2 + 1}\\. `));
+    assert.match(rows[i + 1], /\(est\.\)$/);
+    for (const line of [rows[i], rows[i + 1]]) assert.ok(line.length <= 40, `too long for one line: ${line}`);
+  }
+});
