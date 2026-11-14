@@ -169,19 +169,19 @@ def analyze_floor(floor, room_list, chair_w, chair_l, hinges=False):
         start_room = big["id"]
         anchor = list(big["poly"].representative_point().coords[0])
     cand = np.argwhere(CF.any(0) & room_mask[start_room])
-    if not len(cand):
-        return {"floor": floor.get("label") or floor["id"], "rooms": [],
-                "note": "chair does not fit anywhere in the start room"}
-    ar = np.array(g.to_rc(*anchor))
-    sr, sc = cand[np.argmin(((cand - ar) ** 2).sum(1))]
-    start = (int(np.argmax(CF[:, sr, sc])), int(sr), int(sc))
+    no_start = not len(cand)              # chair fits nowhere in the start room: every room is blocked
 
     # BFS over (heading, row, col).
     K, H, W = CF.shape
     seen = np.zeros(CF.shape, bool)
     prev = np.full(CF.shape, -1, np.int64)
-    seen[start] = True
-    q = deque([start])
+    q = deque()
+    if not no_start:
+        ar = np.array(g.to_rc(*anchor))
+        sr, sc = cand[np.argmin(((cand - ar) ** 2).sum(1))]
+        start = (int(np.argmax(CF[:, sr, sc])), int(sr), int(sc))
+        seen[start] = True
+        q.append(start)
     steps = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
     while q:
         k, r, c = q.popleft()
@@ -224,6 +224,8 @@ def analyze_floor(floor, room_list, chair_w, chair_l, hinges=False):
         suspect = [a for a in artifacts if a["edge"] in rm["edges"]]
         if ok:
             status, reason = "reachable", None
+        elif no_start and rm["id"] == start_room:
+            status, reason = "blocked", "the chair does not fit anywhere in this room (the start room)"
         elif not doors and not open_edge:
             status, reason = "unknown", ("only a suspect scan opening (" + ", ".join(f'{a["width_in"]}"' for a in suspect)
                                          + "); verify in the 3D tour" if suspect else
@@ -317,7 +319,8 @@ def render(floor_res, path_png, title):
     plt.close(fig)
 
 
-def analyze_model(model, mid, chair_w_in=27.0, chair_l_in=42.0, hinges=False, render_dir=None):
+def analyze_model(model: dict, mid: str, chair_w_in: float = 27.0, chair_l_in: float = 42.0,
+                  hinges: bool = False, render_dir: str | None = None) -> dict:
     """Engine result for one model (contract: contracts/unit_result.example.json). PNGs only if render_dir."""
     chair_w, chair_l = chair_w_in * IN, chair_l_in * IN
     by_floor = {}

@@ -34,6 +34,7 @@ INDEX_CSV = ROOT / "data" / "raw" / "models_index.csv"
 OUT = ROOT / "data" / "batch"
 RESULTS = OUT / "results"
 TMC = (29.7095, -95.3982)
+ENGINE_REV = 2                       # bump when engine output changes; stale results are recomputed
 UNIT_NAME = re.compile(r"^\s*(studio|\d+\s*br\b|\d+\s*bed)", re.I)
 
 
@@ -58,8 +59,11 @@ def candidates(center: tuple[float, float], radius_km: float) -> list[dict]:
 
 def run_one(c: dict, w: float, l: float) -> dict:
     path = RESULTS / f"{c['sid']}.json"
-    if path.exists():
-        return json.loads(path.read_text())
+    if path.exists():                     # resume only if it was computed the same way for the same chair
+        rec = json.loads(path.read_text())
+        if rec.get("engine_rev") == ENGINE_REV and rec["row"].get("chair_in") == [w, l]:
+            rec["row"]["distance_km"] = c["distance_km"]
+            return rec
     model = get_model(c["sid"])
     scanned = analyze_model(model, c["sid"], w, l, hinges=False)
     hinged = analyze_model(model, c["sid"], w, l, hinges=True)
@@ -69,9 +73,10 @@ def run_one(c: dict, w: float, l: float) -> dict:
     row["basis"]["distance_km"] = "estimated"
     notes = [f["note"] for f in scanned["floors"] if f.get("note")]
     row["usable"] = sum(row["counts"].values()) > 0       # no measured rooms -> no verdict, never "score 0"
+    # (a chair that fits nowhere still gets rooms, all blocked: see fit.analyze_floor)
     if notes:
         row["notes"] = notes
-    rec = {"row": row, "computed_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    rec = {"row": row, "engine_rev": ENGINE_REV, "computed_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     RESULTS.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(rec))
