@@ -79,7 +79,7 @@ export function approvalText(run: AgentRun): { actionId: string; text: string } 
   const verify = run.events.find((e) => e.type === "verify");
   const n = Array.isArray(verify?.questions) ? verify.questions.length : 0;
   const who = ask.to?.label ?? "the leasing office";
-  const what = n > 0 ? `the ${n} things I couldn't verify` : "what I couldn't verify";
+  const what = n > 1 ? `the ${n} things I couldn't verify` : n === 1 ? "the one thing I couldn't verify" : "what I couldn't verify";
   const draft = ask.draft ? `\n\nI would send:\n"${ask.draft}"` : "";
   return { actionId: ask.action_id, text: `Want me to message ${who} about ${what}?${draft}\n\nReply yes or no.` };
 }
