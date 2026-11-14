@@ -83,7 +83,11 @@ def query(q: str, variables: dict) -> dict:
         if r.status_code >= 500 or r.status_code == 429:
             last = MatterportError("internal", f"HTTP {r.status_code}")
             continue
-        body = r.json()
+        try:
+            body = r.json()
+        except ValueError:                          # e.g. an HTML gateway page: treat as transient
+            last = MatterportError("internal", f"non-JSON response (HTTP {r.status_code})")
+            continue
         errors = body.get("errors") or []
         if not errors:
             return body.get("data") or {}

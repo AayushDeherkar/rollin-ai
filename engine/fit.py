@@ -169,19 +169,19 @@ def analyze_floor(floor, room_list, chair_w, chair_l, hinges=False):
         start_room = big["id"]
         anchor = list(big["poly"].representative_point().coords[0])
     cand = np.argwhere(CF.any(0) & room_mask[start_room])
-    if not len(cand):
-        return {"floor": floor.get("label") or floor["id"], "rooms": [],
-                "note": "chair does not fit anywhere in the start room"}
-    ar = np.array(g.to_rc(*anchor))
-    sr, sc = cand[np.argmin(((cand - ar) ** 2).sum(1))]
-    start = (int(np.argmax(CF[:, sr, sc])), int(sr), int(sc))
+    no_start = not len(cand)              # chair fits nowhere in the start room: every room is blocked
 
     # BFS over (heading, row, col).
     K, H, W = CF.shape
     seen = np.zeros(CF.shape, bool)
     prev = np.full(CF.shape, -1, np.int64)
-    seen[start] = True
-    q = deque([start])
+    q = deque()
+    if not no_start:
+        ar = np.array(g.to_rc(*anchor))
+        sr, sc = cand[np.argmin(((cand - ar) ** 2).sum(1))]
+        start = (int(np.argmax(CF[:, sr, sc])), int(sr), int(sc))
+        seen[start] = True
+        q.append(start)
     steps = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
     while q:
         k, r, c = q.popleft()
@@ -224,6 +224,8 @@ def analyze_floor(floor, room_list, chair_w, chair_l, hinges=False):
         suspect = [a for a in artifacts if a["edge"] in rm["edges"]]
         if ok:
             status, reason = "reachable", None
+        elif no_start and rm["id"] == start_room:
+            status, reason = "blocked", "the chair does not fit anywhere in this room (the start room)"
         elif not doors and not open_edge:
             status, reason = "unknown", ("only a suspect scan opening (" + ", ".join(f'{a["width_in"]}"' for a in suspect)
                                          + "); verify in the 3D tour" if suspect else
@@ -317,6 +319,28 @@ def render(floor_res, path_png, title):
     plt.close(fig)
 
 
+def analyze_model(model: dict, mid: str, chair_w_in: float = 27.0, chair_l_in: float = 42.0,
+                  hinges: bool = False, render_dir: str | None = None) -> dict:
+    """Engine result for one model (contract: contracts/unit_result.example.json). PNGs only if render_dir."""
+    chair_w, chair_l = chair_w_in * IN, chair_l_in * IN
+    by_floor = {}
+    for r in model.get("rooms", []):
+        by_floor.setdefault((r.get("floor") or {}).get("id"), []).append(r)
+    tag = "_hinges" if hinges else ""
+    report = {"model": mid, "name": model.get("name"), "chair_in": [chair_w_in, chair_l_in],
+              "scenario": "offset hinges on every door" if hinges else "as scanned", "floors": []}
+    for i, f in enumerate(model["floors"]):
+        res = analyze_floor(f, by_floor.get(f["id"], []) or (by_floor.get(None, []) if len(model["floors"]) == 1 else []),
+                            chair_w, chair_l, hinges)
+        draw = res.pop("_draw", None)
+        if draw and render_dir:
+            os.makedirs(render_dir, exist_ok=True)
+            render({**res, "_draw": draw}, os.path.join(render_dir, f"{mid}_floor{i}_fit{tag}.png"),
+                   f"{model.get('name')} - chair {chair_w_in:.0f}x{chair_l_in:.0f} in" + (" - with offset hinges" if hinges else ""))
+        report["floors"].append(res)
+    return report
+
+
 def main(argv):
     hinges = "--hinges" in argv
     argv = [a for a in argv if a != "--hinges"]
@@ -332,20 +356,9 @@ def main(argv):
     chair_w = float(rest[0]) * IN if len(rest) > 0 else 27 * IN
     chair_l = float(rest[1]) * IN if len(rest) > 1 else 42 * IN
 
-    by_floor = {}
-    for r in model.get("rooms", []):
-        by_floor.setdefault((r.get("floor") or {}).get("id"), []).append(r)
-    os.makedirs("out", exist_ok=True)
     tag = "_hinges" if hinges else ""
-    report = {"model": mid, "name": model.get("name"), "chair_in": [chair_w / IN, chair_l / IN],
-              "scenario": "offset hinges on every door" if hinges else "as scanned", "floors": []}
-    for i, f in enumerate(model["floors"]):
-        res = analyze_floor(f, by_floor.get(f["id"], []) or (by_floor.get(None, []) if len(model["floors"]) == 1 else []),
-                            chair_w, chair_l, hinges)
-        if "_draw" in res:
-            render(res, f"out/{mid}_floor{i}_fit{tag}.png", f"{model.get('name')} - chair {chair_w/IN:.0f}x{chair_l/IN:.0f} in" + (" - with offset hinges" if hinges else ""))
-            res.pop("_draw")
-        report["floors"].append(res)
+    report = analyze_model(model, mid, chair_w / IN, chair_l / IN, hinges, render_dir="out")
+    os.makedirs("out", exist_ok=True)
     json.dump(report, open(f"out/{mid}_fit{tag}.json", "w"), indent=1)
 
     for f in report["floors"]:
