@@ -57,32 +57,45 @@ const unit = (a: Point): Point => {
   return [a[0] / l, a[1] / l];
 };
 
-/** Wall segments with a gap cut where a door sits on the same edge. */
-export function wallSegments(floor: Floor): { a: Point; b: Point; thickness: number }[] {
-  const out: { a: Point; b: Point; thickness: number }[] = [];
+export interface WallSegment {
+  a: Point;
+  b: Point;
+  thickness: number;
+}
+
+/**
+ * Wall segments with a gap cut where a door sits on the same edge. Ends that meet
+ * another wall (corners) are extended by half the thickness so corners close; ends
+ * that face a door gap are not, so the drawn opening equals the measured width.
+ * Draw the result with butt caps.
+ */
+export function wallSegments(floor: Floor): WallSegment[] {
+  const out: WallSegment[] = [];
   for (const wall of floor.walls) {
-    const doors = floor.doors.filter((d) => d.edge === wall.edge);
     const dir = sub(wall.b, wall.a);
     const L = len(dir);
-    if (doors.length === 0 || L === 0) {
-      out.push({ a: wall.a, b: wall.b, thickness: wall.thickness });
-      continue;
-    }
+    if (L === 0) continue;
     const u = unit(dir);
+    const ext = wall.thickness / 2;
+    const at = (t: number) => add(wall.a, mul(u, t));
     // gaps as [t0, t1] along the wall, in metres from a
-    const gaps = doors
+    const gaps = floor.doors
+      .filter((d) => d.edge === wall.edge)
       .map((d) => {
         const t = (d.center[0] - wall.a[0]) * u[0] + (d.center[1] - wall.a[1]) * u[1];
         const half = (d.width_in * M_PER_IN) / 2;
         return [Math.max(0, t - half), Math.min(L, t + half)] as [number, number];
       })
       .sort((p, q) => p[0] - q[0]);
+    // walk the wall: pieces between gaps; the outer ends (t=0, t=L) are corners
     let t = 0;
+    let startIsCorner = true;
     for (const [g0, g1] of gaps) {
-      if (g0 > t) out.push({ a: add(wall.a, mul(u, t)), b: add(wall.a, mul(u, g0)), thickness: wall.thickness });
+      if (g0 > t) out.push({ a: at(startIsCorner ? -ext : t), b: at(g0), thickness: wall.thickness });
       t = Math.max(t, g1);
+      startIsCorner = false;
     }
-    if (t < L) out.push({ a: add(wall.a, mul(u, t)), b: wall.b, thickness: wall.thickness });
+    if (t < L) out.push({ a: at(startIsCorner ? -ext : t), b: at(L + ext), thickness: wall.thickness });
   }
   return out;
 }
