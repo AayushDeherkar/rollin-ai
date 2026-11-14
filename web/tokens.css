@@ -69,3 +69,10 @@
     --dur-4: 0ms;
   }
 }
+/* same, forced by ?motion=reduce (see workbench.tsx) */
+:root[data-motion="reduce"] {
+  --dur-1: 0ms;
+  --dur-2: 0ms;
+  --dur-3: 0ms;
+  --dur-4: 0ms;
+}

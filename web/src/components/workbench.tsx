@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { RotateCcw } from "lucide-react";
+import { MotionConfig } from "motion/react";
 import type { UnitResult } from "@/lib/contract";
 import { FIXTURE_LABEL, fixtureAsScanned, fixtureHinges } from "@/lib/fixtures";
 import { buildDrive, defaultTarget } from "@/lib/chair";
@@ -38,7 +39,32 @@ function usePreviewState(): Preview {
   return useSyncExternalStore(noSubscribe, readPreview, () => null);
 }
 
+/**
+ * `?motion=reduce` runs the app as if the OS asked for reduced motion (to check that path
+ * on a machine without the setting, or to present without animation). Otherwise the OS decides.
+ */
+function readForceReduce(): boolean {
+  return new URLSearchParams(window.location.search).get("motion") === "reduce";
+}
+function useForceReduce(): boolean {
+  return useSyncExternalStore(noSubscribe, readForceReduce, () => false);
+}
+
 export function Workbench() {
+  const forceReduce = useForceReduce();
+  useEffect(() => {
+    // CSS durations (tokens.css) follow the same switch
+    if (forceReduce) document.documentElement.dataset.motion = "reduce";
+    else delete document.documentElement.dataset.motion;
+  }, [forceReduce]);
+  return (
+    <MotionConfig reducedMotion={forceReduce ? "always" : "user"}>
+      <Sheet />
+    </MotionConfig>
+  );
+}
+
+function Sheet() {
   const preview = usePreviewState();
   const [selected, setSelected] = useState<string | null>(UNITS[0]?.asScanned.model ?? null);
   const [scenario, setScenario] = useState<Scenario>("scanned");

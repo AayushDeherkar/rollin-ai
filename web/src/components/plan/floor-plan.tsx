@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Ban } from "lucide-react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotionConfig } from "motion/react";
 import { DUR, EASE_DRAFT } from "@/lib/motion";
 import { AnimatedFigure } from "./animated-figure";
 import type { Floor, Point, Room, UnitResult } from "@/lib/contract";
@@ -142,7 +142,7 @@ function PlanSvg({
   onRoomSelect?: (roomId: string) => void;
   selectedRoom: string | null;
 }) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   const { toScreen, scale } = projection;
   const poly = (pts: Point[]) => pts.map((p) => toScreen(p).join(",")).join(" ");
   const ctx: PlanCtx = { projection, floor, size, gutter };

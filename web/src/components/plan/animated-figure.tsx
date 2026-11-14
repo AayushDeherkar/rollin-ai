@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
+import { animate, motion, useMotionValue, useReducedMotionConfig, useTransform } from "motion/react";
 import { DUR, EASE_DRAFT } from "@/lib/motion";
 
 /** A measurement that counts to its new value when the scenario changes (mono, tabular). */
 export function AnimatedFigure({ value, digits = 1, svg = false, className }: { value: number; digits?: number; svg?: boolean; className?: string }) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   const mv = useMotionValue(value);
   const text = useTransform(mv, (v) => v.toFixed(digits));
 

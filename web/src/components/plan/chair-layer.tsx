@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { animate, useMotionValue, useMotionValueEvent, useReducedMotion } from "motion/react";
+import { animate, useMotionValue, useMotionValueEvent, useReducedMotionConfig } from "motion/react";
 import type { PathStep } from "@/lib/contract";
 import { M_PER_IN, type Projection } from "@/lib/plan-geometry";
 import { sampler, type Drive } from "@/lib/chair";
@@ -33,7 +33,7 @@ export function ChairLayer({
   onStart: () => void;
   onSettled: () => void;
 }) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   // key on the route's values: a scenario switch that leaves the route unchanged must not replay
   const routeKey = JSON.stringify(drive.route);
   // eslint-disable-next-line react-hooks/exhaustive-deps

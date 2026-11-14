@@ -3,6 +3,15 @@
 @import "shadcn/tailwind.css";
 @import "../../tokens.css";
 
+/* motion-safe also switches off when ?motion=reduce forces the reduced path (workbench.tsx) */
+@custom-variant motion-safe {
+  @media (prefers-reduced-motion: no-preference) {
+    &:where(:root:not([data-motion="reduce"]) *) {
+      @slot;
+    }
+  }
+}
+
 /*
  * Tailwind's default palette, type scale, fonts and radii are switched off so the
  * only utilities that exist are the ones built from tokens.css.
