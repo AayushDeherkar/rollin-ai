@@ -13,6 +13,7 @@ import {
   wallSegments,
   type DoorGeometry,
   type Projection,
+  type WallSegment,
 } from "@/lib/plan-geometry";
 import { STATUS } from "@/components/sheet/status";
 
@@ -83,7 +84,7 @@ function PlanSvg({
   size: { w: number; h: number };
   projection: Projection;
   floor: Floor;
-  walls: ReturnType<typeof wallSegments>;
+  walls: WallSegment[];
   doors: DoorGeometry[];
   chairW: number;
   label: string;
@@ -103,7 +104,7 @@ function PlanSvg({
       </g>
 
       {/* walls at measured thickness */}
-      <g stroke="var(--ink)" strokeLinecap="square">
+      <g stroke="var(--ink)" strokeLinecap="butt">
         {walls.map((w, i) => {
           const a = toScreen(w.a);
           const b = toScreen(w.b);
