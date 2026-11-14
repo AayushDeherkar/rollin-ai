@@ -24,7 +24,8 @@ export async function upstream(path: string, init?: RequestInit, timeoutMs = TIM
   try {
     res = await fetch(base + path, { ...init, cache: "no-store", signal: init?.signal ?? AbortSignal.timeout(timeoutMs) });
   } catch {
-    return { ok: false, status: null, reason: `API not reachable at ${base}` };
+    // the address stays server-side; the browser only learns that the API did not answer
+    return { ok: false, status: null, reason: "API not reachable" };
   }
   if (res.ok) return { ok: true, res };
   let detail = res.statusText;

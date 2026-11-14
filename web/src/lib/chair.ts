@@ -34,7 +34,7 @@ export interface Drive {
 /** room and floor door centres are rounded separately; real scans differ by under a millimetre */
 const SAME_DOOR_M = 0.02;
 
-/** The floor door a room lists, by nearest centre (until contract v2 names doors by edge). */
+/** The floor door a room lists, by nearest centre. */
 function floorDoorFor(floor: Floor, d: { center: Point }): Door | null {
   let best: Door | null = null;
   let bestDist = SAME_DOOR_M;
@@ -78,10 +78,8 @@ export function buildDrive(unit: UnitResult, floor: Floor, roomId: string): Driv
     return { room, kind: "no-door", route: base.slice(0, 1), drawnFrom: null, door: null, shortfallIn: null };
   }
 
-  // blocked: the engine names the blocking door (contract v2); before v2, the reason names
-  // the widest door, so that is the one we stop at
-  const named = room.blocking_door_edge ? (floor.doors.find((d) => d.edge === room.blocking_door_edge) ?? null) : null;
-  const door = named ?? floorDoorFor(floor, room.doors.reduce((a, b) => (b.clear_in_est > a.clear_in_est ? b : a)));
+  // blocked: the reason names the widest door; that is the one we stop at
+  const door = floorDoorFor(floor, room.doors.reduce((a, b) => (b.clear_in_est > a.clear_in_est ? b : a)));
   if (!door || door.passable || base.length === 0) {
     // the widest door fits but the route is too tight (or the door can't be matched)
     return { room, kind: "tight", route: base, drawnFrom: null, door, shortfallIn: null };
@@ -89,10 +87,6 @@ export function buildDrive(unit: UnitResult, floor: Floor, roomId: string): Driv
 
   const [chairW, chairL] = unit.chair_in;
   const shortfall = Math.round((chairW - door.clear_in_est) * 10) / 10;
-  // contract v2: the engine's own approach to the blocking door; nothing drawn by us
-  if (room.path?.length) {
-    return { room, kind: "blocked", route: room.path, drawnFrom: null, door, shortfallIn: shortfall, enginePath: true };
-  }
   const wall = floor.walls.find((w) => w.edge === door.edge);
   const along: Point = wall ? geom.unit(geom.sub(wall.b, wall.a)) : [1, 0];
   let n: Point = [-along[1], along[0]];
