@@ -30,11 +30,19 @@ export function PlanLegend({ unit, floor }: { unit: UnitResult; floor: Floor }) 
           <Ban aria-hidden className="size-5" strokeWidth={2.5} />
           <span className="font-semibold">too narrow</span>
         </span>
+        {floor.rooms.some((r) => r.turning_space?.center) && (
+          <span className="flex items-center gap-2">
+            <svg aria-hidden viewBox="0 0 44 20" className="h-5 w-11">
+              <circle cx="10" cy="10" r="8" fill="none" stroke="var(--reach)" strokeWidth="1.75" />
+              <circle cx="34" cy="10" r="8" fill="none" stroke="var(--block)" strokeWidth="1.75" strokeDasharray="4 3" />
+            </svg>
+            60 in turning circle fits / does not, walls only
+          </span>
+        )}
       </div>
       <p className="text-ink-soft">
         Door figures are clear width, <strong className="font-semibold text-ink">est.</strong> (opening minus about 5 cm)
-        {unit.scenario !== "as scanned" ? "; hinge gain assumed" : ""}. Chair track: solid is the engine’s route, dotted a drawn
-        approach. <span className="measure">{floor.openings_found}</span> openings,{" "}
+        {unit.scenario !== "as scanned" ? "; hinge gain assumed" : ""}. Chair track: the engine’s route. <span className="measure">{floor.openings_found}</span> openings,{" "}
         <span className="measure">{floor.artifacts_ignored}</span> artifacts ignored.
       </p>
     </div>

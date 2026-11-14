@@ -38,6 +38,8 @@ export interface TurningSpace {
   max_circle_in: number;
   meets_60in: boolean;
   walls_only: boolean;
+  /** centre of the largest circle, metres, model frame (contract v2) */
+  center?: Point | null;
 }
 
 export interface Room {
@@ -48,8 +50,11 @@ export interface Room {
   reason?: string | null;
   doors: RoomDoor[];
   turning_space: TurningSpace | null;
+  /** reachable: the drive into the room; blocked: the drive up to the door that stops the chair (contract v2) */
   path: PathStep[] | null;
   polygon: Point[];
+  /** the `edge` of the door where the chair stops on its way to a blocked room, possibly a room on the way (contract v2) */
+  blocking_door_edge?: string | null;
 }
 
 export interface Artifact {
