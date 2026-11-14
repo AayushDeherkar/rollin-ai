@@ -76,9 +76,11 @@ export function FieldScene({ units, origin, status, ranked, chosen, mode, onPick
     onPointerOut: () => (document.body.style.cursor = ""),
   };
   const full = mode === "full";
+  // not drawn at all when hidden: an invisible mesh still catches the pointer
+  if (mode === "hidden") return null;
 
   return (
-    <group visible={mode !== "hidden"}>
+    <group>
       {full &&
         rings.map((pts, i) => (
           <group key={RINGS_KM[i]}>

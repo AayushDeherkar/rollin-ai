@@ -97,7 +97,7 @@ function say(ev: AgentEvent, unitName: (sid: string) => string): string | null {
     case "approval_needed":
       return "Waiting for your answer before anything is sent.";
     case "final":
-      return "Done. The best fits are on the right.";
+      return null; // said after the loop, once it is known whether there is a shortlist
     default:
       return null;
   }
@@ -139,15 +139,25 @@ export function readSearch(run: Run, units: UnitRow[]): SearchView {
           .slice(0, 3)
           .map((s) => {
             const sid = s.sid as string;
+            const counts = countsOf(s) ?? fits.get(sid) ?? null;
             return {
               sid,
               name: typeof s.name === "string" ? s.name : unitName(sid),
-              reason: typeof s.summary === "string" ? s.summary : (byId.get(sid)?.summary ?? ""),
-              counts: countsOf(s) ?? fits.get(sid) ?? null,
+              // the list's own summary is for the batch's chair, not this one: never borrowed
+              reason: typeof s.summary === "string" ? s.summary : counts ? countsLine(counts) : "",
+              counts,
             };
           });
         fromAgent = shortlist.length > 0;
       }
+      const text = (ev as { text?: unknown }).text;
+      narration = fromAgent
+        ? approval
+          ? "Done. The best fits are on the right, and a message waits for your answer."
+          : "Done. The best fits are on the right."
+        : typeof text === "string" && text
+          ? text
+          : "Done. The agent shortlisted no unit.";
     }
   }
   // a run that ends while units are still marked checking left them unchecked
@@ -158,9 +168,14 @@ export function readSearch(run: Run, units: UnitRow[]): SearchView {
     shortlist = [...fits.entries()]
       .sort(([, a], [, b]) => share(b) - share(a) || a.blocked - b.blocked)
       .slice(0, 3)
-      .map(([sid, c]) => ({ sid, name: unitName(sid), reason: byId.get(sid)?.summary ?? `${c.reachable} rooms reached, ${c.blocked} blocked`, counts: c }));
+      .map(([sid, c]) => ({ sid, name: unitName(sid), reason: countsLine(c), counts: c }));
+    if (shortlist.length) narration = "The agent sent no shortlist. The units it checked are on the right.";
   }
   return { status, fits, narration, shortlist, fromAgent, approval, steps: run.events.length };
 }
+
+/** one line from the agent's own fit for this chair */
+const countsLine = (c: StatusCounts) =>
+  `${c.reachable} of ${c.reachable + c.blocked + c.unknown} rooms reached as scanned${c.blocked ? `, ${c.blocked} blocked` : ""}${c.unknown ? `, ${c.unknown} not measured` : ""} (estimated).`;
 
 const share = (c: StatusCounts) => c.reachable / Math.max(1, c.reachable + c.blocked + c.unknown);

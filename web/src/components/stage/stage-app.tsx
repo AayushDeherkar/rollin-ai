@@ -82,15 +82,18 @@ function Stage() {
   const [dismissed, setDismissed] = useState<string | null>(null);
 
   const search = useCallback(
-    (c: ChairIn) =>
+    (c: ChairIn) => {
       startAgent(
         `Find units near the Medical Center my ${c[0]} × ${c[1]} in chair can live in. Check bedroom and bathroom access.`,
         { sender_id: webSenderId(), chair_in: [c[0], c[1]] },
         { replay: readAgentReplay(), pace: entry.pace },
-      ),
+      );
+    },
     [startAgent, entry.pace],
   );
   const find = useCallback(() => {
+    // a new run asks afresh, even if a replay reuses the last run's action id
+    setDismissed(null);
     setProfile(chair);
     setStep("search");
     search(chair);
