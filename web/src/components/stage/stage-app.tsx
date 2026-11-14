@@ -228,8 +228,11 @@ function Stage() {
   }, []);
 
   // ── presenter mode ──
+  /** the unit presenter mode opens on (from /api/demo) */
+  const [demoSid, setDemoSid] = useState<string | null>(null);
   /** back to the opening view: demo unit, bedroom, as scanned, chair stopped at the door */
   const reset = useCallback(() => {
+    if (demoSid) setSid(demoSid);
     setStep("apartment");
     setPick(null);
     setHinges(false);
@@ -238,14 +241,16 @@ function Stage() {
     setGlide(true);
     setStill(true);
     setRunId((n) => n + 1);
-  }, []);
+  }, [demoSid]);
   useEffect(() => {
     if (!entry.demo) return;
     const ac = new AbortController();
     fetch("/api/demo", { signal: ac.signal })
       .then((r) => (r.ok ? (r.json() as Promise<{ sid?: unknown }>) : null))
       .then((d) => {
-        if (!ac.signal.aborted && typeof d?.sid === "string") setSid(d.sid);
+        if (ac.signal.aborted || typeof d?.sid !== "string") return;
+        setDemoSid(d.sid);
+        setSid(d.sid);
       })
       .catch(() => {});
     return () => ac.abort();

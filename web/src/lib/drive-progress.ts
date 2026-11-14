@@ -45,8 +45,9 @@ export function useDriveProgress(drive: Drive | null, runId: number, onStart: ()
     onStart();
     const controls = animate(progress, 1, { duration: glideSeconds(s.length), ease: EASE_DRAFT, onComplete: onSettled });
     return () => controls.stop();
+    // `instant` is read when the effect runs, not a trigger: leaving the set view must not replay an unchanged route
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s, runId, reduce, instant, drive == null]);
+  }, [s, runId, reduce, drive == null]);
 
   return { progress, s };
 }
