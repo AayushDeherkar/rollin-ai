@@ -48,9 +48,11 @@ export function Workbench() {
 
   const [target, setTarget] = useState<string | null>(() => (entry ? defaultTarget(entry.asScanned.floors[0]) : null));
   const [runId, setRunId] = useState(0);
-  const [driving, setDriving] = useState(true);
+  const [glideRunning, setDriving] = useState(true);
 
   const drive = useMemo(() => (unit && floor && target ? buildDrive(unit, floor, target) : null), [unit, floor, target]);
+  // with no drive there is no chair layer to report back, so nothing is driving
+  const driving = glideRunning && drive != null;
 
   // Re-drive only when the outcome changes (e.g. a room turns reachable with hinges);
   // if the chair still stops at the same door it stays put and the figures update in place.
@@ -67,6 +69,7 @@ export function Workbench() {
     setDriving(true);
     setRunId((n) => n + 1);
   }, []);
+  const onStart = useCallback(() => setDriving(true), []);
   const onSettled = useCallback(() => setDriving(false), []);
 
   const listState: PanelState = preview ?? "ready";
@@ -142,6 +145,7 @@ export function Workbench() {
                             chairIn={unit.chair_in}
                             projection={projection}
                             runId={runId}
+                            onStart={onStart}
                             onSettled={onSettled}
                           />
                         )

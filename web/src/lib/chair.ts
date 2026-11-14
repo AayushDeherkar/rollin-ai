@@ -27,6 +27,8 @@ export interface Drive {
   shortfallIn: number | null;
   /** for "arrive": the room's widest door and its spare clear width over the chair, inches */
   spareIn?: number | null;
+  /** true when the route is the engine's own `path` for this room (not a fallback point) */
+  enginePath?: boolean;
 }
 
 const SAME = 1e-6;
@@ -55,7 +57,7 @@ export function buildDrive(unit: UnitResult, floor: Floor, roomId: string): Driv
     const widest = !isStart && room.doors.length ? room.doors.reduce((a, b) => (b.clear_in_est > a.clear_in_est ? b : a)) : null;
     const door = widest ? (floor.doors.find((d) => samePoint(d.center, widest.center)) ?? null) : null;
     const spareIn = door ? Math.round((door.clear_in_est - unit.chair_in[0]) * 10) / 10 : null;
-    return { room, kind: "arrive", route, drawnFrom: null, door, shortfallIn: null, spareIn };
+    return { room, kind: "arrive", route, drawnFrom: null, door, shortfallIn: null, spareIn, enginePath: Boolean(room.path?.length) };
   }
 
   if (room.status === "unknown" || room.doors.length === 0) {
@@ -107,10 +109,23 @@ export interface RouteSampler {
   progressAt: (i: number) => number;
 }
 
+/** metres of travel a full radian of turning is worth on the timeline, so turns in place take time */
+const TURN_M_PER_RAD = 0.25;
+
+/** heading change between two headings that repeat every π, radians in [0, π/2] */
+function turnBetween(a: number, b: number): number {
+  const d = Math.abs(normHeading(b) - normHeading(a));
+  return Math.min(d, Math.PI - d);
+}
+
 export function sampler(route: PathStep[]): RouteSampler {
+  // progress runs on travel plus weighted turning: the engine's path turns in place
+  // (same x,y, new heading), and those steps must be animated, not skipped
   const cum = [0];
   for (let i = 1; i < route.length; i++) {
-    cum.push(cum[i - 1] + Math.hypot(route[i][0] - route[i - 1][0], route[i][1] - route[i - 1][1]));
+    const a = route[i - 1];
+    const b = route[i];
+    cum.push(cum[i - 1] + Math.hypot(b[0] - a[0], b[1] - a[1]) + TURN_M_PER_RAD * turnBetween(a[2], b[2]));
   }
   const length = cum[cum.length - 1] ?? 0;
   return {

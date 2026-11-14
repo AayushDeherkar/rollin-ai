@@ -21,6 +21,7 @@ export function ChairLayer({
   chairIn,
   projection,
   runId,
+  onStart,
   onSettled,
 }: {
   drive: Drive;
@@ -28,6 +29,8 @@ export function ChairLayer({
   projection: Projection;
   /** bump to replay the drive from the start */
   runId: number;
+  /** called whenever a glide (re)starts, so the parent's "driving" state follows the animation */
+  onStart: () => void;
   onSettled: () => void;
 }) {
   const reduce = useReducedMotion();
@@ -48,13 +51,14 @@ export function ChairLayer({
       return;
     }
     progress.jump(0);
+    onStart();
     const controls = animate(progress, 1, {
       duration: glideSeconds(s.length),
       ease: EASE_DRAFT,
       onComplete: onSettled,
     });
     return () => controls.stop();
-    // onSettled is stable from the parent; runId restarts the drive
+    // onStart/onSettled are stable from the parent; runId restarts the drive
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s, runId, reduce]);
 

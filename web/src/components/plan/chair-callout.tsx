@@ -185,7 +185,8 @@ function Body({ drive, chairIn, hinges }: { drive: Drive; chairIn: [number, numb
           </dl>
         )}
         <p className="text-sm text-ink-soft">
-          Route found by the engine{hinges ? ", with offset hinges (gain assumed)" : ""}.
+          {drive.enginePath ? "Route found by the engine" : "Marked reachable by the engine"}
+          {hinges ? ", with offset hinges (gain assumed)" : ""}.
         </p>
         <TurningNote drive={drive} />
       </>
