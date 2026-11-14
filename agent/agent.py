@@ -94,10 +94,12 @@ def run_fit(sid: str, chair_width_in: float = 27.0, chair_length_in: float = 42.
     if not path.exists():
         return {"sid": sid, "error": "model not cached"}
     fit_cache = data_dir() / "cache" / "fit" / f"{sid}_{chair_width_in:g}x{chair_length_in:g}_{int(hinges)}_v{FIT_CACHE_V}.json"
-    engine_src = ROOT / "engine" / "fit.py"
-    if fit_cache.exists() and fit_cache.stat().st_mtime >= max(path.stat().st_mtime, engine_src.stat().st_mtime):
-        try:                                                     # stale if the model or the engine changed since
-            return json.loads(fit_cache.read_text())
+    key = _fit_key(path)
+    if fit_cache.exists():
+        try:                                                     # valid only for this exact model file and engine code
+            cached = json.loads(fit_cache.read_text())
+            if isinstance(cached, dict) and cached.get("_key") == key:
+                return {k: v for k, v in cached.items() if k != "_key"}
         except (ValueError, OSError):                            # unreadable: recompute and overwrite
             pass
     res = analyze_model(json.loads(path.read_text())["data"]["model"], sid, chair_width_in, chair_length_in, hinges)
@@ -114,13 +116,25 @@ def run_fit(sid: str, chair_width_in: float = 27.0, chair_length_in: float = 42.
     out = {"sid": sid, "name": res["name"], "scenario": res["scenario"], "chair_in": res["chair_in"], "rooms": rooms}
     fit_cache.parent.mkdir(parents=True, exist_ok=True)
     tmp = fit_cache.with_suffix(f".{uuid.uuid4().hex[:6]}.tmp")    # atomic: parallel subagents may write the same key
-    tmp.write_text(json.dumps(out))
+    tmp.write_text(json.dumps({**out, "_key": key}))
     os.replace(tmp, fit_cache)
     return out
 
 
 MAX_CHECK = 6
 FIT_CACHE_V = 1                      # bump when run_fit's output shape changes
+
+
+_ENGINE_SHA: str | None = None
+
+
+def _fit_key(model_path: pathlib.Path) -> str:
+    """Content key for a cached fit: model file + engine source. Survives copies, unzips and clock differences."""
+    import hashlib
+    global _ENGINE_SHA
+    if _ENGINE_SHA is None:
+        _ENGINE_SHA = hashlib.sha1((ROOT / "engine" / "fit.py").read_bytes()).hexdigest()[:12]
+    return hashlib.sha1(model_path.read_bytes()).hexdigest()[:12] + "-" + _ENGINE_SHA
 
 
 def check_units(sids: list[str], chair_width_in: float = 27.0, chair_length_in: float = 42.0) -> dict:

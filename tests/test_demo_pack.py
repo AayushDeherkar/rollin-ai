@@ -55,3 +55,19 @@ def test_health_reports_demo_status(data):
     from agent.server import app
     h = TestClient(app).get("/api/health").json()
     assert h["demo"]["main_unit"] == D.DEMO_UNITS[0] and "missing" in h["demo"]
+
+
+def test_bad_link_files_never_break_health_or_build(data, tmp_path):
+    sid = D.DEMO_UNITS[0]
+    (data / "cache" / "vision").mkdir()
+    for aerial, vision in (("", "[]"), ('{"image": null}', '{"images": null}'), ('{"image": "../../.env"}', '{"images": [5]}')):
+        (data / f"cache/aerial_{sid}.json").write_text(aerial)
+        (data / f"cache/vision/{sid}.json").write_text(vision)
+        D.demo_status()
+        names = set(zipfile.ZipFile(D.build(tmp_path / "p.zip")["zip"]).namelist())
+        assert not any(".env" in n for n in names)
+
+
+def test_unsafe_sids_are_skipped(data):
+    (data / "batch/index.json").write_text(json.dumps({"units": [{"sid": "../../x"}, {"sid": "ok_sid_1"}]}))
+    assert "../../x" not in D.unit_list(data) and "ok_sid_1" in D.unit_list(data)

@@ -225,7 +225,7 @@ def test_check_units_batches_both_scenarios_and_caches(data):
     cached = list((data / "cache" / "fit").glob("synthetic_demo_27x42_*.json"))
     assert len(cached) == 2
     f = data / f"cache/fit/synthetic_demo_27x42_0_v{A.FIT_CACHE_V}.json"
-    assert A.run_fit("synthetic_demo") == json.loads(f.read_text())
+    assert A.run_fit("synthetic_demo") == {k: v for k, v in json.loads(f.read_text()).items() if k != "_key"}
     f.write_text('{"half')                                   # a torn write is recomputed, not raised
     assert A.run_fit("synthetic_demo")["rooms"] and json.loads(f.read_text())["sid"] == "synthetic_demo"
     many = A.check_units(["synthetic_demo"] * 7)
@@ -247,3 +247,14 @@ def test_search_is_compact_and_includes_named_units(data):
     assert s["candidates"] == 0 and [u["sid"] for u in s["units"]] == ["synthetic_demo"]
     assert set(s["units"][0]) == {"sid", "name", "km", "reachable", "with_hinges"}
     assert A.search_units(beds=1)["candidates"] == A.search_units(beds=[1])["candidates"] == 2
+
+
+def test_fit_cache_is_keyed_by_content_not_time(data):
+    import os
+    A.run_fit("synthetic_demo")
+    f = data / f"cache/fit/synthetic_demo_27x42_0_v{A.FIT_CACHE_V}.json"
+    os.utime(f, (1, 1))                                       # an unzip that keeps old timestamps
+    assert json.loads(f.read_text())["_key"] and A.run_fit("synthetic_demo")["rooms"]
+    m = data / "cache/synthetic_demo.json"
+    m.write_text(m.read_text().replace("Synthetic 1BR (narrow bedroom door)", "Renamed"))
+    assert A.run_fit("synthetic_demo")["name"] == "Renamed"   # model changed: recomputed

@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import sys
 import zipfile
 from datetime import datetime, timezone
@@ -23,6 +24,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 # main demo first, then backup, alternatives, the fully reachable contrast, the sparse-door example
 DEMO_UNITS = ["demo-main", "demo-backup", "redacted-unit-02", "redacted-unit-01", "demo-pass", "demo-sparse"]
 TOP_N = 20
+SID = re.compile(r"^[A-Za-z0-9_]{3,40}$")
+BAD = (OSError, ValueError, KeyError, TypeError, AttributeError)
 
 
 def data_dir() -> pathlib.Path:
@@ -36,34 +39,62 @@ def _replay_sids(d: pathlib.Path) -> list[str]:
         for line in p.read_text(encoding="utf-8").splitlines():
             if not line.strip():
                 continue
-            e = json.loads(line)
-            for s in [(e.get("result") or {}).get("sid"), e.get("sid")] + [u.get("sid") for u in e.get("shortlist") or []]:
-                if isinstance(s, str) and s not in sids:
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(e, dict):
+                continue
+            res = e.get("result") if isinstance(e.get("result"), dict) else {}
+            for s in [res.get("sid"), e.get("sid")] + [u.get("sid") for u in e.get("shortlist") or [] if isinstance(u, dict)]:
+                if isinstance(s, str) and SID.match(s) and s not in sids:
                     sids.append(s)
     return sids
 
 
 def unit_list(d: pathlib.Path) -> list[str]:
     idx = d / "batch" / "index.json"
-    top = [u["sid"] for u in json.loads(idx.read_text()).get("units", [])[:TOP_N]] if idx.exists() else []
+    try:
+        top = [u["sid"] for u in json.loads(idx.read_text()).get("units", [])[:TOP_N]] if idx.exists() else []
+    except BAD:
+        top = []
+    top = [s for s in top if isinstance(s, str) and SID.match(s)]
     return list(dict.fromkeys(DEMO_UNITS + _replay_sids(d) + top))
 
 
+def _inside(base: pathlib.Path, name: object) -> pathlib.Path | None:
+    """base/name if name is a plain file name that stays inside base, else None."""
+    if not isinstance(name, str) or not name:
+        return None
+    p = (base / name).resolve()
+    return p if base.resolve() in p.parents and p.exists() else None
+
+
 def unit_files(d: pathlib.Path, sid: str) -> dict[str, list[pathlib.Path]]:
+    """Cached files for one unit. Unreadable link files are skipped (reported by demo_status), never raised."""
     cache = d / "cache"
     files: dict[str, list[pathlib.Path]] = {"model": [], "aerial": [], "fit": [], "vision": []}
+    if not SID.match(sid):
+        return files
     if (cache / f"{sid}.json").exists():
         files["model"].append(cache / f"{sid}.json")
     link = cache / f"aerial_{sid}.json"
-    if link.exists():
-        meta = json.loads(link.read_text())
-        files["aerial"] += [p for p in (link, cache / meta["image"], cache / meta["findings_file"]) if p.exists()]
+    try:
+        if link.exists():
+            meta = json.loads(link.read_text())
+            extra = [_inside(cache, meta.get("image")), _inside(cache, meta.get("findings_file"))]
+            files["aerial"] += [link] + [p for p in extra if p]
+    except BAD:
+        pass
     files["fit"] += sorted((cache / "fit").glob(f"{sid}_*.json")) if (cache / "fit").exists() else []
     vision = cache / "vision" / f"{sid}.json"
-    if vision.exists():
-        files["vision"].append(vision)
-        meta = json.loads(vision.read_text())
-        files["vision"] += [cache / "vision" / f for f in meta.get("images", []) if (cache / "vision" / f).exists()]
+    try:
+        if vision.exists():
+            meta = json.loads(vision.read_text())
+            imgs = meta.get("images") if isinstance(meta, dict) else None
+            files["vision"] += [vision] + [p for p in (_inside(cache / "vision", f) for f in (imgs or [])) if p]
+    except BAD:
+        pass
     return files
 
 
