@@ -50,7 +50,7 @@
   --color-destructive: var(--block);
   --color-border: var(--rule-strong);
   --color-input: var(--rule-strong);
-  --color-ring: var(--agent);
+  --color-ring: var(--ink);
   --color-card: var(--paper);
   --color-card-foreground: var(--ink);
   --color-popover: var(--paper-lift);
@@ -100,7 +100,7 @@
   --destructive: var(--block);
   --border: var(--rule-strong);
   --input: var(--rule-strong);
-  --ring: var(--agent);
+  --ring: var(--ink);
 }
 
 @layer base {
@@ -118,12 +118,13 @@
     line-height: var(--leading-text);
     -webkit-font-smoothing: antialiased;
   }
+  /* focus is ink, not the accent: cobalt is reserved for "the agent is acting now" */
   :focus-visible {
-    outline: var(--line-frame) solid var(--agent);
+    outline: var(--line-frame) solid var(--ink);
     outline-offset: 2px;
   }
   ::selection {
-    background: var(--agent-wash);
+    background: var(--paper-deep);
     color: var(--ink);
   }
 }
@@ -146,6 +147,28 @@
     stroke: var(--paper-lift);
     stroke-width: 5px;
     stroke-linejoin: round;
+  }
+  /* room hit areas on the plan: invisible until hovered, focused or selected */
+  .plan-hit {
+    fill: transparent;
+    stroke: transparent;
+    stroke-width: 3px;
+    cursor: pointer;
+    outline: none;
+    transition: stroke var(--dur-1) var(--ease-draft);
+  }
+  .plan-hit:hover {
+    stroke: var(--ink-soft);
+    stroke-dasharray: 6 5;
+  }
+  .plan-hit[aria-pressed="true"] {
+    stroke: var(--ink);
+    stroke-dasharray: 6 5;
+  }
+  .plan-hit:focus-visible {
+    stroke: var(--ink);
+    stroke-width: 5px;
+    stroke-dasharray: none;
   }
   .transition-draft {
     transition-timing-function: var(--ease-draft);
