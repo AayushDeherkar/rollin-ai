@@ -129,3 +129,12 @@ def test_replay_action_with_a_callback_still_never_sends(client):
                                          replay=True, on_resolve=lambda a: calls.append(a) or {"status": "sent"}))
     assert client.post("/api/approve", json={"action_id": "rp", "approved": True}).json()["replay"] is True
     assert calls == []
+
+
+def test_replay_speed_plays_faster_and_stays_marked(client):
+    import time
+    t0 = time.time()
+    events = read_sse(client, url="/api/chat?replay=1&speed=100")
+    assert time.time() - t0 < 3 and all(e["data"]["replay"] is True for e in events)
+    with client.stream("POST", "/api/chat?replay=1&speed=0", json={}) as r:
+        assert r.status_code == 422

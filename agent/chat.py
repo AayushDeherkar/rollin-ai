@@ -3,7 +3,7 @@
 Events follow contracts/chat_events.example.jsonl: one JSON object per SSE `data:` line, with the
 SSE `event:` set to the event type and `id:` to the event id.
 
-    POST /api/chat?replay=1[&pace=1.0]   stream a recorded run (no model needed); every event has replay: true
+    POST /api/chat?replay=1[&pace=1.0 | &speed=N]   stream a recorded run (no model needed); every event has replay: true
     POST /api/chat                       live agent run (503 until a model is configured)
     POST /api/approve {action_id, approved}
 
@@ -91,8 +91,11 @@ async def stream(events: AsyncIterator[dict]) -> AsyncIterator[str]:
 
 
 @router.post("/api/chat")
-async def chat(req: ChatRequest | None = None, replay: bool = False, pace: float = Query(1.0, ge=0, le=10)):
+async def chat(req: ChatRequest | None = None, replay: bool = False, pace: float = Query(1.0, ge=0, le=10),
+               speed: float | None = Query(None, gt=0, le=100)):
     req = req or ChatRequest()                      # replay needs no body
+    if speed is not None:                           # ?speed=4 plays 4x faster; events stay marked replay
+        pace = 1.0 / speed
     headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
     if replay:
         return StreamingResponse(stream(replay_events(pace)), media_type="text/event-stream", headers=headers)
