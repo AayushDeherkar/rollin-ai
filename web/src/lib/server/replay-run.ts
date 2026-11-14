@@ -25,7 +25,8 @@ async function readContractRun(): Promise<string> {
   const tried = [path.join(process.cwd(), "..", name), path.join(process.cwd(), name)];
   for (const file of tried) {
     try {
-      return await readFile(file, "utf8");
+      // the file is traced in by next.config (outputFileTracingIncludes), not by scanning this path
+      return await readFile(/*turbopackIgnore: true*/ file, "utf8");
     } catch {
       /* try the next place */
     }
