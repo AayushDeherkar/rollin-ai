@@ -42,7 +42,10 @@ function layout(bounds: ReturnType<typeof floorBounds>, w: number, h: number, co
   const planW = (bounds.maxX - bounds.minX) * full.scale + 2 * MARGIN;
   if (w - planW < GUTTER) return { projection: full, gutter: null };
   // same scale (height-limited), drawing shifted left to free the strip
-  return { projection: makeProjection(bounds, w - GUTTER, h, MARGIN), gutter: { x: w - GUTTER, w: GUTTER } };
+  return {
+    projection: makeProjection(bounds, w - GUTTER, h, MARGIN),
+    gutter: { x: w - GUTTER, w: GUTTER },
+  };
 }
 
 export interface FloorPlanProps {
@@ -58,12 +61,25 @@ export interface FloorPlanProps {
   baseline?: UnitResult | null;
   /** Rooms become buttons when given. */
   onRoomSelect?: (roomId: string) => void;
+  /** a door the chair cannot pass was clicked (opens the tour); absent when there is no tour */
+  onDoorOpen?: (edge: string) => void;
   selectedRoom?: string | null;
   /** Small inset: walls, status fills and overlays only; no figures or labels to crowd it. */
   compact?: boolean;
 }
 
-export function FloorPlan({ unit, floorIndex = 0, overlay, annotations, highlightDoor, onRoomSelect, selectedRoom, baseline, compact = false }: FloorPlanProps) {
+export function FloorPlan({
+  unit,
+  floorIndex = 0,
+  overlay,
+  annotations,
+  highlightDoor,
+  onRoomSelect,
+  onDoorOpen,
+  selectedRoom,
+  baseline,
+  compact = false,
+}: FloorPlanProps) {
   const floor = unit.floors[floorIndex];
   const box = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
@@ -106,6 +122,7 @@ export function FloorPlan({ unit, floorIndex = 0, overlay, annotations, highligh
           scenarioKey={unit.scenario}
           changed={changed}
           onRoomSelect={onRoomSelect}
+          onDoorOpen={compact ? undefined : onDoorOpen}
           selectedRoom={selectedRoom ?? null}
         />
       )}
@@ -128,6 +145,7 @@ function PlanSvg({
   scenarioKey,
   changed,
   onRoomSelect,
+  onDoorOpen,
   selectedRoom,
   compact,
 }: {
@@ -146,6 +164,7 @@ function PlanSvg({
   scenarioKey: string;
   changed: Room[];
   onRoomSelect?: (roomId: string) => void;
+  onDoorOpen?: (edge: string) => void;
   selectedRoom: string | null;
 }) {
   const reduce = useReducedMotionConfig();
@@ -184,7 +203,11 @@ function PlanSvg({
               stroke={`var(--${r.status === "reachable" ? "reach" : r.status === "blocked" ? "block" : "unknown"})`}
               initial={{ pathLength: reduce ? 1 : 0 }}
               animate={{ pathLength: 1 }}
-              transition={{ duration: reduce ? 0 : DUR[4], ease: EASE_DRAFT, delay: reduce ? 0 : DUR[2] }}
+              transition={{
+                duration: reduce ? 0 : DUR[4],
+                ease: EASE_DRAFT,
+                delay: reduce ? 0 : DUR[2],
+              }}
             />
           </g>
         ))}
@@ -200,11 +223,7 @@ function PlanSvg({
       </g>
 
       {/* bathroom turning circles, where the engine says where the largest circle sits (contract v2) */}
-      {!compact && (
-        <g>
-          {floor.rooms.map((r) => (r.turning_space?.center ? <TurningCircle key={r.room_id} room={r} projection={projection} /> : null))}
-        </g>
-      )}
+      {!compact && <g>{floor.rooms.map((r) => (r.turning_space?.center ? <TurningCircle key={r.room_id} room={r} projection={projection} /> : null))}</g>}
 
       {/* chair and anything else drawn over the plan */}
       {overlay?.(ctx)}
@@ -256,6 +275,41 @@ function PlanSvg({
       )}
 
       {annotations?.(ctx)}
+
+      {/* doors the chair cannot pass open the unit's tour; drawn last so they take the click over rooms and the callout's anchor */}
+      {onDoorOpen && (
+        <g>
+          {doors
+            .filter((g) => !g.door.passable)
+            .map((g) => {
+              const a = toScreen(g.j0);
+              const b = toScreen(g.j1);
+              const open = () => onDoorOpen(g.door.edge);
+              return (
+                <line
+                  key={g.door.edge + g.door.center.join()}
+                  x1={a[0]}
+                  y1={a[1]}
+                  x2={b[0]}
+                  y2={b[1]}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Open the Matterport tour at the door with ${g.door.clear_in_est.toFixed(1)} inches clear (estimated)`}
+                  onClick={open}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      open();
+                    }
+                  }}
+                  className="door-hit"
+                >
+                  <title>Open the Matterport tour at this door</title>
+                </line>
+              );
+            })}
+        </g>
+      )}
     </svg>
   );
 }
@@ -283,7 +337,9 @@ function DoorDimension({ g, projection, chairW, emphasis }: { g: DoorGeometry; p
   const blocked = !g.door.passable;
   const colour = blocked ? "var(--block)" : "var(--ink)";
   const clear = g.door.clear_in_est.toFixed(1);
-  const ease = { transition: "stroke var(--dur-3) var(--ease-draft), fill var(--dur-3) var(--ease-draft)" };
+  const ease = {
+    transition: "stroke var(--dur-3) var(--ease-draft), fill var(--dur-3) var(--ease-draft)",
+  };
   const title = `Door opening ${g.door.width_in.toFixed(1)} in; clear width about ${clear} in (estimated); ${
     blocked ? `not passable for a ${chairW.toFixed(1)} in chair` : "passable"
   }.`;
@@ -292,7 +348,16 @@ function DoorDimension({ g, projection, chairW, emphasis }: { g: DoorGeometry; p
     <g data-door={g.door.edge} className="plan-door">
       <title>{title}</title>
       {/* jamb marks across the opening */}
-      <line x1={j0[0]} y1={j0[1]} x2={j1[0]} y2={j1[1]} stroke={colour} style={ease} strokeWidth={emphasis ? 3 : 1.5} strokeDasharray={blocked ? "none" : "4 4"} />
+      <line
+        x1={j0[0]}
+        y1={j0[1]}
+        x2={j1[0]}
+        y2={j1[1]}
+        stroke={colour}
+        style={ease}
+        strokeWidth={emphasis ? 3 : 1.5}
+        strokeDasharray={blocked ? "none" : "4 4"}
+      />
       <g stroke={blocked ? "var(--block)" : "var(--ink-soft)"} style={ease} strokeWidth={emphasis ? 2.25 : 1.25}>
         <line x1={j0[0]} y1={j0[1]} x2={off(j0, DIM_OFFSET + 6)[0]} y2={off(j0, DIM_OFFSET + 6)[1]} />
         <line x1={j1[0]} y1={j1[1]} x2={off(j1, DIM_OFFSET + 6)[0]} y2={off(j1, DIM_OFFSET + 6)[1]} />
@@ -302,14 +367,7 @@ function DoorDimension({ g, projection, chairW, emphasis }: { g: DoorGeometry; p
       </g>
       <g transform={`translate(${labelAt[0]} ${labelAt[1]}) rotate(${angle})`}>
         {blocked && <Ban x={-58} y={-9} width={18} height={18} color="var(--block)" strokeWidth={2.5} aria-hidden />}
-        <text
-          x={blocked ? -36 : -34}
-          y={0}
-          dominantBaseline="central"
-          className="measure plan-halo text-sm font-semibold"
-          fill={colour}
-          style={ease}
-        >
+        <text x={blocked ? -36 : -34} y={0} dominantBaseline="central" className="measure plan-halo text-sm font-semibold" fill={colour} style={ease}>
           <AnimatedFigure svg value={g.door.clear_in_est} />″ <tspan className="font-normal">est.</tspan>
         </text>
       </g>
@@ -327,19 +385,7 @@ function roomExtentPx(room: Room, scale: number): [number, number] {
 /** approximate advance of 16px text, for centring and fit checks */
 const CHAR_PX = 9;
 
-function RoomLabel({
-  room,
-  at,
-  widthPx: w,
-  heightPx: h,
-  isStart,
-}: {
-  room: Room;
-  at: Point;
-  widthPx: number;
-  heightPx: number;
-  isStart: boolean;
-}) {
+function RoomLabel({ room, at, widthPx: w, heightPx: h, isStart }: { room: Room; at: Point; widthPx: number; heightPx: number; isStart: boolean }) {
   // a tall narrow room is lettered along its length, as on a drawing
   const nameW = room.label.length * CHAR_PX + 12;
   const rotate = nameW > w && h > w;
@@ -354,8 +400,13 @@ function RoomLabel({
   const lines: { text: string; measure?: boolean }[] = [];
   if (isStart) lines.push({ text: "start" });
   if (ts && widthPx >= 200) {
-    lines.push({ text: `turning ⌀ ${ts.max_circle_in.toFixed(1)} in`, measure: true });
-    lines.push({ text: `${ts.meets_60in ? "meets" : "under"} 60 in, walls only` });
+    lines.push({
+      text: `turning ⌀ ${ts.max_circle_in.toFixed(1)} in`,
+      measure: true,
+    });
+    lines.push({
+      text: `${ts.meets_60in ? "meets" : "under"} 60 in, walls only`,
+    });
   }
   return (
     <g transform={`translate(${at[0]} ${at[1]})${rotate ? " rotate(-90)" : ""}`} className="plan-label">

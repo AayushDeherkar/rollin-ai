@@ -1,16 +1,8 @@
 "use client";
 
 import { motion, useReducedMotionConfig } from "motion/react";
-import { CircleCheck, CircleDot, Flag, ListChecks, Satellite, ShieldCheck, Square, Wrench, type LucideIcon } from "lucide-react";
-import type {
-  AgentEvent,
-  ApprovalEvent,
-  FinalEvent,
-  FindingEvent,
-  PlanEvent,
-  ToolEvent,
-  VerifyEvent,
-} from "@/lib/agent-events";
+import { CircleCheck, CircleDot, Flag, History, ListChecks, Satellite, ShieldCheck, Square, Wrench, type LucideIcon } from "lucide-react";
+import type { AgentEvent, ApprovalEvent, FinalEvent, FindingEvent, MemoryEvent, PlanEvent, ToolEvent, VerifyEvent } from "@/lib/agent-events";
 import { isNum } from "@/lib/agent-events";
 import type { Decision } from "@/lib/agent";
 import { DUR, EASE_DRAFT } from "@/lib/motion";
@@ -18,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { STATUS, StatusIcon } from "@/components/sheet/status";
 import { ApprovalCard } from "./approval-card";
 import { BasisChip, NumValue, humanize } from "./basis";
+import { AerialCard, ProfileLine, VisionFindings, aerialSrc } from "./evidence";
 
 export interface Evidence {
   eventId: string;
@@ -57,7 +50,9 @@ export function Timeline({
         }
         // read now: Step renders after this loop ends, when later fits have changed the map
         const sid = "sid" in ev && typeof ev.sid === "string" ? ev.sid : null;
-        const hinges = sid ? (fitHinges[sid] ?? false) : false;
+        // a finding that names its fit (contract v2) says which; otherwise the unit's last fit before it
+        const scenario = "scenario" in ev && typeof ev.scenario === "string" ? ev.scenario : null;
+        const hinges = scenario ? scenario.includes("hinges") : sid ? (fitHinges[sid] ?? false) : false;
         return (
           <motion.li
             key={`${ev.run_id}:${ev.id}:${i}`}
@@ -109,6 +104,7 @@ function Step({
         <>
           <Title icon={ListChecks}>Plan</Title>
           <p className="text-base">{p.text}</p>
+          {p.profile && <ProfileLine profile={p.profile} />}
           {p.todos && p.todos.length > 0 && (
             <ul className="flex flex-col gap-1">
               {p.todos.map((t) => {
@@ -147,17 +143,11 @@ function Step({
       const f = ev as FindingEvent;
       const status = f.status && f.status in STATUS ? f.status : null;
       const canShow = Boolean(f.sid && f.room_id);
-      const evidence: Evidence | null = canShow
-        ? { eventId: f.id, sid: f.sid!, roomId: f.room_id!, hinges }
-        : null;
+      const evidence: Evidence | null = canShow ? { eventId: f.id, sid: f.sid!, roomId: f.room_id!, hinges } : null;
       const body = (
         <>
           <span className={cn("flex items-center gap-2 text-base leading-snug font-semibold", status && STATUS[status].text)}>
-            {ev.type === "aerial" ? (
-              <Satellite aria-hidden className="size-5 shrink-0" strokeWidth={2.25} />
-            ) : status ? (
-              <StatusIcon status={status} />
-            ) : null}
+            {ev.type === "aerial" ? <Satellite aria-hidden className="size-5 shrink-0" strokeWidth={2.25} /> : status ? <StatusIcon status={status} /> : null}
             <span className="min-w-0">
               {f.room ?? (ev.type === "aerial" ? "From aerial" : "Finding")}
               {status && <span className="font-normal">, {STATUS[status].word.toLowerCase()}</span>}
@@ -174,6 +164,8 @@ function Step({
               ))}
             </span>
           )}
+          {ev.type === "aerial" && aerialSrc(f.sid, f.image_url) && <AerialCard src={aerialSrc(f.sid, f.image_url)!} label={f.label} source={f.source} />}
+          {f.findings && <VisionFindings findings={f.findings} />}
           {evidence && <span className="text-sm font-semibold text-ink underline decoration-rule-strong underline-offset-4">Show on the plan</span>}
         </>
       );
@@ -230,6 +222,26 @@ function Step({
         </>
       );
     }
+    case "memory": {
+      // what profile memory did for this sender (contract v3): saved, updated or used
+      const m = ev as MemoryEvent;
+      const chair = m.profile?.chair_in?.length === 2 ? m.profile.chair_in : null;
+      const verb = m.action === "used" ? "Remembered" : m.action === "saved" ? "Saved to memory" : m.action === "updated" ? "Memory updated" : "Memory";
+      return (
+        <>
+          <Title icon={History}>{verb}</Title>
+          {m.text && <p className="text-base">{m.text}</p>}
+          {chair && (
+            <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm">
+              <span className="text-ink-soft">Chair</span>
+              <NumValue n={chair[0]} />
+              <span>×</span>
+              <NumValue n={chair[1]} />
+            </span>
+          )}
+        </>
+      );
+    }
     default:
       return (
         <>
@@ -246,10 +258,18 @@ function Fields({ label, data }: { label: string; data?: Record<string, unknown>
   const rows: { key: string; node: React.ReactNode }[] = [];
   const walk = (prefix: string, v: unknown) => {
     if (isNum(v)) rows.push({ key: prefix, node: <NumValue n={v} /> });
-    else if (Array.isArray(v)) rows.push({ key: prefix, node: <span className="measure">{v.length} items</span> });
+    else if (Array.isArray(v))
+      rows.push({
+        key: prefix,
+        node: <span className="measure">{v.length} items</span>,
+      });
     else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) walk(prefix ? `${prefix} ${k}` : k, x);
     else if (typeof v === "boolean") rows.push({ key: prefix, node: <span>{v ? "yes" : "no"}</span> });
-    else if (v !== null && v !== undefined) rows.push({ key: prefix, node: <span className="measure break-all">{String(v)}</span> });
+    else if (v !== null && v !== undefined)
+      rows.push({
+        key: prefix,
+        node: <span className="measure break-all">{String(v)}</span>,
+      });
   };
   walk("", data);
   if (rows.length === 0) return null;

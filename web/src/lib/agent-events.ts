@@ -37,6 +37,8 @@ export interface PlanEvent extends Base {
   type: "plan";
   text: string;
   todos?: Todo[];
+  /** the profile the run uses (contract v3): who is asking and the chair, each number with its basis */
+  profile?: { sender_id?: string; chair_in?: Num[] | null };
 }
 export interface ToolEvent extends Base {
   type: "tool";
@@ -54,6 +56,23 @@ export interface FindingEvent extends Base {
   text: string;
   numbers?: Record<string, Num>;
   evidence?: { kind: string; edge?: string; center?: Num[] } | null;
+  /** the fit the finding came from: "as scanned" or "offset hinges on every door" */
+  scenario?: string;
+  /** aerial: GET /api/aerial/{sid}, its label ("from aerial, estimated"), who made the image */
+  image_url?: string;
+  label?: string;
+  source?: string;
+  /** what a model saw in an image; every answer carries its basis and label */
+  findings?: VisionFinding[];
+}
+
+export interface VisionFinding {
+  item: string;
+  question: string;
+  answer: "yes" | "no" | "unclear" | string;
+  note?: string;
+  basis: Basis;
+  label?: string;
 }
 export interface VerifyEvent extends Base {
   type: "verify";
@@ -68,6 +87,16 @@ export interface ApprovalEvent extends Base {
   draft?: string;
   reason?: string;
 }
+/** what profile memory did for this sender_id (contract v3); never sent without one */
+export interface MemoryEvent extends Base {
+  type: "memory";
+  sender_id?: string;
+  action?: "saved" | "updated" | "used" | string;
+  text?: string;
+  /** the file in the agent's filesystem memory */
+  path?: string;
+  profile?: { chair_in?: Num[] | null };
+}
 export interface FinalEvent extends Base {
   type: "final";
   text?: string;
@@ -78,7 +107,7 @@ export interface OtherEvent extends Base {
   text?: string;
 }
 
-export type AgentEvent = PlanEvent | ToolEvent | FindingEvent | VerifyEvent | ApprovalEvent | FinalEvent | OtherEvent;
+export type AgentEvent = PlanEvent | MemoryEvent | ToolEvent | FindingEvent | VerifyEvent | ApprovalEvent | FinalEvent | OtherEvent;
 
 /** POST /api/approve result (agent/approvals.py) */
 export interface ApproveResult {

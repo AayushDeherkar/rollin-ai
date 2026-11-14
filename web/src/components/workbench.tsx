@@ -22,6 +22,7 @@ import { ChairLayer } from "@/components/plan/chair-layer";
 import { ChairCallout } from "@/components/plan/chair-callout";
 import { ScenarioToggle, type Scenario } from "@/components/plan/scenario-toggle";
 import { PlanStage } from "@/components/plan/plan-stage";
+import { TourPanel } from "@/components/plan/tour-panel";
 import { useDriveProgress } from "@/lib/drive-progress";
 
 type Preview = PanelState | null;
@@ -57,6 +58,29 @@ function useForceReduce(): boolean {
   return useSyncExternalStore(noSubscribe, readForceReduce, () => false);
 }
 
+/** `?agent=replay` plays the recorded run instead of the live agent (labelled replay on screen). */
+function readAgentReplay(): boolean {
+  return new URLSearchParams(window.location.search).get("agent") === "replay";
+}
+
+/**
+ * A stable id for this browser, sent as the profile's sender_id (contract v3) so the agent's
+ * profile memory carries across runs from the same browser. Random; it identifies no one.
+ */
+function webSenderId(): string | undefined {
+  try {
+    const key = "rollin.sender";
+    let id = localStorage.getItem(key);
+    if (!id) {
+      id = `web_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+      localStorage.setItem(key, id);
+    }
+    return id;
+  } catch {
+    return undefined;
+  }
+}
+
 export function Workbench() {
   const forceReduce = useForceReduce();
   useEffect(() => {
@@ -79,8 +103,7 @@ function Sheet() {
   // a replayed list only has plans for the units the contract fixtures ship
   // and a live batch only has models cached for some units: the API's 404s are remembered
   const noPlan = useNoPlan();
-  const hasPlan = (s: string) =>
-    !noPlan.includes(s) && (list.status !== "ready" || list.origin === "live" || fixtureUnit(s, false) !== null);
+  const hasPlan = (s: string) => !noPlan.includes(s) && (list.status !== "ready" || list.origin === "live" || fixtureUnit(s, false) !== null);
 
   const [chosen, setChosen] = useState<string | null>(null);
   const sid = chosen ?? forcedSid ?? (rows.find((r) => hasPlan(r.sid)) ?? rows[0])?.sid ?? null;
@@ -120,12 +143,21 @@ function Sheet() {
     },
     [sid],
   );
+  // a door the chair cannot pass opens the unit's Matterport tour; only real scans have one
+  const [tour, setTour] = useState<{ sid: string; edge: string } | null>(null);
+  const hasTour = pair.status === "ready" && pair.origin === "live" && sid !== null && !sid.startsWith("synthetic");
+  const openTour = useCallback((edge: string) => sid && setTour({ sid, edge }), [sid]);
+  const closeTour = useCallback(() => setTour(null), []);
+  const tourShown = tour && tour.sid === sid && hasTour ? tour : null;
+
   const agent = useAgentRun();
   const [shownEvidence, setShownEvidence] = useState<string | null>(null);
   // a finding opens its evidence: its unit, in the scenario it was found under, with the chair driven to its room
   const showEvidence = useCallback((e: Evidence) => {
     setShownEvidence(e.eventId);
     setChosen(e.sid);
+    // a tour belongs to the unit it was opened on: moving away closes it
+    setTour(null);
     setScenario(e.hinges ? "hinges" : "scanned");
     setPick({ sid: e.sid, room: e.roomId });
     setDriving(true);
@@ -144,7 +176,12 @@ function Sheet() {
     .map((r) => {
       const h = hingesOn && r.with_hinges ? r.with_hinges : null;
       // an older batch index has no hinges summary: show none rather than the as-scanned one
-      return { r, score: h ? h.score : r.score, counts: h ? h.counts : r.counts, summary: h ? h.summary || null : r.summary };
+      return {
+        r,
+        score: h ? h.score : r.score,
+        counts: h ? h.counts : r.counts,
+        summary: h ? h.summary || null : r.summary,
+      };
     })
     .sort(
       (a, b) =>
@@ -203,6 +240,7 @@ function Sheet() {
               if (next === sid) return;
               // the scenario stays: the list is ranked by it, so changing it here would re-sort under the cursor
               setChosen(next);
+              setTour(null);
               setDriving(true);
             }}
           />
@@ -211,7 +249,14 @@ function Sheet() {
               state={planState}
               title={unit && unit.floors.length > 1 && floor ? `Plan, ${floor.floor}` : "Plan"}
               tag={planReplay !== null ? <ReplayTag reason={planReplay} /> : null}
-              emptyNote={pair.status === "error" ? { title: "This plan could not be loaded", body: pair.message } : null}
+              emptyNote={
+                pair.status === "error"
+                  ? {
+                      title: "This plan could not be loaded",
+                      body: pair.message,
+                    }
+                  : null
+              }
               className="flex-1"
               aside={
                 unit && (
@@ -240,45 +285,57 @@ function Sheet() {
             >
               {unit && floor && (
                 <div className="flex h-full flex-col">
-                  <div className="min-h-0 flex-1">
-                    <PlanStage
-                      unit={unit}
-                      floor={floor}
-                      drive={drive}
-                      driving={driving}
-                      progress={progress}
-                      s={route}
-                      selectedRoom={target}
-                      onRoomSelect={driveTo}
-                      renderPlan={(compact) => (
-                        <FloorPlan
-                          unit={unit}
-                          compact={compact}
-                          baseline={scenario === "hinges" ? entry?.asScanned : null}
-                          selectedRoom={compact ? null : target}
-                          onRoomSelect={compact ? undefined : driveTo}
-                          highlightDoor={drive?.kind === "blocked" && !driving ? (drive.door?.edge ?? null) : null}
-                          overlay={({ projection }) =>
-                            drive && <ChairLayer drive={drive} chairIn={unit.chair_in} projection={projection} progress={progress} s={route} />
-                          }
-                          annotations={({ projection, size, gutter }) =>
-                            !compact &&
-                            drive &&
-                            !driving && (
-                              <ChairCallout
-                                drive={drive}
-                                floor={floor}
-                                chairIn={unit.chair_in}
-                                projection={projection}
-                                size={size}
-                                gutter={gutter}
-                                scenario={unit.scenario}
-                              />
-                            )
-                          }
-                        />
-                      )}
-                    />
+                  <div className="relative min-h-0 flex-1">
+                    {/* the tour replaces the model while open: two WebGL scenes would share the GPU */}
+                    {tourShown ? (
+                      <TourPanel
+                        sid={tourShown.sid}
+                        unitName={unit.name}
+                        door={floor.doors.find((d) => d.edge === tourShown.edge) ?? null}
+                        onClose={closeTour}
+                      />
+                    ) : (
+                      <PlanStage
+                        unit={unit}
+                        floor={floor}
+                        drive={drive}
+                        driving={driving}
+                        progress={progress}
+                        s={route}
+                        selectedRoom={target}
+                        onRoomSelect={driveTo}
+                        onDoorOpen={hasTour ? openTour : undefined}
+                        renderPlan={(compact) => (
+                          <FloorPlan
+                            unit={unit}
+                            compact={compact}
+                            baseline={scenario === "hinges" ? entry?.asScanned : null}
+                            selectedRoom={compact ? null : target}
+                            onRoomSelect={compact ? undefined : driveTo}
+                            onDoorOpen={hasTour ? openTour : undefined}
+                            highlightDoor={drive?.kind === "blocked" && !driving ? (drive.door?.edge ?? null) : null}
+                            overlay={({ projection }) =>
+                              drive && <ChairLayer drive={drive} chairIn={unit.chair_in} projection={projection} progress={progress} s={route} />
+                            }
+                            annotations={({ projection, size, gutter }) =>
+                              !compact &&
+                              drive &&
+                              !driving && (
+                                <ChairCallout
+                                  drive={drive}
+                                  floor={floor}
+                                  chairIn={unit.chair_in}
+                                  projection={projection}
+                                  size={size}
+                                  gutter={gutter}
+                                  scenario={unit.scenario}
+                                />
+                              )
+                            }
+                          />
+                        )}
+                      />
+                    )}
                   </div>
                   <PlanLegend unit={unit} floor={floor} />
                 </div>
@@ -293,7 +350,11 @@ function Sheet() {
             defaultMessage="Find units near the Medical Center my 27 × 42 in chair can live in. Check bedroom and bathroom access."
             onRun={(message) => {
               setShownEvidence(null);
-              agent.start(message, { chair_in: chair ? [chair[0], chair[1]] : null });
+              agent.start(
+                message,
+                { sender_id: webSenderId(), chair_in: chair ? [chair[0], chair[1]] : null },
+                { replay: readAgentReplay() },
+              );
             }}
             onStop={agent.stop}
             onDecide={agent.decide}
@@ -304,7 +365,11 @@ function Sheet() {
         <TitleBlock
           cells={[
             { label: "Unit", value: unit ? unit.name : "None selected" },
-            { label: "Chair (width × length)", value: chair ? `${chair[0].toFixed(1)} × ${chair[1].toFixed(1)} in` : "Not set", measure: true },
+            {
+              label: "Chair (width × length)",
+              value: chair ? `${chair[0].toFixed(1)} × ${chair[1].toFixed(1)} in` : "Not set",
+              measure: true,
+            },
             { label: "Scenario", value: unit ? unit.scenario : "None" },
             {
               label: "Data",
