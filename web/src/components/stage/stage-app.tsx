@@ -11,8 +11,10 @@ import { MotionConfig } from "motion/react";
 import type * as THREE from "three";
 import { PatternDefs } from "@/components/sheet/status";
 import { readWebgl } from "@/components/plan/plan-stage";
-import type { Step } from "@/lib/stage";
+import { PRESETS, type ChairIn, type Step } from "@/lib/stage";
 import { StepBar } from "./step-bar";
+import { ChairPlate } from "./chair-plate";
+import { ChairScene } from "./chair-scene";
 
 const StageCanvas = dynamic(() => import("./stage-canvas").then((m) => m.StageCanvas), { ssr: false });
 
@@ -44,7 +46,14 @@ export function StageApp() {
 
 function Stage() {
   const [step, setStep] = useState<Step>("chair");
-  const available: Record<Step, boolean> = { chair: true, search: false, apartment: false };
+  const [chair, setChair] = useState<ChairIn>(PRESETS[1].chair);
+  /** the chair the search was started with: the profile sent to /api/chat */
+  const [profile, setProfile] = useState<ChairIn | null>(null);
+  const available: Record<Step, boolean> = { chair: true, search: profile !== null, apartment: false };
+  const find = useCallback(() => {
+    setProfile(chair);
+    setStep("search");
+  }, [chair]);
 
   const pose = useCallback(
     (out: { pos: THREE.Vector3; target: THREE.Vector3 }) => {
@@ -63,11 +72,18 @@ function Stage() {
     <div className="fixed inset-0 overflow-hidden bg-paper">
       <PatternDefs />
       <div className="absolute inset-0">
-        <StageCanvas pose={pose} onFallback={fallBack} />
+        <StageCanvas pose={pose} onFallback={fallBack}>
+          <ChairScene chair={step === "chair" ? chair : (profile ?? chair)} visible={step !== "apartment"} />
+        </StageCanvas>
       </div>
       <header className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-6 p-6">
         <StepBar step={step} available={available} onStep={setStep} />
       </header>
+      {step === "chair" && (
+        <div className="pointer-events-none absolute bottom-6 left-6">
+          <ChairPlate chair={chair} onChair={setChair} onFind={find} />
+        </div>
+      )}
     </div>
   );
 }

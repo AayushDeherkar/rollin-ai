@@ -28,3 +28,23 @@ export function kmFrom(origin: { lat: number; lon: number }, p: { lat: number; l
 export function fieldPoint([e, n]: [number, number]): [number, number, number] {
   return [e * FIELD_M_PER_KM, 0, -n * FIELD_M_PER_KM];
 }
+
+export type ChairIn = [number, number];
+
+/**
+ * Starting sizes for the presets, width × length in inches. They are starting points to adjust,
+ * not measurements or statistics, and the plate says so. Power chair is the demo profile.
+ */
+export const PRESETS: { id: string; label: string; chair: ChairIn }[] = [
+  { id: "manual", label: "Manual chair", chair: [25, 40] },
+  { id: "power", label: "Power chair", chair: [27, 42] },
+  { id: "walker", label: "Walker", chair: [24, 30] },
+];
+
+export const CHAIR_LIMITS = { width: [18, 36], length: [20, 56] } as const;
+
+/** the turning space the engine checks rooms against, inches */
+export const TURNING_IN = 60;
+
+/** the circle the footprint sweeps turning in place about its centre: its diagonal, inches */
+export const sweptIn = ([w, l]: ChairIn) => Math.hypot(w, l);
