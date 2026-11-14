@@ -112,7 +112,7 @@ export function ChairCallout({
       <line x1={ax} y1={ay} x2={ex} y2={ey} stroke="var(--ink)" strokeWidth={1.25} />
       <foreignObject x={box.x} y={box.y} width={box.w} height={box.h}>
         <div ref={content} className="flex flex-col gap-2 border-2 border-ink bg-paper-lift px-4 py-3" role="status" aria-live="polite">
-          <Body drive={drive} chairIn={chairIn} hinges={hinges} />
+          <CalloutBody drive={drive} chairIn={chairIn} hinges={hinges} />
         </div>
       </foreignObject>
     </motion.g>
@@ -131,7 +131,8 @@ function TurningNote({ drive }: { drive: Drive }) {
   );
 }
 
-function Body({ drive, chairIn, hinges }: { drive: Drive; chairIn: [number, number]; hinges: boolean }) {
+/** The callout's text and figures, shared by the 2D plan and the 3D model. */
+export function CalloutBody({ drive, chairIn, hinges }: { drive: Drive; chairIn: [number, number]; hinges: boolean }) {
   const name = drive.room.label;
   if (drive.kind === "blocked" && drive.door) {
     return (

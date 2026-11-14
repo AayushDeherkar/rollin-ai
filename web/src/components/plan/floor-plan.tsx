@@ -36,7 +36,8 @@ export interface PlanCtx {
 /** width of the callout strip the plan steps aside for, when there is spare width */
 const GUTTER = 288;
 
-function layout(bounds: ReturnType<typeof floorBounds>, w: number, h: number) {
+function layout(bounds: ReturnType<typeof floorBounds>, w: number, h: number, compact = false) {
+  if (compact) return { projection: makeProjection(bounds, w, h, 10), gutter: null };
   const full = makeProjection(bounds, w, h, MARGIN);
   const planW = (bounds.maxX - bounds.minX) * full.scale + 2 * MARGIN;
   if (w - planW < GUTTER) return { projection: full, gutter: null };
@@ -58,9 +59,11 @@ export interface FloorPlanProps {
   /** Rooms become buttons when given. */
   onRoomSelect?: (roomId: string) => void;
   selectedRoom?: string | null;
+  /** Small inset: walls, status fills and overlays only; no figures or labels to crowd it. */
+  compact?: boolean;
 }
 
-export function FloorPlan({ unit, floorIndex = 0, overlay, annotations, highlightDoor, onRoomSelect, selectedRoom, baseline }: FloorPlanProps) {
+export function FloorPlan({ unit, floorIndex = 0, overlay, annotations, highlightDoor, onRoomSelect, selectedRoom, baseline, compact = false }: FloorPlanProps) {
   const floor = unit.floors[floorIndex];
   const box = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
@@ -90,7 +93,8 @@ export function FloorPlan({ unit, floorIndex = 0, overlay, annotations, highligh
       {size && size.w > 0 && size.h > 0 && (
         <PlanSvg
           size={size}
-          {...layout(bounds, size.w, size.h)}
+          {...layout(bounds, size.w, size.h, compact)}
+          compact={compact}
           floor={floor}
           walls={walls}
           doors={doors}
@@ -125,7 +129,9 @@ function PlanSvg({
   changed,
   onRoomSelect,
   selectedRoom,
+  compact,
 }: {
+  compact: boolean;
   size: { w: number; h: number };
   projection: Projection;
   gutter: PlanCtx["gutter"];
@@ -189,27 +195,29 @@ function PlanSvg({
         {walls.map((w, i) => {
           const a = toScreen(w.a);
           const b = toScreen(w.b);
-          return <line key={i} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} strokeWidth={Math.max(w.thickness * scale, 3)} />;
+          return <line key={i} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} strokeWidth={Math.max(w.thickness * scale, compact ? 2 : 3)} />;
         })}
       </g>
 
       {/* bathroom turning circles, where the engine says where the largest circle sits (contract v2) */}
-      <g>
-        {floor.rooms.map((r) => (r.turning_space?.center ? <TurningCircle key={r.room_id} room={r} projection={projection} /> : null))}
-      </g>
+      {!compact && (
+        <g>
+          {floor.rooms.map((r) => (r.turning_space?.center ? <TurningCircle key={r.room_id} room={r} projection={projection} /> : null))}
+        </g>
+      )}
 
       {/* chair and anything else drawn over the plan */}
       {overlay?.(ctx)}
 
       {/* door dimension lines */}
-      <g>
+      <g display={compact ? "none" : undefined}>
         {doors.map((g) => (
           <DoorDimension key={g.door.edge + g.door.center.join()} g={g} projection={projection} chairW={chairW} emphasis={highlightDoor === g.door.edge} />
         ))}
       </g>
 
       {/* room labels last so they sit above the hatch */}
-      <g>
+      <g display={compact ? "none" : undefined}>
         {floor.rooms.map((r) => (
           <RoomLabel
             key={r.room_id}

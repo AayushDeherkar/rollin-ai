@@ -1,66 +1,32 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { animate, useMotionValue, useMotionValueEvent, useReducedMotionConfig } from "motion/react";
+import { useState } from "react";
+import { useMotionValueEvent, type MotionValue } from "motion/react";
 import type { PathStep } from "@/lib/contract";
 import { M_PER_IN, type Projection } from "@/lib/plan-geometry";
-import { sampler, type Drive } from "@/lib/chair";
-import { DUR, EASE_DRAFT } from "@/lib/motion";
-
-/** One glide: whole multiples of the longest duration step, so the scale stays one scale. */
-function glideSeconds(lengthM: number) {
-  return DUR[4] * Math.max(1, Math.ceil(lengthM / 2.5));
-}
+import type { Drive, RouteSampler } from "@/lib/chair";
 
 /**
- * The chair: a width × length rectangle (chair_in) that glides along the drive's route
- * with its heading, then settles. Cobalt while it moves (the agent is acting), ink once it stops.
+ * The chair on the 2D plan: a width × length rectangle (chair_in) at the drive's current pose.
+ * The drive itself runs in the workbench (useDriveProgress), shared with the 3D model.
+ * Accent while it moves (the agent is acting), ink once it stops.
  */
 export function ChairLayer({
   drive,
   chairIn,
   projection,
-  runId,
-  onStart,
-  onSettled,
+  progress,
+  s,
 }: {
   drive: Drive;
   chairIn: [number, number];
   projection: Projection;
-  /** bump to replay the drive from the start */
-  runId: number;
-  /** called whenever a glide (re)starts, so the parent's "driving" state follows the animation */
-  onStart: () => void;
-  onSettled: () => void;
+  progress: MotionValue<number>;
+  s: RouteSampler;
 }) {
-  const reduce = useReducedMotionConfig();
-  // key on the route's values: a scenario switch that leaves the route unchanged must not replay
-  const routeKey = JSON.stringify(drive.route);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const s = useMemo(() => sampler(drive.route), [routeKey]);
-  // progress along the route, 0..1, driven by a motion value so frames don't go through effects
-  const progress = useMotionValue(reduce ? 1 : 0);
   const [p, setP] = useState(progress.get());
   useMotionValueEvent(progress, "change", setP);
   const moving = p < 1;
-
-  useEffect(() => {
-    if (reduce || s.length === 0) {
-      progress.jump(1);
-      onSettled();
-      return;
-    }
-    progress.jump(0);
-    onStart();
-    const controls = animate(progress, 1, {
-      duration: glideSeconds(s.length),
-      ease: EASE_DRAFT,
-      onComplete: onSettled,
-    });
-    return () => controls.stop();
-    // onStart/onSettled are stable from the parent; runId restarts the drive
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s, runId, reduce]);
 
   const { toScreen, scale } = projection;
   const pose = s.at(p);
@@ -95,7 +61,7 @@ export function ChairLayer({
   );
 }
 
-function trackPoints(route: PathStep[], s: ReturnType<typeof sampler>, from: number, to: number, toScreen: Projection["toScreen"]) {
+function trackPoints(route: PathStep[], s: RouteSampler, from: number, to: number, toScreen: Projection["toScreen"]) {
   if (to <= from) return "";
   const pts: string[] = [];
   const push = (q: number) => {
