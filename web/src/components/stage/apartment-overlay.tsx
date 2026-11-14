@@ -133,6 +133,7 @@ export function RoomCard({
         )}
         {fix.kind === "landlord-door" && <p className="text-base">Hinges are not enough here. Ask the landlord about a wider doorway.</p>}
         {fix.kind === "landlord-measure" && <p className="text-base">Ask the landlord for this door’s clear width.</p>}
+        {fix.kind === "unchecked" && <p className="text-base">Offset hinges were not checked for this unit, so the fix is unknown.</p>}
       </div>
       <div className="flex flex-col gap-2">
         <h3 className="text-sm font-semibold text-ink-soft">Basis</h3>

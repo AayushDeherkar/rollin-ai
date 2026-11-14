@@ -168,6 +168,15 @@ function Stage() {
   }, [both, scannedFloor, target]);
   const live = pair.status === "ready" && pair.origin === "live" && unit !== null && !isSynthetic(unit);
   const [evidence, setEvidence] = useState<EvidenceKind | null>(null);
+  /** the door the tour is about: the one clicked in the model, or the ruler's door when opened from the card */
+  const [tourEdge, setTourEdge] = useState<string | null>(null);
+  const showEvidence = useCallback(
+    (kind: EvidenceKind | null) => {
+      if (kind === "tour") setTourEdge(rulerEdge);
+      setEvidence(kind);
+    },
+    [rulerEdge],
+  );
   const [vision, setVision] = useState<VisionResult | null>(null);
   useEffect(() => {
     if (!sid || !live) return;
@@ -304,7 +313,14 @@ function Stage() {
               s={route}
               selectedRoom={target}
               onRoomSelect={selectRoom}
-              onDoorOpen={live ? () => setEvidence("tour") : undefined}
+              onDoorOpen={
+                live
+                  ? (edge: string) => {
+                      setTourEdge(edge);
+                      setEvidence("tour");
+                    }
+                  : undefined
+              }
             />
           )}
         </StageCanvas>
@@ -360,10 +376,11 @@ function Stage() {
           evidence={evidence}
           photoFor={photoFor}
           rulerEdge={rulerEdge}
+          tourEdge={tourEdge}
           onRoom={selectRoom}
           onHinges={setHinges}
           onRide={toggleRide}
-          onEvidence={setEvidence}
+          onEvidence={showEvidence}
         />
       )}
     </div>
@@ -385,6 +402,7 @@ function Apartment({
   evidence,
   photoFor,
   rulerEdge,
+  tourEdge,
   onRoom,
   onHinges,
   onRide,
@@ -404,6 +422,8 @@ function Apartment({
   evidence: EvidenceKind | null;
   photoFor: (roomId: string | null) => import("@/lib/apartment").VisionItem | null;
   rulerEdge: string | null;
+  /** the door the open tour is about */
+  tourEdge: string | null;
   onRoom: (id: string) => void;
   onHinges: (on: boolean) => void;
   onRide: () => void;
@@ -441,7 +461,7 @@ function Apartment({
             kind={evidence}
             sid={sid}
             unit={unit}
-            door={rulerEdge ? (floor.doors.find((d) => d.edge === rulerEdge) ?? null) : null}
+            door={tourEdge ? (floor.doors.find((d) => d.edge === tourEdge) ?? null) : null}
             photo={photo}
             onClose={() => onEvidence(null)}
           />
