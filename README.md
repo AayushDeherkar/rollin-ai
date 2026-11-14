@@ -85,7 +85,9 @@ pauses for approval. Every number the UI shows is `{value, unit, basis}` with ba
 2. **Batch** (`engine/batch.py`). It ran the engine on every model within 20 km of the Texas Medical Center for a
    27x42 in chair:
    - 1,977 models processed. 892 had enough measured data to rank; 1,085 did not.
-   - Of the 892, 223 let the chair reach every room, and 649 have at least one blocked room (as scanned).
+   - Of the 892, as scanned: 223 let the chair reach every room, 649 have at least one blocked room, and the other 20
+     have no blocked room but at least one unknown room. These counts come from the batch index (`data/batch/index.json`,
+     run on 14 Nov 2026).
 3. **Agent** (`agent/agent.py`, deepagents). One request runs four model turns:
    - search, with the person's chair (for any chair other than 27x42, the batch's top 8 are re-checked live and
      re-ranked);
@@ -131,10 +133,10 @@ cp .env.example .env                 # fill in the keys
 pytest -q                            # synthetic data only; the one real-data test skips without data/demo_units.json
 ```
 
-**Data.** You can build it from the APIs, which takes about 25 minutes for the Houston batch:
+**Data.** You can build it from the APIs. The last full Houston batch took 44 minutes:
 ```bash
 python -m engine.matterport demo-main demo-backup demo-pass demo-sparse   # demo units (aliases)
-python -m engine.batch                                                     # rank units around the Texas Medical Center
+python -m engine.batch --radius-km 20                                      # rank units around the Texas Medical Center (default 8 km)
 python -m engine.vision demo-main demo-backup                              # panorama checks (cached)
 ```
 Or unzip a teammate's offline demo pack at the repo root. Build one with `python -m engine.demo_pack`; it writes
@@ -187,8 +189,9 @@ python -m agent.agent "27x42 in power chair, 1-2 bedrooms near the Texas Medical
   - An approved message is queued in `data/outbox/`. Nothing in this repo delivers it to a leasing office.
 - **Memory.** The chair size is remembered per sender (a hashed id, never a phone number), so a later request
   without a size reuses it. The UI shows a `memory` event whenever this happens.
-- **Speed.** One live request takes about 25 s and about 31k tokens (Gemini, measured with LangSmith). An early
-  version took 154 s and 142k tokens.
+- **Speed.** One live request takes about 25 s and about 31k tokens. These are wall time and LangSmith token
+  counts, measured on 14 Nov 2026 with a 27x42 chair and the fit cache warm. With a new chair size and no cached
+  fits it took 29 s. An early version took 154 s and 142k tokens.
 
 **Opening a LangSmith trace:**
 1. In `.env`, set `LANGSMITH_TRACING=true`, `LANGSMITH_API_KEY` and `LANGSMITH_PROJECT` (ours is `rollin`).
@@ -196,7 +199,8 @@ python -m agent.agent "27x42 in power chair, 1-2 bedrooms near the Texas Medical
 3. Open https://smith.langchain.com, go to **Tracing Projects**, and choose the project. Each request is one root
    run named **`rollin-chat`**.
 4. To find a specific run, filter by metadata `run_id`. It equals the `run_id` on every event in the SSE stream.
-5. Open the run to see the orchestrator's turns, each subagent (`search`, `geometry`, `outside`, `outreach`), every
+5. Open the run to see the orchestrator's turns, each subagent (`search`, `geometry`, `outside`, `outreach`, and a
+   read-only `general-purpose` helper when the model uses it), every
    tool call with its arguments and result, the approval interrupt, and token counts.
 
 ## Limitations
@@ -240,8 +244,8 @@ python -m agent.agent "27x42 in power chair, 1-2 bedrooms near the Texas Medical
 | Data | Matterport Model API and Showcase, the CoStar hackathon kit (models index), the Vexcel imagery API |
 | Models and agents | Google Gemini (`gemini-3.8-flash`) via langchain-google-genai, deepagents 0.7.38, LangChain 1.5, LangGraph 1.2, LangSmith |
 | Python | NumPy, SciPy, Shapely, Pillow, Matplotlib, FastAPI, Uvicorn, Requests, python-dotenv, pytest, HTTPX |
-| Web | Next.js, React, Tailwind CSS, tw-animate-css, shadcn/ui, Radix UI, class-variance-authority, cn, Motion, Lucide, three.js, React Three Fiber, drei, TypeScript, ESLint |
-| Messaging | Photon 2.0 (`@photon-ai/api`), socket.io-client, tsx |
+| Web | Next.js, React, Tailwind CSS (with `@tailwindcss/turbopack`), tw-animate-css, shadcn/ui, Radix UI, class-variance-authority, cn, Motion, Lucide, three.js, React Three Fiber, drei, TypeScript, ESLint with eslint-config-next, DefinitelyTyped type packages (`@types/node`, `@types/react`, `@types/react-dom`, `@types/three`) |
+| Messaging | Photon 2.0 (`@photon-ai/api`), socket.io-client, tsx, TypeScript, `@types/node` |
 | Fonts | Big Shoulders, Public Sans, IBM Plex Mono |
 | Tools | git filter-repo (history scrub), GitHub CLI |
 
