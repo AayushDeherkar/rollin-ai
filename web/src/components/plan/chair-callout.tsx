@@ -138,7 +138,7 @@ function Body({ drive, chairIn, hinges }: { drive: Drive; chairIn: [number, numb
       <>
         <p className="flex items-center gap-2 text-base leading-tight font-semibold text-block">
           <Ban aria-hidden className="size-5 shrink-0" strokeWidth={2.5} />
-          {name} door stops the chair
+          {drive.via ? `${drive.via.label} door stops the chair on the way to the ${name.toLowerCase()}` : `${name} door stops the chair`}
         </p>
         <dl className="grid grid-cols-[1fr_auto_auto] items-baseline gap-x-2 text-sm">
           <dt>Clear width</dt>

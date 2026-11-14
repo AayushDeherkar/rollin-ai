@@ -1,57 +1,49 @@
 /**
- * The chair's drive through a plan, built from the contract.
+ * The chair's drive through a plan, built from the contract (v2).
  *
  * Heading convention (engine/fit.py rect_kernel): theta rotates the chair's LENGTH axis
  * from +x in the model frame (y up). Headings live in [0, π): a rectangle has no front.
  *
- * Honesty: a reachable room is driven along the engine's own `path`. A blocked room has no
- * engine path, so the route is the start room's engine path plus a short straight approach
- * to the blocking door that we draw for illustration. That segment is marked
- * `drawnFrom` so the UI can draw it differently and say so.
+ * Every route is the engine's own `path`: into a reachable room, or up to the door that stops
+ * the chair for a blocked one. The blocking door is the one the engine names
+ * (`blocking_door_edge`); nothing is drawn or matched by the UI.
  */
 import type { Door, Floor, PathStep, Point, Room, UnitResult } from "./contract";
-import { M_PER_IN, centroid, geom } from "./plan-geometry";
+import { centroid, roomsForDoor } from "./plan-geometry";
 
 export type DriveKind = "arrive" | "blocked" | "tight" | "no-door";
+
+/** The door a drive is about: where the callout points, with its estimated clear width. */
+export interface DriveDoor {
+  center: Point;
+  clear_in_est: number;
+  /** wall edge id, for doors the engine named (blocked rooms) */
+  edge: string | null;
+}
 
 export interface Drive {
   room: Room;
   kind: DriveKind;
   /** chair centre + heading, metres / radians, model frame */
   route: PathStep[];
-  /** index in `route` from which the segment is a drawn approach, not an engine path */
-  drawnFrom: number | null;
-  /** the door that stops the chair (kind "blocked") */
-  door: Door | null;
+  /** the door that stops the chair (kind "blocked"), or the widest way in (kind "arrive") */
+  door: DriveDoor | null;
+  /** when the stopping door belongs to a room on the way, not to the room itself */
+  via: Room | null;
   /** chair width minus estimated clear width, inches (kind "blocked") */
   shortfallIn: number | null;
-  /** for "arrive": the room's widest door and its spare clear width over the chair, inches */
+  /** for "arrive": spare clear width over the chair at the widest door, inches */
   spareIn?: number | null;
   /** true when the route is the engine's own `path` for this room (not a fallback point) */
   enginePath?: boolean;
 }
 
-/** room and floor door centres are rounded separately; real scans differ by under a millimetre */
-const SAME_DOOR_M = 0.02;
+const asDriveDoor = (d: Door): DriveDoor => ({ center: d.center, clear_in_est: d.clear_in_est, edge: d.edge });
 
-/** The floor door a room lists, by nearest centre. */
-function floorDoorFor(floor: Floor, d: { center: Point }): Door | null {
-  let best: Door | null = null;
-  let bestDist = SAME_DOOR_M;
-  for (const fd of floor.doors) {
-    const dist = Math.hypot(fd.center[0] - d.center[0], fd.center[1] - d.center[1]);
-    if (dist <= bestDist) {
-      best = fd;
-      bestDist = dist;
-    }
-  }
-  return best;
-}
-
-/** The room the drive should open on: first blocked room with a measured door, else any blocked, else first non-start room. */
+/** The room the drive should open on: first blocked room the engine names a door for, else any blocked, else first non-start room. */
 export function defaultTarget(floor: Floor): string | null {
   const blocked = floor.rooms.filter((r) => r.status === "blocked");
-  const withDoor = blocked.find((r) => r.doors.length > 0);
+  const withDoor = blocked.find((r) => r.blocking_door_edge && r.path?.length);
   return (withDoor ?? blocked[0] ?? floor.rooms.find((r) => r.room_id !== floor.start_room) ?? null)?.room_id ?? null;
 }
 
@@ -59,45 +51,33 @@ export function buildDrive(unit: UnitResult, floor: Floor, roomId: string): Driv
   const room = floor.rooms.find((r) => r.room_id === roomId);
   if (!room) return null;
   const start = floor.rooms.find((r) => r.room_id === floor.start_room);
-  const base: PathStep[] = start?.path?.length
-    ? start.path
-    : start
-      ? [[...centroid(start.polygon), 0] as PathStep]
-      : [];
+  const atStart: PathStep[] = start?.path?.length ? [start.path[0]] : start ? [[...centroid(start.polygon), 0] as PathStep] : [];
+  const none = { door: null, via: null, shortfallIn: null } as const;
 
   if (room.status === "reachable") {
     const route = room.path?.length ? room.path : [[...centroid(room.polygon), 0] as PathStep];
     const isStart = room.room_id === floor.start_room;
+    // the room's own door list carries each door's estimated clear width
     const widest = !isStart && room.doors.length ? room.doors.reduce((a, b) => (b.clear_in_est > a.clear_in_est ? b : a)) : null;
-    const door = widest ? floorDoorFor(floor, widest) : null;
+    const door = widest ? { center: widest.center, clear_in_est: widest.clear_in_est, edge: null } : null;
     const spareIn = door ? Math.round((door.clear_in_est - unit.chair_in[0]) * 10) / 10 : null;
-    return { room, kind: "arrive", route, drawnFrom: null, door, shortfallIn: null, spareIn, enginePath: Boolean(room.path?.length) };
+    return { room, kind: "arrive", route, ...none, door, spareIn, enginePath: Boolean(room.path?.length) };
   }
 
-  if (room.status === "unknown" || room.doors.length === 0) {
-    return { room, kind: "no-door", route: base.slice(0, 1), drawnFrom: null, door: null, shortfallIn: null };
+  if (room.status === "unknown") {
+    return { room, kind: "no-door", route: atStart, ...none };
   }
 
-  // blocked: the reason names the widest door; that is the one we stop at
-  const door = floorDoorFor(floor, room.doors.reduce((a, b) => (b.clear_in_est > a.clear_in_est ? b : a)));
-  if (!door || door.passable || base.length === 0) {
-    // the widest door fits but the route is too tight (or the door can't be matched)
-    return { room, kind: "tight", route: base, drawnFrom: null, door, shortfallIn: null };
+  // blocked: the engine names the door that stops the chair and drives up to it
+  const named = room.blocking_door_edge ? (floor.doors.find((d) => d.edge === room.blocking_door_edge) ?? null) : null;
+  if (!named || !room.path?.length || named.passable) {
+    // no stopping door: the chair fits nowhere on the way (the reason says why)
+    return { room, kind: "tight", route: room.path?.length ? room.path : atStart, ...none, door: named ? asDriveDoor(named) : null, enginePath: Boolean(room.path?.length) };
   }
-
-  const [chairW, chairL] = unit.chair_in;
-  const shortfall = Math.round((chairW - door.clear_in_est) * 10) / 10;
-  const wall = floor.walls.find((w) => w.edge === door.edge);
-  const along: Point = wall ? geom.unit(geom.sub(wall.b, wall.a)) : [1, 0];
-  let n: Point = [-along[1], along[0]];
-  const last = base[base.length - 1];
-  const fromDoor = geom.sub([last[0], last[1]], door.center);
-  if (fromDoor[0] * n[0] + fromDoor[1] * n[1] < 0) n = geom.mul(n, -1);
-  // stop with the chair's leading edge a few cm short of the door line, length axis through the door
-  const stop = geom.add(door.center, geom.mul(n, (chairL * M_PER_IN) / 2 + 0.06));
-  const theta = normHeading(Math.atan2(n[1], n[0]));
-  const route: PathStep[] = [...base, [stop[0], stop[1], theta]];
-  return { room, kind: "blocked", route, drawnFrom: base.length - 1, door, shortfallIn: shortfall };
+  const sides = roomsForDoor(floor, named);
+  const via = sides.some((r) => r.room_id === room.room_id) ? null : (sides.find((r) => r.status !== "reachable") ?? sides[0] ?? null);
+  const shortfallIn = Math.round((unit.chair_in[0] - named.clear_in_est) * 10) / 10;
+  return { room, kind: "blocked", route: room.path, door: asDriveDoor(named), via, shortfallIn, enginePath: true };
 }
 
 /** Heading folded into [0, π). */

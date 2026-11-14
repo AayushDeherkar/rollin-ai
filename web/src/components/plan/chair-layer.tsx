@@ -70,17 +70,12 @@ export function ChairLayer({
   const widPx = chairIn[0] * M_PER_IN * scale;
   const stroke = moving ? "var(--agent)" : "var(--ink)";
 
-  // travelled track, split into engine path (solid) and drawn approach (dashed)
-  const cut = drive.drawnFrom == null ? 1 : s.progressAt(drive.drawnFrom);
-  const engineTrack = trackPoints(drive.route, s, 0, Math.min(p, cut), toScreen);
-  const drawnTrack = p > cut ? trackPoints(drive.route, s, cut, p, toScreen) : "";
+  // the travelled part of the engine's route
+  const track = trackPoints(drive.route, s, 0, p, toScreen);
 
   return (
     <g className="chair-layer" aria-hidden>
-      <polyline points={engineTrack} fill="none" stroke={stroke} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" opacity={0.85} />
-      {drawnTrack && (
-        <polyline points={drawnTrack} fill="none" stroke={stroke} strokeWidth={2.5} strokeDasharray="2 6" strokeLinecap="round" opacity={0.85} />
-      )}
+      <polyline points={track} fill="none" stroke={stroke} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" opacity={0.85} />
       <g transform={`translate(${cx} ${cy}) rotate(${deg})`}>
         <rect
           x={-lenPx / 2}
