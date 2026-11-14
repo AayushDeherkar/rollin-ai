@@ -8,7 +8,7 @@ import { Conversations } from "./conversation.ts";
 import { webRollin } from "./rollin.ts";
 
 const webUrl = process.env.ROLLIN_WEB_URL?.trim() || "http://localhost:3000";
-const conversations = new Conversations(webRollin(webUrl), process.env.ROLLIN_PUBLIC_WEB_URL?.trim() || webUrl);
+const conversations = new Conversations(webRollin(webUrl), process.env.ROLLIN_PUBLIC_WEB_URL?.trim() || webUrl, "console");
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 
 console.log(`Texting the agent through ${webUrl}. Ctrl+D to stop.\n`);

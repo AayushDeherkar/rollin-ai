@@ -31,7 +31,7 @@ const photon = photonClient({
     .filter(Boolean),
   stateDir: path.join(import.meta.dirname, "..", ".state"),
 });
-const conversations = new Conversations(webRollin(webUrl), publicUrl);
+const conversations = new Conversations(webRollin(webUrl), publicUrl, "imsg");
 const log = (s: string) => console.log(`${new Date().toISOString()} ${s}`);
 
 await photon.listen(async (m) => {

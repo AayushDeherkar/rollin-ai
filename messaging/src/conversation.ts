@@ -1,12 +1,15 @@
 /**
  * One text conversation with the agent, independent of the messaging service:
- *   first message → the agent says it is an AI;
- *   a request    → run the agent, reply with the top three units and a link to the plans,
- *                  then ask before contacting anyone;
+ *   first message → the agent says it is an AI (in the same text as the acknowledgement);
+ *   a request    → acknowledge at once, run the agent, then reply with the top three units and a
+ *                  link to the plans, then ask before contacting anyone;
  *   "yes" / "no" → /api/approve, and say plainly what happened.
  * Nothing is ever sent to a third party without a "yes" from the person in this conversation.
  */
+import { createHash } from "node:crypto";
 import type { AgentEvent, AgentRun, Num, Rollin, ShortlistUnit } from "./rollin.ts";
+
+export const ACK = "Checking units now. I'll text you the shortlist in about half a minute.";
 
 export const INTRO =
   "Hi, I'm Rollin', an AI agent, not a person. I check whether apartments fit a specific wheelchair, " +
@@ -81,6 +84,14 @@ export function approvalText(run: AgentRun): { actionId: string; text: string } 
   return { actionId: ask.action_id, text: `Want me to message ${who} about ${what}?${draft}\n\nReply yes or no.` };
 }
 
+/**
+ * The profile's sender_id (contract v3), so the agent's memory carries across texts. A hash of the
+ * conversation key: stable for one person, and the handle (a phone number) never leaves the bridge.
+ */
+export function senderId(prefix: string, key: string): string {
+  return `${prefix}_${createHash("sha256").update(key).digest("hex").slice(0, 16)}`;
+}
+
 interface State {
   introduced: boolean;
   pending: string | null;
@@ -97,6 +108,8 @@ export class Conversations {
   constructor(
     private readonly rollin: Rollin,
     private readonly webUrl: string,
+    /** labels the sender ids this transport makes (imsg, console) */
+    private readonly senderPrefix = "msg",
   ) {}
 
   /**
@@ -110,7 +123,7 @@ export class Conversations {
     this.states.set(key, s);
     const next = s.chain.then(async () => {
       try {
-        await this.step(s, text, say, arrivedAt);
+        await this.step(s, senderId(this.senderPrefix, key), text, say, arrivedAt);
       } catch (err) {
         // never leave a question open that the person may not have seen
         s.pending = null;
@@ -122,30 +135,33 @@ export class Conversations {
     return next;
   }
 
-  private async step(s: State, text: string, say: Say, arrivedAt: number): Promise<void> {
-    if (!s.introduced) {
+  private async step(s: State, sender: string, text: string, say: Say, arrivedAt: number): Promise<void> {
+    const pending = s.pending;
+    const answer = pending ? yesNo(text) : null;
+    // a new request: the first reply is the acknowledgement (with the introduction, the first time)
+    if (!pending || answer === null) {
+      const intro = s.introduced ? "" : `${INTRO}\n\n`;
       s.introduced = true;
-      await say(INTRO);
+      s.pending = null; // an unanswered question lapses
+      await say(intro + ACK);
+      return this.search(s, sender, text, say);
     }
-    const answer = s.pending ? yesNo(text) : null;
-    if (s.pending && answer !== null && arrivedAt < s.askedAt) {
+    if (arrivedAt < s.askedAt) {
       // sent before the question existed: not an answer to it
       return say("I asked something after that message. Please answer the question above with yes or no.");
     }
-    if (s.pending && answer !== null) {
-      const actionId = s.pending;
-      s.pending = null;
-      const r = await this.rollin.approve(actionId, answer);
-      if (r.status === "already decided") return say("That was already decided.");
-      if (r.replay) return say("Not sent: this was a replayed run, so nothing went out.");
-      if (!r.approved) return say("OK, I won't contact them.");
-      return say(`Approved. Status: ${r.status}.`);
-    }
-    // anything else is a new request; an unanswered question lapses
     s.pending = null;
-    await say("Checking units now. This takes about a minute.");
+    const r = await this.rollin.approve(pending, answer);
+    if (r.status === "already decided") return say("That was already decided.");
+    if (r.replay) return say("Not sent: this was a replayed run, so nothing went out.");
+    if (!r.approved) return say("OK, I won't contact them.");
+    return say(`Approved. Status: ${r.status}.`);
+  }
+
+  private async search(s: State, sender: string, text: string, say: Say): Promise<void> {
+    // a chair size in the text wins; without one the agent's memory of this sender may supply it
     const chair = chairFrom(text);
-    const run = await this.rollin.run(text, chair ? { chair_in: chair } : {});
+    const run = await this.rollin.run(text, chair ? { sender_id: sender, chair_in: chair } : { sender_id: sender });
     const shortlist = shortlistOf(run);
     const units = shortlist ?? (await this.rollin.units());
     await say(resultsText(run, units, chair, this.webUrl, shortlist !== null));

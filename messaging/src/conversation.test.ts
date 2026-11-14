@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Conversations, INTRO, chairFrom, yesNo } from "./conversation.ts";
+import { ACK, Conversations, INTRO, chairFrom, senderId, yesNo } from "./conversation.ts";
 import { inboundFrom } from "./photon.ts";
 import type { AgentEvent, ApproveResult, Rollin } from "./rollin.ts";
 
@@ -35,14 +35,43 @@ async function talk(c: Conversations, text: string, arrivedAt?: number): Promise
   return out;
 }
 
-test("the first reply says it is an AI; later ones do not repeat it", async () => {
+test("the first reply is an immediate acknowledgement that says it is an AI; later ones do not repeat it", async () => {
   const { rollin } = fake();
   const c = new Conversations(rollin, "http://web.test");
   const first = await talk(c, "27 x 42 chair near the Medical Center");
-  assert.equal(first[0], INTRO);
+  assert.equal(first[0], `${INTRO}\n\n${ACK}`);
   assert.match(first[0], /AI agent/);
   const second = await talk(c, "what about 2 bedrooms");
-  assert.notEqual(second[0], INTRO);
+  assert.equal(second[0], ACK);
+});
+
+test("the acknowledgement goes out before the agent run finishes", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  const { rollin } = fake();
+  const slow: Rollin = { ...rollin, run: async (m, p) => (await gate, rollin.run(m, p)) };
+  const c = new Conversations(slow, "http://web.test");
+  const out: string[] = [];
+  const done = c.handle("k", "27 x 42 chair", async (t) => void out.push(t));
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(out, [`${INTRO}\n\n${ACK}`]);
+  release();
+  await done;
+  assert.ok(out.some((t) => t.includes("Top ")));
+});
+
+test("every run carries a hashed sender_id, stable per conversation, never the raw handle", async () => {
+  const { rollin, calls } = fake();
+  const c = new Conversations(rollin, "http://web.test", "imsg");
+  await c.handle("+15551234567", "27 x 42 chair", async () => {});
+  await c.handle("+15551234567", "what about 2 bedrooms", async () => {});
+  const ids = calls.run.map((p) => p.sender_id);
+  assert.equal(ids[0], senderId("imsg", "+15551234567"));
+  assert.equal(ids[0], ids[1]);
+  assert.match(String(ids[0]), /^imsg_[0-9a-f]{16}$/);
+  assert.ok(!JSON.stringify(calls.run).includes("5551234567"));
+  // no chair in the text: none is sent, so memory can supply it
+  assert.equal("chair_in" in calls.run[1], false);
 });
 
 test("results list at most three units, say they are estimates, link to the plans, then ask", async () => {
@@ -56,7 +85,7 @@ test("results list at most three units, say they are estimates, link to the plan
   assert.doesNotMatch(results, /^4\. /m);
   assert.match(results, /http:\/\/web\.test\/\?sid=/);
   assert.match(out.at(-1)!, /Reply yes or no\.$/);
-  assert.deepEqual(calls.run[0], { chair_in: [27, 42] });
+  assert.deepEqual(calls.run[0], { sender_id: senderId("msg", "k"), chair_in: [27, 42] });
 });
 
 test("nothing is approved without a yes; yes approves the action from this run", async () => {
@@ -81,7 +110,7 @@ test("no declines; any other text is a new request and the question lapses", asy
   await talk(c, "27 x 42 chair");
   await talk(c, "actually try 30 x 44");
   assert.equal(calls.approve.length, 1);
-  assert.deepEqual(calls.run.at(-1), { chair_in: [30, 44] });
+  assert.deepEqual(calls.run.at(-1), { sender_id: senderId("msg", "k"), chair_in: [30, 44] });
 });
 
 test("a question that failed to send is not left open, and the failure reaches the transport", async () => {
