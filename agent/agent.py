@@ -72,33 +72,33 @@ def _cached(sid: str) -> bool:
     return (data_dir() / "cache" / f"{sid}.json").exists()
 
 
-def _fit_pair(sid: str, w: float, l: float, data: str | None = None) -> str:
-    """Worker: both scenarios for one unit into the fit cache (process pool; `data` pins the data dir)."""
-    if data:
-        os.environ["ROLLIN_DATA_DIR"] = data
+def _fit_pair(sid: str, w: float, l: float) -> str:
+    """Both scenarios for one unit into the fit cache."""
     run_fit(sid, w, l)
     run_fit(sid, w, l, True)
     return sid
 
 
-_POOL = None
-
-
 def _fit_many(sids: list[str], w: float, l: float) -> None:
-    """Fill the fit cache for these units at this chair. Uncached fits take seconds each, so several run in parallel."""
-    global _POOL
+    """Fill the fit cache for these units at this chair. Uncached fits take seconds each, so several run in parallel
+    as plain worker subprocesses (`python -m agent.agent --fit`). Not a multiprocessing pool: on Windows that
+    re-imports the caller's main script in every worker."""
+    import subprocess
     todo = [s for s in sids if not (_fit_cached(s, w, l, False) and _fit_cached(s, w, l, True))]
     if len(todo) > 2:
-        try:
-            from concurrent.futures import ProcessPoolExecutor
-            if _POOL is None:
-                _POOL = ProcessPoolExecutor(max_workers=min(8, os.cpu_count() or 2))
-            list(_POOL.map(_fit_pair, todo, [w] * len(todo), [l] * len(todo), [str(data_dir())] * len(todo)))
-            return
-        except Exception:                            # no worker processes available: do it here
-            _POOL = None
-    for s in todo:
-        _fit_pair(s, w, l)
+        n = min(len(todo), 8, os.cpu_count() or 2)
+        env = {**os.environ, "ROLLIN_DATA_DIR": str(data_dir().resolve())}
+        procs = [subprocess.Popen([sys.executable, "-m", "agent.agent", "--fit", f"{w:g}", f"{l:g}", *todo[i::n]],
+                                  cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                 for i in range(n)]
+        for p in procs:
+            try:
+                p.wait(timeout=120)
+            except subprocess.TimeoutExpired:
+                p.kill()
+    for s in todo:                                   # anything a worker did not finish is done here
+        if not (_fit_cached(s, w, l, False) and _fit_cached(s, w, l, True)):
+            _fit_pair(s, w, l)
 
 
 def _fit_row(sid: str, w: float, l: float) -> dict:
@@ -817,7 +817,11 @@ async def run_agent(message: str, profile: dict, run_id: str) -> AsyncIterator[d
 
 
 def main(argv: list[str]) -> int:
-    msg = " ".join(argv) or "Power chair 27 x 42 inches; needs to reach a bedroom and a bathroom; 1 or 2 bedrooms near the Texas Medical Center."
+    if argv[:1] == ["--fit"]:                    # worker for _fit_many: --fit <w> <l> <sid>...
+        for sid in argv[3:]:
+            _fit_pair(sid, float(argv[1]), float(argv[2]))
+        return 0
+    msg =" ".join(argv) or "Power chair 27 x 42 inches; needs to reach a bedroom and a bathroom; 1 or 2 bedrooms near the Texas Medical Center."
 
     async def go():
         async for e in run_agent(msg, {}, f"run_{uuid.uuid4().hex[:8]}"):
