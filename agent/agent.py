@@ -49,25 +49,33 @@ def _beds(name: str | None) -> int | None:
     return beds_of(name)
 
 
-def search_units(radius_km: float = 8.0, beds: int | None = None, top: int = 5,
-                 rank_with_hinges: bool = False) -> dict:
-    """Ranked apartment units near the Texas Medical Center from the precomputed batch (27x42 in chair).
+def _row(u: dict) -> dict:
+    c, h = u["counts"], u["with_hinges"]["counts"]
+    total = sum(c.values())
+    return {"sid": u["sid"], "name": u.get("name"), "km": u.get("distance_km"),
+            "reachable": f"{c['reachable']}/{total}", "with_hinges": f"{h['reachable']}/{total}"}
+
+
+def search_units(radius_km: float = 8.0, beds: list[int] | int | None = None, top: int = 3,
+                 include: list[str] | None = None) -> dict:
+    """Best units near the Texas Medical Center from the precomputed batch (27x42 in chair), compact.
 
     Args:
         radius_km: max distance from the Texas Medical Center.
-        beds: exact number of bedrooms (0 = studio), or None for any.
-        top: how many units to return.
-        rank_with_hinges: rank by the scores the units would have with offset hinges on every door.
+        beds: acceptable bedroom counts (0 = studio), or None for any.
+        top: how many units to return (max 5).
+        include: unit ids the person named; always returned, even outside the radius.
     """
     idx = _index()
-    rows = [u for u in idx.get("units", []) if (u.get("distance_km") or 99) <= radius_km
-            and (beds is None or _beds(u.get("name")) == beds)]
-    key = (lambda u: (-u["with_hinges"]["score"], u["counts"]["blocked"])) if rank_with_hinges else \
-          (lambda u: (-u["score"], u["counts"]["blocked"]))
-    rows.sort(key=key)
-    return {"chair_in": idx.get("chair_in"), "candidates": len(rows),
-            "units": [{k: u.get(k) for k in ("sid", "name", "distance_km", "score", "counts", "with_hinges", "summary")}
-                      for u in rows[:max(1, min(top, 20))]]}
+    units = idx.get("units", [])
+    if isinstance(beds, int):                    # the model sometimes passes a single count
+        beds = [beds]
+    rows = [u for u in units if (u.get("distance_km") or 99) <= radius_km
+            and (not beds or _beds(u.get("name")) in beds)]
+    rows.sort(key=lambda u: (-u["score"], u["counts"]["blocked"], u.get("distance_km") or 99))
+    picked = rows[:max(1, min(top, 5))]
+    named = [u for u in units if u["sid"] in (include or []) and u not in picked]
+    return {"candidates": len(rows), "units": [_row(u) for u in picked + named]}
 
 
 def get_unit(sid: str) -> dict:
@@ -85,6 +93,13 @@ def run_fit(sid: str, chair_width_in: float = 27.0, chair_length_in: float = 42.
     path = data_dir() / "cache" / f"{sid}.json"
     if not path.exists():
         return {"sid": sid, "error": "model not cached"}
+    fit_cache = data_dir() / "cache" / "fit" / f"{sid}_{chair_width_in:g}x{chair_length_in:g}_{int(hinges)}_v{FIT_CACHE_V}.json"
+    engine_src = ROOT / "engine" / "fit.py"
+    if fit_cache.exists() and fit_cache.stat().st_mtime >= max(path.stat().st_mtime, engine_src.stat().st_mtime):
+        try:                                                     # stale if the model or the engine changed since
+            return json.loads(fit_cache.read_text())
+        except (ValueError, OSError):                            # unreadable: recompute and overwrite
+            pass
     res = analyze_model(json.loads(path.read_text())["data"]["model"], sid, chair_width_in, chair_length_in, hinges)
     rooms = []
     for f in res["floors"]:
@@ -96,7 +111,48 @@ def run_fit(sid: str, chair_width_in: float = 27.0, chair_length_in: float = 42.
                           "blocking_door": {"edge": stop["edge"], "width_in": stop["width_in"],
                                             "clear_in_est": stop["clear_in_est"]} if stop else None,
                           "turning_circle_in": (r["turning_space"] or {}).get("max_circle_in")})
-    return {"sid": sid, "name": res["name"], "scenario": res["scenario"], "chair_in": res["chair_in"], "rooms": rooms}
+    out = {"sid": sid, "name": res["name"], "scenario": res["scenario"], "chair_in": res["chair_in"], "rooms": rooms}
+    fit_cache.parent.mkdir(parents=True, exist_ok=True)
+    tmp = fit_cache.with_suffix(f".{uuid.uuid4().hex[:6]}.tmp")    # atomic: parallel subagents may write the same key
+    tmp.write_text(json.dumps(out))
+    os.replace(tmp, fit_cache)
+    return out
+
+
+MAX_CHECK = 6
+FIT_CACHE_V = 1                      # bump when run_fit's output shape changes
+
+
+def check_units(sids: list[str], chair_width_in: float = 27.0, chair_length_in: float = 42.0) -> dict:
+    """Drive the wheelchair through up to 6 units at once, as scanned and with offset hinges. Returns, per unit,
+    rooms reachable in each scenario and only the rooms that are blocked or unknown (with the measured width of
+    the door that stops the chair and the estimated shortfall)."""
+    out = []
+    for sid in sids[:MAX_CHECK]:
+        a, h = run_fit(sid, chair_width_in, chair_length_in), run_fit(sid, chair_width_in, chair_length_in, True)
+        if "error" in a:
+            out.append({"sid": sid, "error": a["error"]})
+            continue
+        hs = {r["room_id"]: r["status"] for r in h["rooms"]}
+        problems = []
+        for r in a["rooms"]:
+            if r["status"] == "reachable":
+                continue
+            stop = r.get("blocking_door")
+            p = {"room": r["label"], "status": r["status"], "with_hinges": hs.get(r["room_id"])}
+            if stop:
+                p["door_in"] = stop["width_in"]
+                if stop["clear_in_est"] < chair_width_in:
+                    p["short_in_est"] = round(chair_width_in - stop["clear_in_est"], 1)
+            problems.append(p)
+        n = len(a["rooms"])
+        out.append({"sid": sid, "name": a["name"],
+                    "reachable": f"{sum(r['status'] == 'reachable' for r in a['rooms'])}/{n}",
+                    "with_hinges": f"{sum(r['status'] == 'reachable' for r in h['rooms'])}/{n}", "problems": problems})
+    res = {"chair_in": [chair_width_in, chair_length_in], "units": out}
+    if len(sids) > MAX_CHECK:
+        res["skipped"] = sids[MAX_CHECK:]           # say so; never drop a named unit silently
+    return res
 
 
 def aerial_check(sid: str) -> dict:
@@ -137,51 +193,48 @@ def send_message(to: str, text: str) -> dict:
 # ---------------------------------------------------------------- agent definition
 
 SYSTEM = """You are Rollin', an AI assistant for hospital case managers finding apartments a wheelchair user can live in.
-Your first action is write_todos with the plan. Then delegate:
-1. `search` subagent: find candidate units (Houston, near the Texas Medical Center) that match the request.
-2. `geometry` subagent: run the fit engine on the top 2-3 candidates, as scanned and with offset hinges when a door is
-   short by 1.75 in or less; report each blocked or unknown bedroom/bathroom with its measured door width.
-3. `verifier` subagent: label every claim measured / estimated / assumed / unknown and turn unknowns into questions.
-4. `outside` subagent: aerial check of the best unit's building (parking, curb ramps, walkways); estimates only.
-5. `outreach` subagent: draft ONE message to the leasing office of the best unit with those questions.
-Then call send_message with that drafted text and recipient. A human must approve it; you cannot send without approval.
-Finish with a short shortlist: each unit's sid, name, rooms reachable as scanned and with hinges, and what is unknown.
-Always use the user's exact chair size; never try other sizes. You do not need the file tools.
-Rules: use only tool results; never invent door widths, statistics or units. Unknown stays unknown. Say clear widths
-and turning circles are estimates. Be brief."""
+Work in exactly four turns, and make the calls listed for a turn in ONE message so they run in parallel:
+1. search_units (pass any unit id the person named in `include`).
+2. task(geometry) with the 3 best sids plus any named unit, AND task(outside) for the best sid.
+3. task(verifier) with the geometry answer, AND task(outreach) for the best unit with these questions: every unknown room's
+   door width, every 'unclear' aerial item, and "Is the building entrance step-free, and is there an elevator?".
+4. send_message with the outreach draft and recipient (a person must approve it; you cannot send without approval).
+Then answer in at most 80 words: best unit(s) with rooms reachable as scanned and with hinges, and what is unknown.
+Use the person's exact chair size. Never invent door widths, statistics or units; unknown stays unknown. Do not use file tools."""
+
+SUB_RULES = " Use only tool results. Answer in at most 80 words. Never invent numbers."
 
 
 def subagents(model: Any) -> list[dict]:
     return [
-        {"name": "search", "description": "Finds candidate apartment units from the ranked batch by area and bedrooms.",
-         "system_prompt": "Call search_units at most twice (e.g. once per bedroom count), then return the best 3-5 sids with "
-                          "names, distance and room counts. Include any unit the user named. Never invent units.",
-         "tools": [search_units, get_unit], "model": model},
-        {"name": "geometry", "description": "Runs the wheelchair fit engine on units and explains every blocked room.",
-         "system_prompt": "Use run_fit with the user's exact chair size only (as scanned, then hinges=True where a door is short "
-                          "by <=1.75 in). For each blocked or "
-                          "unknown room give the measured door width, estimated clear width and shortfall from the tool output only.",
-         "tools": [run_fit, get_unit], "model": model},
-        {"name": "verifier", "description": "Checks claims against engine output and labels each one's basis.",
-         "system_prompt": "Re-check each claim with run_fit using the user's exact chair size. Label it measured (door widths, walls), estimated (clear width, "
-                          "turning circle), assumed (hinge gain ~1.75 in) or unknown. List unknowns as questions for the landlord.",
-         "tools": [run_fit, get_unit], "model": model},
+        {"name": "search", "description": "Finds candidate units from the ranked batch.",
+         "system_prompt": "Call search_units once and return the sids with their counts." + SUB_RULES,
+         "tools": [search_units], "model": model},
+        {"name": "geometry", "description": "Drives the chair through several units (as scanned and with hinges) in one call.",
+         "system_prompt": "Call check_units ONCE with all the sids and the person's chair size. Summarise each unit's blocked "
+                          "or unknown rooms with the door width and shortfall exactly as returned." + SUB_RULES,
+         "tools": [check_units], "model": model},
+        {"name": "verifier", "description": "Labels each claim's basis and lists unknowns as questions.",
+         "system_prompt": "Do not call tools. Label the claims you are given: door widths measured; clear widths, shortfalls "
+                          "and turning circles estimated; the hinge gain (~1.75 in) assumed; rooms with no door unknown. "
+                          "List the unknowns as questions." + SUB_RULES,
+         "tools": [], "model": model},
         {"name": "general-purpose", "description": "Read-only helper for anything the other subagents do not cover.",
-         "system_prompt": "Answer using the read-only tools. You cannot contact anyone.",
-         "tools": [search_units, get_unit, run_fit], "model": model},
-        {"name": "outside", "description": "Checks a unit's building from Vexcel aerial imagery (parking, curb ramps, walkways).",
-         "system_prompt": "Call aerial_check once for the unit you are given. Report each answer exactly as returned, labelled "
-                          "'from aerial, estimated'. Anything 'unclear' becomes a question for the landlord. Never upgrade unclear to yes.",
+         "system_prompt": "Answer using the read-only tools. You cannot contact anyone." + SUB_RULES,
+         "tools": [search_units, get_unit, check_units], "model": model},
+        {"name": "outside", "description": "Checks a unit's building from Vexcel aerial imagery.",
+         "system_prompt": "Call aerial_check once. Report each answer exactly as returned, labelled 'from aerial, estimated'. "
+                          "Never upgrade unclear to yes." + SUB_RULES,
          "tools": [aerial_check], "model": model},
         {"name": "outreach", "description": "Drafts (never sends) a message to a leasing office.",
-         "system_prompt": "Call draft_landlord_message once with the questions you are given. Return the draft text and recipient. "
-                          "You cannot send messages.",
+         "system_prompt": "Call draft_landlord_message once with the questions you are given and return the draft text and "
+                          "recipient verbatim. You cannot send messages.",
          "tools": [draft_landlord_message], "model": model},
     ]
 
 
 INTERRUPT_ON = {"send_message": {"allowed_decisions": ["approve", "reject"]}}
-ORCHESTRATOR_TOOLS = [search_units, get_unit, run_fit, draft_landlord_message, send_message]
+ORCHESTRATOR_TOOLS = [search_units, get_unit, check_units, draft_landlord_message, send_message]
 
 
 def configured() -> bool:
@@ -198,7 +251,9 @@ def get_agent():
         from deepagents import create_deep_agent
         from langchain.chat_models import init_chat_model
         from langgraph.checkpoint.memory import InMemorySaver
-        model = init_chat_model(os.environ["MODEL_NAME"], model_provider=PROVIDERS[os.environ["MODEL_PROVIDER"].lower()])
+        prov = PROVIDERS[os.environ["MODEL_PROVIDER"].lower()]
+        extra = {"thinking_budget": int(os.environ.get("ROLLIN_THINKING_BUDGET", "0"))} if prov == "google_genai" else {}
+        model = init_chat_model(os.environ["MODEL_NAME"], model_provider=prov, **extra)
         _agent = create_deep_agent(model=model, tools=ORCHESTRATOR_TOOLS, system_prompt=SYSTEM,
                                    subagents=subagents(model), interrupt_on=INTERRUPT_ON,
                                    checkpointer=InMemorySaver(), name="rollin")
@@ -307,6 +362,20 @@ class Run:
                                    args=wrap_args(tc["args"])))
         return out
 
+    def fit_events(self, data: dict, args: dict) -> list[dict]:
+        """A run_fit result as a tool event plus one finding per blocked/unknown room (deduplicated)."""
+        raw = {s: sum(1 for r in data["rooms"] if r["status"] == s) for s in ("reachable", "blocked", "unknown")}
+        self.fits[(data["sid"], data["scenario"])] = {"name": data["name"], "counts": raw}
+        out = [self.ev("tool", name="run_fit", status="done", args=wrap_args(args),
+                       result={"sid": data["sid"], "scenario": data["scenario"], "counts": counts_of(data["rooms"])})]
+        for f in findings_from_fit(data, float(data["chair_in"][0])):
+            key = (f["sid"], f["room_id"], f["scenario"])
+            if key not in self.seen_findings:
+                self.seen_findings.add(key)
+                self.found[key] = {"room": f["room"], "status": f["status"], "turning": "turning_circle" in f["numbers"]}
+                out.append(self.ev(f.pop("type"), **f))
+        return out
+
     def from_tool(self, m: Any) -> list[dict]:
         name, args = self.calls.get(getattr(m, "tool_call_id", "") or "", (getattr(m, "name", ""), {}))
         try:
@@ -314,22 +383,22 @@ class Run:
         except (ValueError, TypeError):
             data = None
         if name == "run_fit" and isinstance(data, dict) and "rooms" in data:
-            raw = {s: sum(1 for r in data["rooms"] if r["status"] == s) for s in ("reachable", "blocked", "unknown")}
-            self.fits[(data["sid"], data["scenario"])] = {"name": data["name"], "counts": raw}
-            out = [self.ev("tool", name="run_fit", status="done", args=wrap_args(args),
-                           result={"sid": data["sid"], "scenario": data["scenario"], "counts": counts_of(data["rooms"])})]
-            for f in findings_from_fit(data, float(data["chair_in"][0])):
-                key = (f["sid"], f["room_id"], f["scenario"])
-                if key not in self.seen_findings:
-                    self.seen_findings.add(key)
-                    self.found[key] = {"room": f["room"], "status": f["status"], "turning": "turning_circle" in f["numbers"]}
-                    out.append(self.ev(f.pop("type"), **f))
-            return out
+            return self.fit_events(data, args)
         if name == "search_units" and isinstance(data, dict):
             self.last_search = data
             return [self.ev("tool", name="search_units", status="done", args=wrap_args(args),
                             result={"candidates": num(data["candidates"], "measured"),
                                     "sids": [u["sid"] for u in data["units"]]})]
+        if name == "check_units" and isinstance(data, dict) and "units" in data:
+            w, l = data["chair_in"]
+            out = [self.ev("tool", name="check_units", status="done", args=wrap_args(args),
+                           result={"sids": [u["sid"] for u in data["units"]]})]
+            for u in data["units"]:
+                if "error" in u:
+                    continue
+                for hinges in (False, True):                    # same engine results the tool used (disk cache)
+                    out += self.fit_events(run_fit(u["sid"], w, l, hinges), {"sid": u["sid"], "hinges": hinges})
+            return out
         if name == "task":
             sub = args.get("subagent_type")
             text = text_of(m.content)

@@ -40,7 +40,7 @@ uvicorn agent.server:app --port 8000 --reload
 - Without real data, the web app can build against the files in `contracts/`.
 
 ## The agent (live `/api/chat`)
-`agent/agent.py` is a deepagents 0.7.38 orchestrator with four subagents (`search`, `geometry`, `verifier`, `outreach`) and five tools (`search_units`, `get_unit`, `run_fit`, `draft_landlord_message`, `send_message`).
+`agent/agent.py` is a deepagents 0.7.38 orchestrator with four subagents (`search`, `geometry`, `verifier`, `outreach`) and five orchestrator tools (`search_units`, `get_unit`, `check_units`, `draft_landlord_message`, `send_message`); subagents also use `aerial_check`.
 - **Model:** `MODEL_PROVIDER` (`google` or `anthropic`) and `MODEL_NAME` from `.env`; we use `gemini-3.8-flash`. When these are set, the server attaches the agent to `POST /api/chat` automatically.
 - **Approval:** `send_message` is held by the orchestrator only and is listed in `interrupt_on`. The run pauses and emits `approval_needed`, and continues only when `POST /api/approve` is called. Every outbound text starts by saying it comes from an AI. An approved message is queued in `data/outbox/` (gitignored) for the iMessage bridge; the agent itself delivers nothing.
 - **Tracing:** LangSmith traces go to the `LANGSMITH_PROJECT` set in `.env`.
@@ -48,7 +48,12 @@ uvicorn agent.server:app --port 8000 --reload
   ```bash
   python -m agent.agent "27x42 in power chair, 1-2 bedrooms near the Texas Medical Center"
   ```
-- **Replay:** `data/replay/run.jsonl` holds one recorded real run (gitignored, because it contains real data). `POST /api/chat?replay=1` streams it.
+- **Replay:** `data/replay/run.jsonl` holds one recorded real run (gitignored, because it contains real data). `POST /api/chat?replay=1` streams it; add `&speed=4` to play it 4x faster. Every replayed event is still marked `replay: true`.
+- **Speed:** one live request takes about 23-31 s and about 33k tokens. Before the round-3 changes it took 154 s and 142k tokens. The changes:
+  - no model thinking (`ROLLIN_THINKING_BUDGET=0`);
+  - one `check_units` call for up to 4 units, backed by a disk cache of engine results (`data/cache/fit/`);
+  - a compact top-3 search;
+  - four orchestrator turns, with geometry and outside in parallel, then verifier and outreach in parallel.
 
 ## Built with
 Matterport Model API (wall graph, openings, rooms, panoramas), Vexcel aerial imagery, CoStar records, LangChain deepagents, LangChain, LangGraph, LangSmith, Google Gemini (gemini-3.8-flash via langchain-google-genai), Photon 2.0 (@photon-ai/api), NumPy, SciPy, Shapely, Pillow, Matplotlib, FastAPI, Uvicorn, HTTPX (tests), Requests, python-dotenv, pytest, Next.js, Tailwind, shadcn/ui, Radix, Motion, Lucide, socket.io-client, tsx; fonts Big Shoulders, Public Sans, IBM Plex Mono.
