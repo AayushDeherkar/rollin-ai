@@ -88,7 +88,8 @@ def chat_events(demo: dict, demo_h: dict, other: dict, rows: list[dict]) -> list
         numbers={"door_width": num(bed_door["width_in"], "measured", "in"),
                  "clear_width": num(bed_door["clear_in_est"], "estimated", "in"),
                  "shortfall": num(round(w - bed_door["clear_in_est"], 1), "estimated", "in")},
-        evidence={"kind": "door", "center": [num(c, "measured", "m") for c in bed_door["center"]]})
+        evidence={"kind": "door", "edge": bed["blocking_door_edge"],
+                  "center": [num(c, "measured", "m") for c in bed_door["center"]]})
     add("tool", name="run_fit", status="done",
         args={"sid": demo["model"], "chair": chair, "hinges": True},
         result={"scenario": demo_h["scenario"], "counts": counts_with_basis(unit_row(demo_h, None, None))})

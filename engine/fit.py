@@ -216,6 +216,27 @@ def analyze_floor(floor, room_list, chair_w, chair_l, hinges=False):
     def other_side(o, rid):
         return [x for x in edge_rooms.get(o["edge"], []) if x in room_ids and x != rid]
 
+    by_id = {rm["id"]: rm for rm in rooms}
+
+    def blocking_door(rid):
+        """Nearest door (by rooms crossed) where the chair stops on its way to room `rid`.
+        Searches outward through unreached rooms via doors and open passages.
+        Returns (opening, reached room on the near side) or (None, None)."""
+        seen_r, q = {rid}, deque([rid])
+        while q:
+            cur = q.popleft()
+            ds = [o for o in openings if o["edge"] in by_id[cur]["edges"]]
+            front = [(o, x) for o in ds for x in other_side(o, cur) if reached[x]]
+            if front:
+                return max(front, key=lambda ox: ox[0]["clear_m"])
+            passages = [x for i in by_id[cur]["edges"] if E[i]["type"] != "wall"
+                        for x in edge_rooms.get(i, []) if x in room_ids and x != cur]
+            for x in [x for o in ds for x in other_side(o, cur)] + passages:
+                if x not in seen_r and not reached[x]:
+                    seen_r.add(x)
+                    q.append(x)
+        return None, None
+
     results = []
     for rm in rooms:
         doors = [o for o in openings if o["edge"] in rm["edges"]]
@@ -257,15 +278,26 @@ def analyze_floor(floor, room_list, chair_w, chair_l, hinges=False):
         if rm["label"].lower() == "bathroom":
             dt = ndimage.distance_transform_edt(free & room_mask[rm["id"]]) * RES
             d_in = 2 * float(dt.max()) / IN
-            turn = {"max_circle_in": round(d_in, 1), "meets_60in": d_in >= TURN_DIAM_IN, "walls_only": True}
+            tr, tc = np.unravel_index(int(np.argmax(dt)), dt.shape)
+            tx, ty = g.to_xy(int(tr), int(tc))
+            turn = {"max_circle_in": round(d_in, 1), "meets_60in": d_in >= TURN_DIAM_IN, "walls_only": True,
+                    "center": [round(tx, 3), round(ty, 3)]}
         centre = list(rm["poly"].representative_point().coords[0])
+        stop_door, stop_room = blocking_door(rm["id"]) if status == "blocked" else (None, None)
+        if ok:
+            path = path_to(room_mask[rm["id"]], centre)
+        elif stop_door is not None:           # drive up to the door that stops the chair
+            path = path_to(room_mask[stop_room], stop_door["center"])
+        else:
+            path = None
         results.append({
             "room_id": rm["id"], "label": rm["label"], "area_m2": rm["area_m2"],
             "status": status, "reason": reason,
             "doors": [{"type": o["type"], "width_in": round(o["width_m"] / IN, 1),
                        "clear_in_est": round(o["clear_m"] / IN, 1), "center": o["center"]} for o in doors],
             "turning_space": turn,
-            "path": path_to(room_mask[rm["id"]], centre) if ok else None,
+            "path": path,
+            "blocking_door_edge": stop_door["edge"] if stop_door is not None else None,
             "polygon": [list(p) for p in rm["poly"].exterior.coords] if isinstance(rm["poly"], Polygon) else None,
         })
 

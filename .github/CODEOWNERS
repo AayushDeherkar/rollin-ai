@@ -1,10 +1,18 @@
-# Person A
-/engine/   @PERSON_A_GITHUB
-/agent/    @PERSON_A_GITHUB
-/requirements.txt @PERSON_A_GITHUB
-# Person B
-/web/       @PERSON_B_GITHUB
-/messaging/ @PERSON_B_GITHUB
-/docs/devpost/ @PERSON_B_GITHUB
-# Shared
-/contracts/ @PERSON_A_GITHUB @PERSON_B_GITHUB
+# Mirrors CLAUDE.md "Ownership". Aarohi requests shared-file changes through the manager.
+# Person A: Aayush
+/engine/           @AayushDeherkar
+/agent/            @AayushDeherkar
+/data/             @AayushDeherkar
+/tests/            @AayushDeherkar
+/contracts/        @AayushDeherkar
+/requirements.txt  @AayushDeherkar
+/README.md         @AayushDeherkar
+/PLAN.md           @AayushDeherkar
+/CLAUDE.md         @AayushDeherkar
+/.gitignore        @AayushDeherkar
+/.env.example      @AayushDeherkar
+/.github/          @AayushDeherkar
+# Person B: Aarohi
+/web/              @aarohi-agrawal
+/messaging/        @aarohi-agrawal
+/docs/             @aarohi-agrawal

@@ -13,7 +13,7 @@
 **What it is:** an agent that takes a person's real mobility device (width, length), drives it through the measured floor plans of real apartments (Matterport wall graph + door widths), checks the building outside (Vexcel aerial), ranks the units, explains every blocker with evidence, simulates fixes (offset hinges), and — with approval — messages the landlord about anything it could not verify (Photon / iMessage).
 
 **Main track:** Healthcare (only one allowed).
-**Special tracks to enter:** CoStar (primary), Amazon Practical AI, LangChain deepagents, Photon (Agents in iMessage — must integrate Spectrum), Peri Forward Deployed (only if we complete a real consultation with evidence).
+**Special tracks to enter:** CoStar (primary), Amazon Practical AI, LangChain deepagents, Photon (Agents in iMessage, built on Photon 2.0; confirm track requirements), Peri Forward Deployed (only if we complete a real consultation with evidence).
 
 **Status at time of writing:** the core fit engine (`engine/fit.py`) is built and verified on real Matterport data. Demo apartment found: `demo-backup` (<unit>): as scanned, a 27" chair reaches only the living room and laundry; with offset hinges the bedroom flips to reachable; bathrooms stay blocked behind a <x>" door.
 
@@ -71,7 +71,7 @@ If a number can't be verified in 5 minutes, drop it. Never invent statistics.
 | CoStar: demo/polish (15%) | | Animated chair, before/after toggle, 3D tour jumps to the blocking door |
 | Amazon (25% each) | | Creative, useful, technically real (geometry + motion planning), simple UX (text the agent) |
 | LangChain deepagents | | Orchestrator + 5 subagents, todo planning, filesystem memory, human-in-the-loop approval |
-| Photon | | Case manager texts the agent in iMessage via Spectrum; agent replies with shortlist + asks approval before contacting a landlord |
+| Photon | | Case manager texts the agent in iMessage (Photon 2.0); agent replies with shortlist + asks approval before contacting a landlord |
 
 **CoStar's own problem board (from their quickstart) and how we relate:** #3 "agentic annotation" (our agent labels doors/blockers inside the 3D tour as Tags) and their bonus idea "predict CoStar listing amenities from the Matterport models" (we verify or refute the accessibility amenity from geometry). Most teams will build #4 (search inside panoramas) and #6 (refurnish) — we deliberately avoid those.
 
@@ -168,8 +168,9 @@ Writes `out/<sid>_fit[ _hinges].json` and `out/<sid>_floor<N>_fit[ _hinges].png`
       "status":"reachable|blocked|unknown",
       "reason":"widest door ~<x> in clear < chair 27.0 in (short by <x> in); offset hinges ... --hinges",
       "doors":[{"type":"doorway","width_in":<x>,"clear_in_est":<x>,"center":[x,y]}],
-      "turning_space":{"max_circle_in":<x>,"meets_60in":true,"walls_only":true} | null,
-      "path":[[x,y,theta_rad], ...] | null,     // chair centre + heading, metres, model frame
+      "turning_space":{"max_circle_in":<x>,"meets_60in":true,"walls_only":true,"center":[x,y]} | null,
+      "path":[[x,y,theta_rad], ...] | null,     // chair centre + heading, metres, model frame; blocked rooms: up to the blocking door (null if no door on the way connects to a reached room)
+      "blocking_door_edge":"z" | null,           // door where the chair stops (blocked rooms only)
       "polygon":[[x,y], ...]
     }]
   }]
@@ -208,7 +209,7 @@ None of these is a blocker. L6 and L12 are the ones to prepare answers / mitigat
 ```
             iMessage (case manager)                Web app (judges / projector)
                      │                                      │
-          messaging/ (Spectrum, TS)                  web/ (Next.js)
+          messaging/ (Photon 2.0, TS)                web/ (Next.js)
                      │   HTTP                               │  HTTP + SSE
                      └──────────────►  agent/ (FastAPI + deepagents, Python)  ◄───┘
                                          │  tools
@@ -219,7 +220,7 @@ None of these is a blocker. L6 and L12 are the ones to prepare answers / mitigat
                                   data/ cache (JSON per model, batch results)
 ```
 
-**Stack:** Python 3.11 (engine + agent + FastAPI), Next.js (App Router) + Tailwind + shadcn/ui + Motion + Lucide for the web, `spectrum-ts` (Bun or Node) for iMessage. Claude as the agent model via the deepagents harness (any supported model works; pick one and pin it). Optional cheap vision model for panorama checks.
+**Stack:** Python 3.11 (engine + agent + FastAPI), Next.js (App Router) + Tailwind + shadcn/ui + Motion + Lucide for the web, Photon 2.0 (`@photon-ai/api`, Node) for iMessage. Claude as the agent model via the deepagents harness (any supported model works; pick one and pin it). Optional cheap vision model for panorama checks.
 
 **Deployment for the demo:** run everything on one laptop from cache (most reliable). Optionally deploy `web/` to Vercel and expose the FastAPI via a tunnel (e.g. cloudflared) so judges can open it on their phones. The live demo must never depend on venue Wi-Fi.
 
@@ -256,8 +257,8 @@ Layout (one screen, projector-first, ≥16 px body text, high contrast, one acce
 - Every finding is clickable to its evidence (door on plan, pano crop, aerial crop).
 - Skeleton loaders, empty states, a cached fallback run (labelled "replay").
 
-### 7.4 iMessage (owned by B)
-- Photon Spectrum: `bun add spectrum-ts` (docs: docs.photon.codes, repo github.com/photon-hq/spectrum-ts, cloud dashboard app.photon.codes). Spring 2026 track page listed promo code `HACKPTON2026` for a free Pro subscription and required Spectrum integration to qualify — **confirm the fall terms at the Photon table/Discord.**
+### 7.4 iMessage (owned by B, Photon 2.0)
+- **Photon 2.0** (replaces spectrum-ts): `@photon-ai/api` on npm, `photonhq-api` on PyPI. The beta handles **text and images only**, and a **shared line cannot send the first message**: the case manager has to text the agent first. Cloud dashboard: app.photon.codes. **Confirm the fall track terms at the Photon table or on Discord.**
 - Flow: case manager texts "patient leaves TIRR in 2 weeks, 27 in chair, needs roll-in shower, under $1,400" → bridge posts to `/api/chat` → replies with top 3 units + a link to the web view → asks "Want me to message the leasing office about the 2 things I couldn't verify?" → on "yes", calls `/api/approve`.
 - Demo recipient for outreach = teammate's phone. The agent identifies itself as an AI.
 
@@ -288,7 +289,7 @@ Layout (one screen, projector-first, ≥16 px body text, high contrast, one acce
 | B4 | Map + ranked list from `/api/units` | Click unit → loads plan | 1.5 h |
 | B5 | Agent trace panel (SSE), evidence chips, approval card | Streams a real run | 2 h |
 | B6 | Matterport embed + jump to door (Showcase SDK `Sweep.moveTo`, coordinate conversion) | Click red door → tour moves there | 2 h |
-| B7 | `messaging/`: Spectrum iMessage bridge ↔ `/api/chat` / `/api/approve` | Text in, shortlist out, approval works | 2 h |
+| B7 | `messaging/`: Photon 2.0 iMessage bridge ↔ `/api/chat` / `/api/approve` | Text in, shortlist out, approval works | 2 h |
 | B8 | Peri consultation (optional): one real conversation with a case manager / independent-living centre / disability-services office or a relevant student org; capture name, role, evidence (quote/screenshot/photo) | Evidence saved in `docs/peri/` | 1 h |
 | B9 | Devpost page, pitch script, video (record backup ~hour 28, final after freeze) | Uploaded, ≤2 min | 2 h |
 
@@ -306,7 +307,7 @@ Layout (one screen, projector-first, ≥16 px body text, high contrast, one acce
 **Ownership by path** (CLAUDE.md is the source of truth):
 | Path | Owner |
 |---|---|
-| `engine/`, `agent/`, `data/`, `tests/`, `requirements.txt`, `contracts/`, `README.md`, `PLAN.md`, `CLAUDE.md`, `.gitignore`, `.env.example` | A (Aayush) |
+| `engine/`, `agent/`, `data/`, `tests/`, `requirements.txt`, `contracts/`, `README.md`, `PLAN.md`, `CLAUDE.md`, `.gitignore`, `.env.example`, `.github/` | A (Aayush) |
 | `web/`, `messaging/`, `docs/` (and their `package.json` / lockfiles) | B (Aarohi) — requests shared-file changes through the manager |
 
 **Branches**
