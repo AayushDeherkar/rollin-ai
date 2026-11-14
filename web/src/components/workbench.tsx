@@ -143,24 +143,26 @@ function Sheet() {
     },
     [sid],
   );
-  const agent = useAgentRun();
-  const [shownEvidence, setShownEvidence] = useState<string | null>(null);
-  // a finding opens its evidence: its unit, in the scenario it was found under, with the chair driven to its room
-  const showEvidence = useCallback((e: Evidence) => {
-    setShownEvidence(e.eventId);
-    setChosen(e.sid);
-    setScenario(e.hinges ? "hinges" : "scanned");
-    setPick({ sid: e.sid, room: e.roomId });
-    setDriving(true);
-    setRunId((n) => n + 1);
-  }, []);
-
   // a door the chair cannot pass opens the unit's Matterport tour; only real scans have one
   const [tour, setTour] = useState<{ sid: string; edge: string } | null>(null);
   const hasTour = pair.status === "ready" && pair.origin === "live" && sid !== null && !sid.startsWith("synthetic");
   const openTour = useCallback((edge: string) => sid && setTour({ sid, edge }), [sid]);
   const closeTour = useCallback(() => setTour(null), []);
   const tourShown = tour && tour.sid === sid && hasTour ? tour : null;
+
+  const agent = useAgentRun();
+  const [shownEvidence, setShownEvidence] = useState<string | null>(null);
+  // a finding opens its evidence: its unit, in the scenario it was found under, with the chair driven to its room
+  const showEvidence = useCallback((e: Evidence) => {
+    setShownEvidence(e.eventId);
+    setChosen(e.sid);
+    // a tour belongs to the unit it was opened on: moving away closes it
+    setTour(null);
+    setScenario(e.hinges ? "hinges" : "scanned");
+    setPick({ sid: e.sid, room: e.roomId });
+    setDriving(true);
+    setRunId((n) => n + 1);
+  }, []);
 
   const onStart = useCallback(() => setDriving(true), []);
   const onSettled = useCallback(() => setDriving(false), []);
@@ -238,6 +240,7 @@ function Sheet() {
               if (next === sid) return;
               // the scenario stays: the list is ranked by it, so changing it here would re-sort under the cursor
               setChosen(next);
+              setTour(null);
               setDriving(true);
             }}
           />

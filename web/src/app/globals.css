@@ -183,9 +183,11 @@
     outline: none;
     transition: stroke var(--dur-1) var(--ease-draft);
   }
-  .door-hit:hover,
-  .door-hit:focus-visible {
+  .door-hit:hover {
     stroke: color-mix(in srgb, var(--block) 30%, transparent);
+  }
+  .door-hit:focus-visible {
+    stroke: color-mix(in srgb, var(--ink) 55%, transparent);
   }
   .plan-hit:focus-visible {
     stroke: var(--ink);

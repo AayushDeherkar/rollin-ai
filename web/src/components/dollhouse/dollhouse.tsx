@@ -397,6 +397,8 @@ function DoorFrame({
     ? {
         onClick: (e: ThreeEvent<MouseEvent>) => {
           e.stopPropagation();
+          // the model unmounts under the pointer, so pointer-out never comes
+          document.body.style.cursor = "";
           onOpen(door.edge);
         },
         onPointerOver: (e: ThreeEvent<PointerEvent>) => {

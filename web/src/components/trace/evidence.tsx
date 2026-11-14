@@ -26,7 +26,7 @@ export function AerialCard({ src, label, source }: { src: string; label?: string
       {failed ? (
         <p className="flex items-center gap-2 py-6 text-sm text-ink-soft">
           <ImageOff aria-hidden className="size-4 shrink-0" strokeWidth={2.25} />
-          No aerial image is cached for this unit.
+          No aerial image is available for this unit.
         </p>
       ) : (
         <Image
