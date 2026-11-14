@@ -1,10 +1,11 @@
 /**
- * Contract fixtures. Until Aayush's API (PLAN.md §7.2) is live, the web app reads only
- * these synthetic examples — never real Matterport / CoStar / Vexcel data.
+ * Contract fixtures: synthetic examples only, never real Matterport / CoStar / Vexcel data.
+ * The app replays them automatically (and says so on screen) when the API is not reachable.
  */
 import asScannedJson from "../../../contracts/unit_result.example.json";
 import hingesJson from "../../../contracts/unit_result.hinges.example.json";
-import type { UnitResult } from "./contract";
+import unitsListJson from "../../../contracts/units_list.example.json";
+import type { UnitResult, UnitsList } from "./contract";
 
 /** JSON imports widen tuples to number[]; check the shape once, then trust the type. */
 function asUnitResult(json: unknown): UnitResult {
@@ -17,6 +18,14 @@ function asUnitResult(json: unknown): UnitResult {
 
 export const fixtureAsScanned = asUnitResult(asScannedJson);
 export const fixtureHinges = asUnitResult(hingesJson);
+
+export const fixtureUnitsList = unitsListJson as unknown as UnitsList;
+
+/** The fixture plan for a sid, if the contract ships one (only the demo unit has a plan). */
+export function fixtureUnit(sid: string, hinges: boolean): UnitResult | null {
+  if (sid !== fixtureAsScanned.model) return null;
+  return hinges ? fixtureHinges : fixtureAsScanned;
+}
 
 /** Shown wherever fixture data is on screen, so nobody mistakes it for a real unit. */
 export const FIXTURE_LABEL = "Synthetic test unit (contract fixture)";

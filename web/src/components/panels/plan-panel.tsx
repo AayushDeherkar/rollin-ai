@@ -9,20 +9,30 @@ import { EmptyNote, Panel, type PanelState } from "@/components/sheet/panel";
 export function PlanPanel({
   state,
   title,
+  tag,
   aside,
+  emptyNote,
   children,
   className,
 }: {
   state: PanelState;
   className?: string;
   title: string;
+  tag?: ReactNode;
   aside?: ReactNode;
+  /** replaces the default empty state, e.g. when the plan failed to load */
+  emptyNote?: { title: string; body: string } | null;
   children?: ReactNode;
 }) {
   return (
-    <Panel title={title} labelledBy="plan-heading" aside={state === "ready" ? aside : null} className={cn("bg-paper-lift", className)}>
+    <Panel title={title} tag={state === "ready" ? tag : null} labelledBy="plan-heading" aside={state === "ready" ? aside : null} className={cn("bg-paper-lift", className)}>
       {state === "loading" && <PlanLoading />}
-      {state === "empty" && (
+      {state === "empty" && emptyNote && (
+        <EmptyNote title={emptyNote.title} figure={<NorthArrow />}>
+          {emptyNote.body}
+        </EmptyNote>
+      )}
+      {state === "empty" && !emptyNote && (
         <EmptyNote title="Pick a unit to draw its plan" figure={<NorthArrow />}>
           The plan shows every wall and door the scan measured, which rooms your chair reaches, and the door that stops it.
         </EmptyNote>

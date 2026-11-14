@@ -6,12 +6,15 @@ export type PanelState = "loading" | "empty" | "ready";
 /** One region of the drawing sheet: a heading on a rule, then the drawing area. */
 export function Panel({
   title,
+  tag,
   aside,
   children,
   className,
   labelledBy,
 }: {
   title: string;
+  /** a short caveat beside the title (e.g. replayed data) */
+  tag?: ReactNode;
   aside?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -20,9 +23,12 @@ export function Panel({
   return (
     <section aria-labelledby={labelledBy} className={cn("flex min-h-0 min-w-0 flex-col", className)}>
       <header className="flex min-h-16 shrink-0 items-end justify-between gap-4 border-b border-rule-strong px-5 pb-3">
-        <h2 id={labelledBy} className="display min-w-0 truncate text-2xl font-semibold">
-          {title}
-        </h2>
+        <div className="flex min-w-0 items-center gap-3">
+          <h2 id={labelledBy} className="display shrink-0 text-2xl font-semibold">
+            {title}
+          </h2>
+          {tag}
+        </div>
         {aside}
       </header>
       <div className="relative min-h-0 flex-1">{children}</div>

@@ -38,6 +38,8 @@ export interface TurningSpace {
   max_circle_in: number;
   meets_60in: boolean;
   walls_only: boolean;
+  /** contract v2: centre of the largest circle, metres, model frame */
+  center?: Point | null;
 }
 
 export interface Room {
@@ -50,6 +52,8 @@ export interface Room {
   turning_space: TurningSpace | null;
   path: PathStep[] | null;
   polygon: Point[];
+  /** contract v2: the wall edge of the door that stops the chair (blocked rooms) */
+  blocking_door_edge?: string | null;
 }
 
 export interface Artifact {
@@ -90,3 +94,33 @@ export function countRooms(unit: UnitResult): StatusCounts {
   }
   return counts;
 }
+
+/** One row of GET /api/units (contracts/units_list.example.json). */
+export interface UnitRow {
+  sid: string;
+  name: string;
+  lat?: number | null;
+  lon?: number | null;
+  score: number;
+  counts: StatusCounts;
+  summary: string;
+  chair_in: [number, number];
+  scenario: string;
+  distance_km?: number | null;
+  with_hinges?: { score: number; counts: StatusCounts; summary: string } | null;
+  usable?: boolean;
+  synthetic?: boolean;
+}
+
+/** GET /api/units */
+export interface UnitsList {
+  query: { lat: number; lon: number; radius_km: number | null; beds: number | null; w: number; l: number; hinges: boolean };
+  total: number;
+  units: UnitRow[];
+  source: { kind: string; updated_at?: string | null; processed?: number | null; no_data?: number | null };
+}
+
+/** Where a response came from: the live API, or the contract fixtures replayed when it is not reachable. */
+export type Origin = "live" | "replay";
+export const ORIGIN_HEADER = "x-rollin-origin";
+export const REPLAY_REASON_HEADER = "x-rollin-replay-reason";

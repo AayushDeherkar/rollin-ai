@@ -193,6 +193,11 @@ function PlanSvg({
         })}
       </g>
 
+      {/* bathroom turning circles, where the engine says where the largest circle sits (contract v2) */}
+      <g>
+        {floor.rooms.map((r) => (r.turning_space?.center ? <TurningCircle key={r.room_id} room={r} projection={projection} /> : null))}
+      </g>
+
       {/* chair and anything else drawn over the plan */}
       {overlay?.(ctx)}
 
@@ -305,6 +310,29 @@ function DoorDimension({ g, projection, chairW, emphasis }: { g: DoorGeometry; p
 }
 
 /** On-screen width and height of a room's bounding box, used to decide how much label fits. */
+/**
+ * The 60 in circle a wheelchair needs to turn, drawn at the centre of the largest circle the
+ * engine fitted between the room's walls. Solid when it fits, dashed red when it does not.
+ * Walls only: fixtures are not in the scan, so the drawing says so.
+ */
+function TurningCircle({ room, projection }: { room: Room; projection: Projection }) {
+  const ts = room.turning_space;
+  if (!ts?.center) return null;
+  const [cx, cy] = projection.toScreen(ts.center);
+  const r = (60 * 0.0254 * projection.scale) / 2;
+  const colour = ts.meets_60in ? "var(--reach)" : "var(--block)";
+  return (
+    <g aria-label={`${room.label}: 60 inch turning circle ${ts.meets_60in ? "fits" : "does not fit"}, walls only`} role="img">
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={colour} strokeWidth={2} strokeDasharray={ts.meets_60in ? undefined : "8 6"} />
+      <line x1={cx - 6} y1={cy} x2={cx + 6} y2={cy} stroke={colour} strokeWidth={1.5} />
+      <line x1={cx} y1={cy - 6} x2={cx} y2={cy + 6} stroke={colour} strokeWidth={1.5} />
+      <text x={cx} y={cy + r + 18} textAnchor="middle" className="measure plan-halo text-sm" fill={colour}>
+        60″ turn, walls only
+      </text>
+    </g>
+  );
+}
+
 function roomExtentPx(room: Room, scale: number): [number, number] {
   const xs = room.polygon.map((p) => p[0]);
   const ys = room.polygon.map((p) => p[1]);
