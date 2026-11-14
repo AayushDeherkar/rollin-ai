@@ -5,6 +5,7 @@
 GET /api/units          ranked list from data/batch/index.json (contract: contracts/units_list.example.json)
 GET /api/units/{sid}    engine result from data/cache/<sid>.json (contract: contracts/unit_result.example.json)
 GET /api/health         what data is loaded
+POST /api/chat, POST /api/approve   agent event stream and approval gate (agent/chat.py)
 
 ROLLIN_DATA_DIR overrides the data folder (default: <repo>/data).
 """
@@ -24,6 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from engine.fit import analyze_model  # noqa: E402
+from agent.chat import router as chat_router  # noqa: E402
 
 SID = re.compile(r"^[A-Za-z0-9_]{3,40}$")
 BEDS = re.compile(r"(\d+)\s*(?:br\b|bed)", re.I)
@@ -31,6 +33,7 @@ BEDS = re.compile(r"(\d+)\s*(?:br\b|bed)", re.I)
 app = FastAPI(title="Rollin' API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000"],
                    allow_methods=["GET", "POST"], allow_headers=["*"])
+app.include_router(chat_router)
 
 
 def data_dir() -> pathlib.Path:

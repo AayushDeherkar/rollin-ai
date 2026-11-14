@@ -31,6 +31,9 @@ uvicorn agent.server:app --port 8000 --reload
 | `GET /api/units?lat=&lon=&radius_km=&beds=&w=&l=&hinges=` | Ranked list, same shape as `contracts/units_list.example.json`. All parameters are optional. `hinges=true` ranks by the offset-hinge scores. `w`/`l` must match the chair the batch used (27x42 in); other sizes get a 422. |
 | `GET /api/units/{sid}?w=27&l=42&hinges=false` | Engine result for any chair size, same shape as `contracts/unit_result.example.json`. Returns 404 if the model is not cached. |
 | `GET /api/health` | Number of cached models and batch progress. |
+| `POST /api/chat?replay=1&pace=1` | SSE stream of a recorded agent run, with `event:` set to the type and `data:` holding the JSON event (`contracts/chat_events.example.jsonl`). Every event has `replay: true`; `pace` scales the delays (0 = instant). It uses `data/replay/run.jsonl` if present, otherwise the synthetic example. |
+| `POST /api/chat` `{message, profile}` | Live agent run as an SSE stream. Returns 503 until a model is configured. |
+| `POST /api/approve` `{action_id, approved}` | Approval gate. Nothing outbound is sent without it, and nothing is ever sent for a replayed run. Returns 404 for an unknown id and 409 if already decided. |
 
 - If there is no batch index yet, `/api/units` returns 503.
 - To serve data from another folder, set `ROLLIN_DATA_DIR=/path/to/data`.
