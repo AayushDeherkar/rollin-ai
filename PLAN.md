@@ -126,7 +126,7 @@ Merge Q1+Q2+Q3 into `{"data":{"model":{name, floors, rooms}}}` — the engine's 
 ### 4.4 Known demo units
 | sid | name | result (27×42 in chair) | use |
 |---|---|---|---|
-| `demo-backup` | <unit name> | Blocked bedroom (<x> in short) → fixed by hinges; bathrooms blocked behind <x>" door | **Main demo** (before/after) |
+| `demo-backup` | <unit name> | Re-verified Nov 14 ~08:30 from a fresh fetch. As scanned: <n> of <m> rooms reachable (living room, laundry). Bedroom blocked: <x>" door, ~<x>" clear, <x> in short → reachable with hinges (second living area also flips, <x>" door). Bathroom suite (two rooms joined by a <x>" door) stays blocked: its only ways in are a <x>" door (from the second living area) and a <x>" door (from the bedroom) | **Main demo** (before/after) |
 | `demo-pass` | <unit name> | Fully reachable (<x>" closet door bypassed via a <x>" opening); <x>" bathroom turning circle | "Pass" contrast |
 | `redacted-unit-03` | <unit name> | Reachable; only 2 doors in scan; no entry door | Example of sparse data |
 Other candidates with narrow doors (from a 21-unit scan): `redacted-unit-04`, `redacted-unit-05`, `redacted-unit-06`, `redacted-unit-07`, `redacted-unit-08`, `redacted-unit-09`.
@@ -137,7 +137,8 @@ Other candidates with narrow doors (from a 21-unit scan): `redacted-unit-04`, `r
 
 **Usage**
 ```bash
-python engine/fit.py <MODEL_ID> [chair_width_in] [chair_length_in] [--hinges]
+python -m engine.matterport <MODEL_ID>          # fetch + cache only
+python engine/fit.py <MODEL_ID> [chair_width_in] [chair_length_in] [--hinges]   # uses the cache
 python engine/fit.py --file data/cache/<sid>.json [w] [l] [--hinges]
 ```
 Writes `out/<sid>_fit[ _hinges].json` and `out/<sid>_floor<N>_fit[ _hinges].png`.
@@ -147,7 +148,7 @@ Writes `out/<sid>_fit[ _hinges].json` and `out/<sid>_floor<N>_fit[ _hinges].png`
 2. Rooms = polygons from each room's boundary edges.
 3. Rasterize free space at 5 cm; for 16 headings, compute where the chair centre can sit (obstacles dilated by the rotated chair rectangle).
 4. Breadth-first search over (x, y, heading) from the entry (an opening on an edge only one room owns; fallback: largest room).
-5. Per room: `reachable` / `blocked` (with the widest door's shortfall, or "route too tight") / `unknown` (no measured door, or only a suspect artifact).
+5. Per room: `reachable` / `blocked` / `unknown` (no measured door, or only a suspect artifact). A blocked room's reason uses only doors the chair could arrive at (from a reached room, else from outside the unit): their shortfall, "route too tight", or "every door leads from a room the chair can't reach".
 6. Bathrooms: largest inscribed circle (walls only) vs 60 in.
 7. `--hinges`: adds ~1.75 in to every door's clear width (offset/swing-clear hinges recover roughly 1.5–2 in) and re-runs.
 
@@ -268,7 +269,7 @@ Layout (one screen, projector-first, ≥16 px body text, high contrast, one acce
 | # | Task | Done when | Est. |
 |---|---|---|---|
 | A1 | Create repo, push starter folder, add `.env.example`, `.gitignore`, `requirements.txt` | Both can clone & run engine on `data/cache/demo-backup.json` | 0.5 h |
-| A2 | `engine/matterport.py`: client with 3-query split, 4× retry, disk cache `data/cache/<sid>.json` | `python -m engine.fetch <sid>` caches a model | 1 h |
+| A2 | `engine/matterport.py`: client with 3-query split, 4× retry, disk cache `data/cache/<sid>.json` | `python -m engine.matterport <sid>` caches a model | 1 h |
 | A3 | `engine/batch.py`: download `models_index.csv`; filter apartments near Texas Medical Center (≈ 29.71 N, −95.40 W — verify) within ~8 km; fetch + run engine for 27×42 chair; write `data/batch/index.json` (ranked) | ≥150 units processed and ranked | 2 h (mostly waiting) |
 | A4 | FastAPI `agent/server.py`: `/api/units`, `/api/units/{sid}` from cache | B's UI loads real data | 1 h |
 | A5 | deepagents orchestrator + `geometry`, `search`, `verifier`, `outreach` subagents; SSE events on `/api/chat`; approval gate | A full request streams plan→findings→approval | 3 h |

@@ -8,6 +8,7 @@ Built at HackPrinceton Fall 2026. Plan: `PLAN.md`. Agent rules: `CLAUDE.md`. API
 ```bash
 pip install -r requirements.txt
 cp .env.example .env   # fill in keys from /costar-keys (never commit .env)
+python -m engine.matterport demo-backup                           # fetch + cache (needs keys in .env)
 python engine/fit.py --file data/cache/demo-backup.json            # cached demo unit
 python engine/fit.py --file data/cache/demo-backup.json --hinges   # what-if: offset hinges
 pytest -q

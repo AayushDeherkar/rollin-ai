@@ -354,7 +354,7 @@
      "label": "Bedroom",
      "area_m2": 9,
      "status": "blocked",
-     "reason": "widest door ~26.0 in clear < chair 27.0 in (short by 1.0 in); offset hinges (+~1.8 in) would fix it - rerun with --hinges",
+     "reason": "widest way in (door from Living Room) ~26.0 in clear < chair 27.0 in (short by 1.0 in); offset hinges (+~1.8 in) could fix it - rerun with --hinges",
      "doors": [
       {
        "type": "doorway",
@@ -396,7 +396,7 @@
      "label": "Bathroom",
      "area_m2": 4.5,
      "status": "blocked",
-     "reason": "widest door ~24.0 in clear < chair 27.0 in (short by 3.0 in)",
+     "reason": "widest way in (door from Living Room) ~24.0 in clear < chair 27.0 in (short by 3.0 in)",
      "doors": [
       {
        "type": "doorway",

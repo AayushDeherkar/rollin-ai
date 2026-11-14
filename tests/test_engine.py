@@ -21,8 +21,11 @@ DEMO = pathlib.Path(__file__).resolve().parents[1] / "data/cache/demo-backup.jso
 def test_demo_unit_hinges_flip_bedroom():
     before = run(DEMO)
     after = run(DEMO, "--hinges")
-    lab = lambda r: {x["room_id"]: x["status"] for x in r["floors"][0]["rooms"]}
-    assert lab(before)["<room>"] == "blocked" and lab(after)["<room>"] == "reachable"
+    bed = lambda r: [x for x in r["floors"][0]["rooms"] if x["label"] == "Bedroom"]
+    assert [x["status"] for x in bed(before)] == ["blocked"]
+    assert [x["status"] for x in bed(after)] == ["reachable"]
+    baths = lambda r: {x["status"] for x in r["floors"][0]["rooms"] if x["label"] == "Bathroom"}
+    assert baths(before) == {"blocked"} and baths(after) == {"blocked"}
 
 def test_output_matches_contract_keys():
     r = run(ROOT / "tests/synthetic_1br.json")

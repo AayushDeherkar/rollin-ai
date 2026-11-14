@@ -597,7 +597,7 @@
      "label": "Bathroom",
      "area_m2": 4.5,
      "status": "blocked",
-     "reason": "widest door ~25.8 in clear < chair 27.0 in (short by 1.2 in)",
+     "reason": "widest way in (door from Living Room) ~25.8 in clear < chair 27.0 in (short by 1.2 in)",
      "doors": [
       {
        "type": "doorway",

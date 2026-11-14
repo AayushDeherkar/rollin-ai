@@ -2,7 +2,7 @@
 Rollin' fit engine: can a specific wheelchair reach every room of a Matterport model?
 
 Usage:
-    export MATTERPORT_API_KEY=...  MATTERPORT_API_TOKEN=...
+    (keys come from .env; live fetches are cached in data/cache/<sid>.json)
     python fit.py redacted-unit-03              # default chair 27 x 42 in
     python fit.py redacted-unit-03 25 40        # chair width, length in inches
     python fit.py --file model.json        # run on a saved API response
@@ -25,18 +25,10 @@ import os, sys, json, math
 from collections import deque
 
 import numpy as np
-import requests
 from PIL import Image, ImageDraw
 from scipy import ndimage
 from shapely.geometry import LineString, Polygon, MultiPolygon
 from shapely.ops import polygonize, unary_union
-
-API = "https://api.matterport.com/api/models/graph"
-QUERY = """query T($id: ID!) { model(id: $id) { name
-  floors { id label vertices { id position { x y } }
-           edges { id type thickness vertices { id } openings { width type relativeCenter } } }
-  rooms { id floor { id } classifications { label confidence } boundary { edges { id } }
-          dimensions(units: metric) { areaFloor width depth } } } }"""
 
 RES = 0.05            # metres per grid cell
 N_HEAD = 16           # headings over [0, pi): a rectangle is symmetric front/back
@@ -48,13 +40,10 @@ MIN_REAL_OPENING = 18 * IN   # narrower "openings" are treated as scan artifacts
 
 
 def fetch(model_id):
-    r = requests.post(API, json={"query": QUERY, "variables": {"id": model_id}},
-                      auth=(os.environ["MATTERPORT_API_KEY"], os.environ["MATTERPORT_API_TOKEN"]),
-                      timeout=60)
-    d = r.json()
-    if "errors" in d:
-        raise SystemExit(f"API error: {d['errors']}")
-    return d["data"]["model"]
+    """Live or cached model via the split-query client (engine/matterport.py)."""
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from engine.matterport import get_model
+    return get_model(model_id)
 
 
 def rect_kernel(w, l, th):
@@ -221,11 +210,17 @@ def analyze_floor(floor, room_list, chair_w, chair_l, hinges=False):
         out.reverse()
         return out[::3] + [out[-1]]       # thin for the UI
 
+    reached = {rm["id"]: bool((reach & room_mask[rm["id"]]).any()) for rm in rooms}
+    label_of = {rm["id"]: rm["label"] for rm in rooms}
+
+    def other_side(o, rid):
+        return [x for x in edge_rooms.get(o["edge"], []) if x in room_ids and x != rid]
+
     results = []
     for rm in rooms:
         doors = [o for o in openings if o["edge"] in rm["edges"]]
         open_edge = any(E[i]["type"] != "wall" for i in rm["edges"])
-        ok = bool((reach & room_mask[rm["id"]]).any())
+        ok = reached[rm["id"]]
         suspect = [a for a in artifacts if a["edge"] in rm["edges"]]
         if ok:
             status, reason = "reachable", None
@@ -234,16 +229,26 @@ def analyze_floor(floor, room_list, chair_w, chair_l, hinges=False):
                                          + "); verify in the 3D tour" if suspect else
                                          "no door measured in the scan; ask the landlord")
         else:
-            best = max(doors, key=lambda o: o["clear_m"]) if doors else None
             status = "blocked"
+            # Only doors the chair could arrive at count: from a reached room first, else from outside the unit.
+            inside = [o for o in doors if any(reached[x] for x in other_side(o, rm["id"]))]
+            outside = [o for o in doors if not other_side(o, rm["id"])]
+            entry = inside or outside
+            best = max(entry, key=lambda o: o["clear_m"]) if entry else None
+            frm = (", ".join(label_of[x] for x in other_side(best, rm["id"])) or "outside the unit") if best else ""
             if best and best["clear_m"] < chair_w:
                 short = (chair_w - best["clear_m"]) / IN
-                reason = (f"widest door ~{best['clear_m']/IN:.1f} in clear < chair {chair_w/IN:.1f} in "
-                          f"(short by {short:.1f} in)")
+                reason = (f"widest way in (door from {frm}) ~{best['clear_m']/IN:.1f} in clear < chair "
+                          f"{chair_w/IN:.1f} in (short by {short:.1f} in)")
                 if short <= HINGE_GAIN / IN and not hinges:
-                    reason += f"; offset hinges (+~{HINGE_GAIN/IN:.2g} in) would fix it - rerun with --hinges"
+                    reason += f"; offset hinges (+~{HINGE_GAIN/IN:.2g} in) could fix it - rerun with --hinges"
+            elif best and inside:
+                reason = f"the door from {frm} fits, but the route to it is too tight to turn into"
             elif best:
-                reason = "a door fits, but the route to it is too tight to turn into (or the room behind it is blocked)"
+                reason = "only a door from outside the unit fits; not reachable from the scanned entry"
+            elif doors:
+                via = sorted({label_of[x] for o in doors for x in other_side(o, rm["id"])})
+                reason = f"every door leads from a room the chair can't reach ({', '.join(via)})"
             else:
                 reason = "only reachable through an open passage that is too tight"
         turn = None
