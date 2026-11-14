@@ -28,7 +28,7 @@ def test_send_message_is_gated_and_only_the_orchestrator_has_it():
     assert A.send_message in A.ORCHESTRATOR_TOOLS
     for sub in A.subagents(model=None):
         assert A.send_message not in sub["tools"], sub["name"]
-    assert {s["name"] for s in A.subagents(None)} == {"search", "geometry", "verifier", "outreach", "general-purpose"}
+    assert {s["name"] for s in A.subagents(None)} == {"search", "geometry", "verifier", "outside", "outreach", "general-purpose"}
 
 
 def test_every_outbound_text_identifies_as_ai(data):
@@ -156,3 +156,34 @@ def test_no_negative_shortfall_when_a_door_fits():
            "blocking_door": {"edge": "e", "width_in": 32.0, "clear_in_est": 30.0}, "turning_circle_in": None}]}
     f = A.findings_from_fit(res, 27.0)[0]
     assert "shortfall" not in f["numbers"] and f["numbers"]["blocking_door_width"]["value"] == 32.0
+
+
+def test_aerial_event_and_api(data, monkeypatch):
+    from fastapi.testclient import TestClient
+    from engine import vexcel
+    assert vexcel.square_wkt(29.7, -95.4).startswith("POLYGON((-95.40") and vexcel.key_for(29.7, -95.4) == "aerial_29p70000_m95p40000"
+    res = {"lat": 29.7, "lon": -95.4, "clip_m": 80.0, "image": "aerial_x.jpg", "source": "Vexcel ortho (from aerial)",
+           "findings": [{"item": "curb_ramps", "question": "q", "answer": "unclear", "note": "n",
+                         "basis": "estimated", "label": "from aerial, estimated"}]}
+    (data / "cache/aerial_x.jpg").write_bytes(b"\xff\xd8\xff fake jpeg")
+    (data / "cache/aerial_x.findings.json").write_text(json.dumps(res))
+    (data / "cache/aerial_synthetic_demo.json").write_text(json.dumps(
+        {"sid": "synthetic_demo", "image": "aerial_x.jpg", "findings_file": "aerial_x.findings.json"}))
+    r = A.Run("run_a")
+    r.calls["c9"] = ("aerial_check", {"sid": "synthetic_demo"})
+    ev = r.from_tool(_tool_msg("c9", {"sid": "synthetic_demo", **res}))[0]
+    assert ev["type"] == "aerial" and ev["label"] == "from aerial, estimated" and ev["image_url"] == "/api/aerial/synthetic_demo"
+    _numbers_have_basis(ev, ev["id"])
+    from agent.server import app
+    c = TestClient(app)
+    img = c.get("/api/aerial/synthetic_demo")
+    assert img.status_code == 200 and img.headers["content-type"] == "image/jpeg"
+    assert c.get("/api/aerial/synthetic_demo/findings").json()["findings"][0]["answer"] == "unclear"
+    assert c.get("/api/aerial/notThere123").status_code == 404
+    assert c.get("/api/aerial/bad-id!").status_code == 400
+
+
+def test_aerial_failure_is_reported_not_guessed(data, monkeypatch):
+    import engine.vexcel as V
+    monkeypatch.setattr(V, "aerial_check_unit", lambda sid: (_ for _ in ()).throw(RuntimeError("HTTP 403")))
+    assert A.aerial_check("synthetic_demo") == {"sid": "synthetic_demo", "error": "aerial check failed: RuntimeError"}

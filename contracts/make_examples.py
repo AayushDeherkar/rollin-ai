@@ -118,6 +118,12 @@ def chat_events(demo: dict, demo_h: dict, other: dict, rows: list[dict]) -> list
         questions=["What is the clear width of the closet door?",
                    "Would you install offset (swing-clear) hinges on the bedroom door?",
                    "Is the building entrance step-free, and is there an elevator?"])
+    add("aerial", sid=demo["model"], image_url=f"/api/aerial/{demo['model']}", label="from aerial, estimated",
+        source="Vexcel ortho (from aerial)", synthetic=True, numbers={"clip_size": num(80.0, "assumed", "m")},
+        findings=[{"item": "accessible_parking", "question": "Are accessible parking stalls visible?", "answer": "yes",
+                   "note": "synthetic example", "basis": "estimated", "label": "from aerial, estimated"},
+                  {"item": "curb_ramps", "question": "Are curb ramps visible?", "answer": "unclear",
+                   "note": "synthetic example", "basis": "estimated", "label": "from aerial, estimated"}])
     add("approval_needed", action_id="act_example_001", action="send_message",
         to={"label": "Leasing office (demo: teammate's phone)"},
         draft=("Hi, I'm an AI assistant helping a client who uses a 27-inch power chair. "

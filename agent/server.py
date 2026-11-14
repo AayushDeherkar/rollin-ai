@@ -5,6 +5,7 @@
 GET /api/units          ranked list from data/batch/index.json (contract: contracts/units_list.example.json)
 GET /api/units/{sid}    engine result from data/cache/<sid>.json (contract: contracts/unit_result.example.json)
 GET /api/health         what data is loaded
+GET /api/aerial/{sid}[/findings]   cached Vexcel clip + labelled findings (engine/vexcel.py)
 POST /api/chat, POST /api/approve   agent event stream and approval gate (agent/chat.py)
 
 ROLLIN_DATA_DIR overrides the data folder (default: <repo>/data).
@@ -20,6 +21,7 @@ import sys
 from functools import lru_cache
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -118,6 +120,30 @@ def units(lat: float | None = None, lon: float | None = None, radius_km: float |
             "total": len(rows), "units": rows,
             "source": {"kind": "batch", "updated_at": doc.get("updated_at"), "processed": doc.get("processed"),
                        "no_data": len(doc.get("no_data", []))}}
+
+
+def _aerial(sid: str) -> tuple[pathlib.Path, pathlib.Path]:
+    if not SID.match(sid):
+        raise HTTPException(400, "bad model id")
+    link = data_dir() / "cache" / f"aerial_{sid}.json"
+    if not link.exists():
+        raise HTTPException(404, f"no aerial check cached for {sid}; run `python -m engine.vexcel {sid}`")
+    meta = json.loads(link.read_text())
+    return data_dir() / "cache" / meta["image"], data_dir() / "cache" / meta["findings_file"]
+
+
+@app.get("/api/aerial/{sid}")
+def aerial_image(sid: str) -> FileResponse:
+    """Cached Vexcel orthophoto around the unit's building (from aerial; imagery (c) Vexcel Imaging)."""
+    img, _ = _aerial(sid)
+    return FileResponse(img, media_type="image/jpeg", headers={"Cache-Control": "max-age=3600"})
+
+
+@app.get("/api/aerial/{sid}/findings")
+def aerial_findings(sid: str) -> dict:
+    """What is visible from above, every answer labelled 'from aerial, estimated'."""
+    _, findings = _aerial(sid)
+    return {"sid": sid, "image_url": f"/api/aerial/{sid}", **json.loads(findings.read_text())}
 
 
 @lru_cache(maxsize=256)

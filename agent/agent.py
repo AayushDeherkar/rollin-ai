@@ -99,6 +99,16 @@ def run_fit(sid: str, chair_width_in: float = 27.0, chair_length_in: float = 42.
     return {"sid": sid, "name": res["name"], "scenario": res["scenario"], "chair_in": res["chair_in"], "rooms": rooms}
 
 
+def aerial_check(sid: str) -> dict:
+    """Outside check for a unit's building from Vexcel aerial imagery: accessible parking, curb ramps, walkways,
+    exterior stairs, storeys. Every answer is yes / no / unclear and is an estimate from aerial imagery."""
+    from engine.vexcel import aerial_check_unit
+    try:
+        return aerial_check_unit(sid)
+    except Exception as e:                           # imagery or model unavailable: say so, never guess
+        return {"sid": sid, "error": f"aerial check failed: {type(e).__name__}"}
+
+
 def with_ai_disclosure(text: str) -> str:
     """Every outbound message says up front that it comes from an AI."""
     return text if "AI assistant" in text[:200] else AI_DISCLOSURE + text
@@ -132,7 +142,8 @@ Your first action is write_todos with the plan. Then delegate:
 2. `geometry` subagent: run the fit engine on the top 2-3 candidates, as scanned and with offset hinges when a door is
    short by 1.75 in or less; report each blocked or unknown bedroom/bathroom with its measured door width.
 3. `verifier` subagent: label every claim measured / estimated / assumed / unknown and turn unknowns into questions.
-4. `outreach` subagent: draft ONE message to the leasing office of the best unit with those questions.
+4. `outside` subagent: aerial check of the best unit's building (parking, curb ramps, walkways); estimates only.
+5. `outreach` subagent: draft ONE message to the leasing office of the best unit with those questions.
 Then call send_message with that drafted text and recipient. A human must approve it; you cannot send without approval.
 Finish with a short shortlist: each unit's sid, name, rooms reachable as scanned and with hinges, and what is unknown.
 Always use the user's exact chair size; never try other sizes. You do not need the file tools.
@@ -158,6 +169,10 @@ def subagents(model: Any) -> list[dict]:
         {"name": "general-purpose", "description": "Read-only helper for anything the other subagents do not cover.",
          "system_prompt": "Answer using the read-only tools. You cannot contact anyone.",
          "tools": [search_units, get_unit, run_fit], "model": model},
+        {"name": "outside", "description": "Checks a unit's building from Vexcel aerial imagery (parking, curb ramps, walkways).",
+         "system_prompt": "Call aerial_check once for the unit you are given. Report each answer exactly as returned, labelled "
+                          "'from aerial, estimated'. Anything 'unclear' becomes a question for the landlord. Never upgrade unclear to yes.",
+         "tools": [aerial_check], "model": model},
         {"name": "outreach", "description": "Drafts (never sends) a message to a leasing office.",
          "system_prompt": "Call draft_landlord_message once with the questions you are given. Return the draft text and recipient. "
                           "You cannot send messages.",
@@ -255,6 +270,7 @@ def findings_from_fit(res: dict, chair_w: float) -> list[dict]:
 PIPELINE = ["Find candidate units near the Texas Medical Center (search)",
             "Drive the chair through each candidate's floor plan, as scanned and with offset hinges (geometry)",
             "Check every claim and label its basis; turn unknowns into questions (verifier)",
+            "Check the building outside from aerial imagery (outside)",
             "Draft questions for the leasing office (outreach)",
             "Ask for approval before sending anything"]
 
@@ -320,6 +336,11 @@ class Run:
             if sub == "verifier":
                 return [self.ev("verify", text=text, checked=self.checked(), questions=self.questions())]
             return [self.ev("tool", name="task", subagent=sub, status="done", result={"text": text})]
+        if name == "aerial_check" and isinstance(data, dict) and "findings" in data:
+            return [self.ev("aerial", sid=data["sid"], image_url=f"/api/aerial/{data['sid']}", label="from aerial, estimated",
+                            source=data.get("source"), numbers={"clip_size": num(data.get("clip_m"), "assumed", "m")},
+                            findings=[{k: f[k] for k in ("item", "question", "answer", "note", "basis", "label")}
+                                      for f in data["findings"]])]
         if name in ("get_unit", "draft_landlord_message"):
             return [self.ev("tool", name=name, status="done", args=wrap_args(args),
                             result=data if name == "draft_landlord_message" else {"sid": args.get("sid")})]
