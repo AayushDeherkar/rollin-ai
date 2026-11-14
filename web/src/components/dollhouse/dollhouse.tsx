@@ -11,7 +11,7 @@
  * lost, or the frame rate stays low, `onFallback` hands the plan back to the 2D view.
  */
 import { Component, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { Html, Line, OrbitControls } from "@react-three/drei";
 import { useReducedMotionConfig, type MotionValue } from "motion/react";
 import * as THREE from "three";
@@ -43,6 +43,8 @@ export interface DollhouseProps {
   s: RouteSampler;
   selectedRoom: string | null;
   onRoomSelect: (roomId: string) => void;
+  /** a door the chair cannot pass was clicked (opens the tour); absent when there is no tour */
+  onDoorOpen?: (edge: string) => void;
   onFallback: (reason: string) => void;
 }
 
@@ -69,7 +71,7 @@ export function Dollhouse(props: DollhouseProps) {
             <BaseBoard floor={props.floor} palette={palette} />
             <Floors floor={props.floor} palette={palette} selected={props.selectedRoom} onSelect={props.onRoomSelect} />
             <Walls floor={props.floor} palette={palette} />
-            <Doors floor={props.floor} palette={palette} hinges={hinges} drive={props.drive} driving={props.driving} />
+            <Doors floor={props.floor} palette={palette} hinges={hinges} drive={props.drive} driving={props.driving} onOpen={props.onDoorOpen} />
             <TurningCircles floor={props.floor} palette={palette} />
             <RoomLabels floor={props.floor} />
             {props.drive && <Chair chairIn={props.unit.chair_in} drive={props.drive} progress={props.progress} s={props.s} palette={palette} />}
@@ -140,7 +142,10 @@ function Rig({ drive, driving, progress, s, centre, span }: DollhouseProps & { c
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
   /** seconds (performance clock) the user last let go of the camera; Infinity while they hold it */
   const touched = useRef(-Infinity);
-  const scratch = useRef({ offset: new THREE.Vector3(), goal: new THREE.Vector3() });
+  const scratch = useRef({
+    offset: new THREE.Vector3(),
+    goal: new THREE.Vector3(),
+  });
   useFrame((st, dt) => {
     const c = controls.current;
     if (!c) return;
@@ -234,7 +239,11 @@ function patternTexture(status: RoomStatus, p: Palette): THREE.CanvasTexture {
 
 function Floors({ floor, palette, selected, onSelect }: { floor: Floor; palette: Palette; selected: string | null; onSelect: (id: string) => void }) {
   const textures = useMemo(
-    () => ({ reachable: patternTexture("reachable", palette), blocked: patternTexture("blocked", palette), unknown: patternTexture("unknown", palette) }),
+    () => ({
+      reachable: patternTexture("reachable", palette),
+      blocked: patternTexture("blocked", palette),
+      unknown: patternTexture("unknown", palette),
+    }),
     [palette],
   );
   useEffect(() => () => Object.values(textures).forEach((t) => t.dispose()), [textures]);
@@ -321,18 +330,46 @@ function Walls({ floor, palette }: { floor: Floor; palette: Palette }) {
   );
 }
 
-function Doors({ floor, palette, hinges, drive, driving }: { floor: Floor; palette: Palette; hinges: boolean; drive: Drive | null; driving: boolean }) {
+function Doors({
+  floor,
+  palette,
+  hinges,
+  drive,
+  driving,
+  onOpen,
+}: {
+  floor: Floor;
+  palette: Palette;
+  hinges: boolean;
+  drive: Drive | null;
+  driving: boolean;
+  onOpen?: (edge: string) => void;
+}) {
   const lit = drive?.kind === "blocked" && !driving ? drive.door?.edge : null;
   return (
     <group>
       {floor.doors.map((d) => (
-        <DoorFrame key={d.edge + d.center.join()} floor={floor} door={d} palette={palette} hinges={hinges} lit={lit === d.edge} />
+        <DoorFrame key={d.edge + d.center.join()} floor={floor} door={d} palette={palette} hinges={hinges} lit={lit === d.edge} onOpen={onOpen} />
       ))}
     </group>
   );
 }
 
-function DoorFrame({ floor, door, palette, hinges, lit }: { floor: Floor; door: Floor["doors"][number]; palette: Palette; hinges: boolean; lit: boolean }) {
+function DoorFrame({
+  floor,
+  door,
+  palette,
+  hinges,
+  lit,
+  onOpen,
+}: {
+  floor: Floor;
+  door: Floor["doors"][number];
+  palette: Palette;
+  hinges: boolean;
+  lit: boolean;
+  onOpen?: (edge: string) => void;
+}) {
   const reduce = useReducedMotionConfig();
   const g = useMemo(() => doorGeometry(floor, door), [floor, door]);
   const wall = floor.walls.find((w) => w.edge === door.edge);
@@ -354,8 +391,23 @@ function DoorFrame({ floor, door, palette, hinges, lit }: { floor: Floor; door: 
   // not passable is never colour alone: a dashed sill across the opening, as dashed means
   // "does not fit" for turning circles too
   const sill = useMemo(() => [v3(g.j0[0], g.j0[1], 0.03), v3(g.j1[0], g.j1[1], 0.03)], [g]);
+  // a door the chair cannot pass opens the unit's tour, to see it as scanned
+  const open = !door.passable && onOpen;
+  const handlers = open
+    ? {
+        onClick: (e: ThreeEvent<MouseEvent>) => {
+          e.stopPropagation();
+          onOpen(door.edge);
+        },
+        onPointerOver: (e: ThreeEvent<PointerEvent>) => {
+          e.stopPropagation();
+          document.body.style.cursor = "pointer";
+        },
+        onPointerOut: () => (document.body.style.cursor = ""),
+      }
+    : {};
   return (
-    <group>
+    <group {...handlers}>
       {!door.passable && <Line points={sill} color={palette.block} lineWidth={4} dashed dashSize={0.06} gapSize={0.05} />}
       {/* jambs and head */}
       {[g.j0, g.j1].map((j, i) => (
@@ -439,20 +491,39 @@ function RoomLabels({ floor }: { floor: Floor }) {
 }
 
 /** The chair: seat, back and wheels on the width × length footprint the engine tested. */
-function Chair({ chairIn, drive, progress, s, palette }: { chairIn: [number, number]; drive: Drive; progress: MotionValue<number>; s: RouteSampler; palette: Palette }) {
+function Chair({
+  chairIn,
+  drive,
+  progress,
+  s,
+  palette,
+}: {
+  chairIn: [number, number];
+  drive: Drive;
+  progress: MotionValue<number>;
+  s: RouteSampler;
+  palette: Palette;
+}) {
   const W = chairIn[0] * M_PER_IN;
   const L = chairIn[1] * M_PER_IN;
   const body = useRef<THREE.Group>(null);
   const mats = useRef<THREE.MeshStandardMaterial[]>([]);
-  const colours = useMemo(() => ({ moving: new THREE.Color(palette.agent), still: new THREE.Color(palette.ink) }), [palette]);
+  const colours = useMemo(
+    () => ({
+      moving: new THREE.Color(palette.agent),
+      still: new THREE.Color(palette.ink),
+    }),
+    [palette],
+  );
   const footprint = useMemo(
-    () => [
-      [-L / 2, 0.02, -W / 2],
-      [L / 2, 0.02, -W / 2],
-      [L / 2, 0.02, W / 2],
-      [-L / 2, 0.02, W / 2],
-      [-L / 2, 0.02, -W / 2],
-    ] as [number, number, number][],
+    () =>
+      [
+        [-L / 2, 0.02, -W / 2],
+        [L / 2, 0.02, -W / 2],
+        [L / 2, 0.02, W / 2],
+        [-L / 2, 0.02, W / 2],
+        [-L / 2, 0.02, -W / 2],
+      ] as [number, number, number][],
     [W, L],
   );
   const track = useMemo(() => drive.route.map(([x, y]) => v3(x, y, 0.015)), [drive.route]);

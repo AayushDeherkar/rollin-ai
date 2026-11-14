@@ -81,6 +81,7 @@ export function PlanStage({
   s,
   selectedRoom,
   onRoomSelect,
+  onDoorOpen,
   renderPlan,
 }: {
   unit: UnitResult;
@@ -91,6 +92,7 @@ export function PlanStage({
   s: RouteSampler;
   selectedRoom: string | null;
   onRoomSelect: (roomId: string) => void;
+  onDoorOpen?: (edge: string) => void;
   /** the 2D plan, full size or as the compact inset */
   renderPlan: (compact: boolean) => ReactNode;
 }) {
@@ -153,6 +155,7 @@ export function PlanStage({
           s={s}
           selectedRoom={selectedRoom}
           onRoomSelect={onRoomSelect}
+          onDoorOpen={onDoorOpen}
           onFallback={onFallback}
         />
       </div>
