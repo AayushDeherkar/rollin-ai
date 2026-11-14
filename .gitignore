@@ -12,6 +12,7 @@ data/raw/
 data/cache/
 data/batch/
 data/replay/
+data/outbox/
 data/models/
 .DS_Store
 .pytest_cache/

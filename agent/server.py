@@ -36,6 +36,17 @@ app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000"],
 app.include_router(chat_router)
 
 
+def _attach_live_agent() -> None:
+    """POST /api/chat runs the deepagents orchestrator when a model is configured in .env."""
+    from agent import chat
+    from agent.agent import configured, run_agent
+    if configured():
+        chat.live_runner = run_agent
+
+
+_attach_live_agent()
+
+
 def data_dir() -> pathlib.Path:
     return pathlib.Path(os.environ.get("ROLLIN_DATA_DIR") or ROOT / "data")
 
