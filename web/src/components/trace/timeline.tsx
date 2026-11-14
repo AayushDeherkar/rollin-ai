@@ -2,7 +2,7 @@
 
 import { motion, useReducedMotionConfig } from "motion/react";
 import { CircleCheck, CircleDot, Flag, History, ListChecks, Satellite, ShieldCheck, Square, Wrench, type LucideIcon } from "lucide-react";
-import type { AgentEvent, ApprovalEvent, FinalEvent, FindingEvent, PlanEvent, ToolEvent, VerifyEvent } from "@/lib/agent-events";
+import type { AgentEvent, ApprovalEvent, FinalEvent, FindingEvent, MemoryEvent, PlanEvent, ToolEvent, VerifyEvent } from "@/lib/agent-events";
 import { isNum } from "@/lib/agent-events";
 import type { Decision } from "@/lib/agent";
 import { DUR, EASE_DRAFT } from "@/lib/motion";
@@ -223,15 +223,22 @@ function Step({
       );
     }
     case "memory": {
-      // what the agent remembers about this sender between messages (profile memory)
-      const all = ev as AgentEvent & Record<string, unknown>;
-      const text = all.text;
-      const rest = Object.fromEntries(Object.entries(all).filter(([k]) => !["id", "ts", "run_id", "type", "replay", "text"].includes(k)));
+      // what profile memory did for this sender (contract v3): saved, updated or used
+      const m = ev as MemoryEvent;
+      const chair = m.profile?.chair_in?.length === 2 ? m.profile.chair_in : null;
+      const verb = m.action === "used" ? "Remembered" : m.action === "saved" ? "Saved to memory" : m.action === "updated" ? "Memory updated" : "Memory";
       return (
         <>
-          <Title icon={History}>Memory</Title>
-          {typeof text === "string" && <p className="text-base">{text}</p>}
-          <Fields label="Kept" data={rest} />
+          <Title icon={History}>{verb}</Title>
+          {m.text && <p className="text-base">{m.text}</p>}
+          {chair && (
+            <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm">
+              <span className="text-ink-soft">Chair</span>
+              <NumValue n={chair[0]} />
+              <span>×</span>
+              <NumValue n={chair[1]} />
+            </span>
+          )}
         </>
       );
     }

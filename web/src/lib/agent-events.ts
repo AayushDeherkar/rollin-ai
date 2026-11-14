@@ -87,6 +87,16 @@ export interface ApprovalEvent extends Base {
   draft?: string;
   reason?: string;
 }
+/** what profile memory did for this sender_id (contract v3); never sent without one */
+export interface MemoryEvent extends Base {
+  type: "memory";
+  sender_id?: string;
+  action?: "saved" | "updated" | "used" | string;
+  text?: string;
+  /** the file in the agent's filesystem memory */
+  path?: string;
+  profile?: { chair_in?: Num[] | null };
+}
 export interface FinalEvent extends Base {
   type: "final";
   text?: string;
@@ -97,7 +107,7 @@ export interface OtherEvent extends Base {
   text?: string;
 }
 
-export type AgentEvent = PlanEvent | ToolEvent | FindingEvent | VerifyEvent | ApprovalEvent | FinalEvent | OtherEvent;
+export type AgentEvent = PlanEvent | MemoryEvent | ToolEvent | FindingEvent | VerifyEvent | ApprovalEvent | FinalEvent | OtherEvent;
 
 /** POST /api/approve result (agent/approvals.py) */
 export interface ApproveResult {
