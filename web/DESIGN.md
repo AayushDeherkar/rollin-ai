@@ -98,7 +98,7 @@ The steps are a real sequence, so the step bar numbers them.
 
 ### Presenter, fallback and public replay
 
-- `?demo=1` opens step 3 on `demo-main` (resolved by the API's health, never a hard-coded id) with the chair stopped at the bedroom door. `R` resets the demo.
+- `?demo=1` opens step 3 on `demo-main` with the chair already stopped at the bedroom door, the camera set on the door and its ruler, no flight. `/api/demo` resolves the unit from the API's health (the first unit of its demo pack, never a hard-coded id), or the synthetic contract unit when there is no API. `R` puts everything back: bedroom, as scanned, hinges off, evidence closed.
 - No WebGL, a lost context, or a frame rate under 24 fps: the page sends you to `/classic` and says why there.
 - The public build is fixture-only: synthetic apartment, no API URL, no keys, and a visible "Replay with a synthetic apartment" label.
 
