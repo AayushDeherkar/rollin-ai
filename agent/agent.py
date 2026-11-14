@@ -237,6 +237,13 @@ INTERRUPT_ON = {"send_message": {"allowed_decisions": ["approve", "reject"]}}
 ORCHESTRATOR_TOOLS = [search_units, get_unit, check_units, draft_landlord_message, send_message]
 
 
+def memory_permissions() -> list:
+    """The agent's file tools may not read or write /memories/ (other senders' profiles); only agent.memory does.
+    Subagents inherit these rules because none of them sets its own."""
+    from deepagents.middleware.filesystem import FilesystemPermission
+    return [FilesystemPermission(operations=["read", "write"], paths=["/memories/**", "/memories"], mode="deny")]
+
+
 def configured() -> bool:
     prov = os.environ.get("MODEL_PROVIDER", "").lower()
     return prov in PROVIDERS and bool(os.environ.get("MODEL_NAME")) and bool(os.environ.get(KEYS[prov]))
@@ -254,9 +261,14 @@ def get_agent():
         prov = PROVIDERS[os.environ["MODEL_PROVIDER"].lower()]
         extra = {"thinking_budget": int(os.environ.get("ROLLIN_THINKING_BUDGET", "0"))} if prov == "google_genai" else {}
         model = init_chat_model(os.environ["MODEL_NAME"], model_provider=prov, **extra)
+        from deepagents.backends import CompositeBackend, FilesystemBackend, StateBackend
+        from agent.memory import memory_root
+        memory_root().mkdir(parents=True, exist_ok=True)
+        backend = CompositeBackend(default=StateBackend(),             # /memories/ = data/memory on disk (profiles)
+                                   routes={"/memories/": FilesystemBackend(root_dir=memory_root(), virtual_mode=True)})
         _agent = create_deep_agent(model=model, tools=ORCHESTRATOR_TOOLS, system_prompt=SYSTEM,
-                                   subagents=subagents(model), interrupt_on=INTERRUPT_ON,
-                                   checkpointer=InMemorySaver(), name="rollin")
+                                   subagents=subagents(model), interrupt_on=INTERRUPT_ON, backend=backend,
+                                   permissions=memory_permissions(), checkpointer=InMemorySaver(), name="rollin")
     return _agent
 
 
@@ -533,15 +545,40 @@ def resume(thread: dict, approved: bool, n_requests: int = 1, msgs: list[dict] |
     return res
 
 
+def memory_event(sender_id: str, mem: dict) -> dict:
+    """What profile memory did, in words and with the chair size labelled by where it came from."""
+    from agent.memory import key_for
+    w, l = mem["chair_in"]
+    text = {"used": (f"Using the {w:g}x{l:g} in chair from your last request." if mem["source"] == "memory" else
+                     f"Your {w:g}x{l:g} in chair matches your saved profile."),
+            "saved": f"Saved your {w:g}x{l:g} in chair for next time.",
+            "updated": (f"Updated your chair to {w:g}x{l:g} in (was {mem['previous'][0]:g}x{mem['previous'][1]:g} in)."
+                        if mem.get("previous") else f"Updated your chair to {w:g}x{l:g} in.")}[mem["action"]]
+    return {"sender_id": sender_id, "action": mem["action"], "text": text,
+            "path": f"/memories/profiles/{key_for(sender_id)}.json",
+            "profile": {"chair_in": [num(v, "asked", "in", source=mem["source"]) for v in mem["chair_in"]]}}
+
+
 async def run_agent(message: str, profile: dict, run_id: str) -> AsyncIterator[dict]:
     """Live runner for POST /api/chat."""
     agent = get_agent()
     thread = {"configurable": {"thread_id": run_id}, "recursion_limit": 120,
               "metadata": {"run_id": run_id}, "run_name": "rollin-chat"}
-    prompt = message if not profile else f"{message}\n\nProfile: {json.dumps(profile)}"
+    from agent import memory
+    profile, mem = memory.resolve(message, profile)
     r = Run(run_id)
-    yield r.ev("plan", text="Orchestrator pipeline", source="orchestrator",
-               todos=[{"id": f"t{i}", "text": t, "status": "pending"} for i, t in enumerate(PIPELINE, 1)])
+    plan = {"text": "Orchestrator pipeline", "source": "orchestrator",
+            "todos": [{"id": f"t{i}", "text": t, "status": "pending"} for i, t in enumerate(PIPELINE, 1)]}
+    if profile.get("chair_in") or profile.get("sender_id"):
+        src = (mem or {}).get("source", "user")
+        plan["profile"] = {"sender_id": profile.get("sender_id"),
+                           "chair_in": [num(v, "asked", "in", source=src) for v in profile.get("chair_in") or []]}
+    yield r.ev("plan", **plan)
+    if mem:
+        yield r.ev("memory", **memory_event(profile["sender_id"], mem))
+    note = (" (chair size from this person's saved profile)" if mem and mem["source"] == "memory" else "")
+    for_model = {k: v for k, v in profile.items() if k != "sender_id"}      # the model never sees who is asking
+    prompt = message if not for_model else f"{message}\n\nProfile{note}: {json.dumps(for_model)}"
     async for ns, chunk in agent.astream({"messages": [{"role": "user", "content": prompt}]}, thread,
                                          stream_mode="updates", subgraphs=True):
         for node, upd in chunk.items():

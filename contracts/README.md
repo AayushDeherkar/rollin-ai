@@ -37,9 +37,10 @@ Every field is optional. Numbers the person gives are reported back in events wi
 
 ## Chat events
 - `final.shortlist[]` only names units the run checked with `run_fit` (so each has a plan).
-- `plan.profile` (optional) echoes the profile the run uses: `{sender_id, chair_in: [Num, Num]}`. The live agent sends it once profile memory lands (round 3, task 3); until then only the example has it.
+- `memory` (new type, right after `plan`) says what profile memory did for this `sender_id`: `action` is `saved`, `updated` or `used`; `text` is one line for the trace ("Using the 27x42 in chair from your last request."); `profile.chair_in` values carry `basis: asked` with `source: memory` (reused) or `source: user` (stated now); `path` is the file in the agent's filesystem memory. No `memory` event is sent without a `sender_id`.
+- `plan.profile` (optional) echoes the profile the run uses: `{sender_id, chair_in: [Num, Num]}`. The live agent sends it whenever a chair size or `sender_id` is known.
 - Every event has `id`, `ts` (ISO 8601 UTC), `run_id`, `type`.
-- `type` is one of `plan`, `tool`, `finding`, `verify`, `aerial`, `approval_needed`, `final`.
+- `type` is one of `plan`, `memory`, `tool`, `finding`, `verify`, `aerial`, `approval_needed`, `final`.
 - `aerial` events give `sid`, `text` (a one-line summary the trace shows), `image_url` (`GET /api/aerial/{sid}`), `label: "from aerial, estimated"` and `findings[]` of `{item, question, answer: yes|no|unclear, note, basis: estimated, label}`. A top-down photo cannot show steps at doors, door widths or elevators, so those are never claimed.
 - Every number is wrapped: `{"value": 26.0, "unit": "in", "basis": "estimated"}`. An unknown number is `{"value": null, "basis": "unknown"}`.
 - `basis` is one of:
