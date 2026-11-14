@@ -52,9 +52,11 @@ def test_examples_are_synthetic():
 
 def test_units_list_shape_and_ranking():
     d = load("units_list.example.json")
-    assert set(d) == {"query", "total", "units"} and d["total"] == len(d["units"])
+    assert set(d) == {"query", "total", "units", "source"} and d["total"] == len(d["units"])
     for u in d["units"]:
-        assert {"sid", "name", "lat", "lon", "score", "counts", "summary", "basis", "source"} <= set(u)
+        assert {"sid", "name", "lat", "lon", "score", "counts", "summary", "basis", "source",
+                "distance_km", "with_hinges", "usable"} <= set(u)
+        assert set(u["with_hinges"]["counts"]) == {"reachable", "blocked", "unknown"}
         assert set(u["counts"]) == {"reachable", "blocked", "unknown"}
         assert set(u["basis"].values()) <= BASIS
     scores = [u["score"] for u in d["units"]]

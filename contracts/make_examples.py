@@ -14,7 +14,8 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from engine.summary import rank, unit_row  # noqa: E402
+from engine.batch import km  # noqa: E402
+from engine.summary import rank, room_counts, score, unit_row  # noqa: E402
 
 C = ROOT / "contracts"
 CHAIR = (27.0, 42.0)
@@ -27,6 +28,17 @@ def run_fit(name: str, hinges: bool) -> dict:
             str(CHAIR[0]), str(CHAIR[1])] + (["--hinges"] if hinges else [])
     subprocess.run(args, cwd=ROOT, check=True, capture_output=True)
     return json.loads((ROOT / f"out/{name}_fit{'_hinges' if hinges else ''}.json").read_text())
+
+
+def batch_row(scanned: dict, hinged: dict) -> dict:
+    """Same row shape engine/batch.py writes, from synthetic results."""
+    lat, lon = FAKE_LOC[scanned["model"]]
+    row = unit_row(scanned, lat, lon, source="batch")
+    hc = room_counts(hinged)
+    row.update({"distance_km": round(km(29.7106, -95.3990, lat, lon), 2),
+                "with_hinges": {"score": score(hc), "counts": hc}, "usable": True, "synthetic": True})
+    row["basis"]["distance_km"] = "estimated"
+    return row
 
 
 def num(value, basis: str, unit: str | None = None, **extra) -> dict:
@@ -124,10 +136,12 @@ def main() -> None:
     demo, demo_h, other = run_fit("synthetic_demo", False), run_fit("synthetic_demo", True), run_fit("synthetic_1br", False)
     (C / "unit_result.example.json").write_text(json.dumps(demo, indent=1) + "\n")
     (C / "unit_result.hinges.example.json").write_text(json.dumps(demo_h, indent=1) + "\n")
-    rows = rank([unit_row(r, *FAKE_LOC[r["model"]], source="cache") | {"synthetic": True} for r in (demo, other)])
+    other_h = run_fit("synthetic_1br", True)
+    rows = rank([batch_row(r, rh) for r, rh in ((demo, demo_h), (other, other_h))])
     units = {"query": {"lat": 29.7106, "lon": -95.3990, "radius_km": 8.0, "beds": None,
                        "w": CHAIR[0], "l": CHAIR[1], "hinges": False},
-             "total": len(rows), "units": rows}
+             "total": len(rows), "units": rows,
+             "source": {"kind": "synthetic example", "updated_at": None, "processed": len(rows), "no_data": 0}}
     (C / "units_list.example.json").write_text(json.dumps(units, indent=1) + "\n")
     events = chat_events(demo, demo_h, other, rows)
     (C / "chat_events.example.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
