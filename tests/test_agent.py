@@ -320,6 +320,12 @@ def test_draft_adds_the_unknowns_itself(data):
 def test_named_uncached_unit_is_reported_not_dropped(data):
     s = A.search_units(radius_km=8, include=["notdownloaded", "synthetic_demo"])
     assert s["not_cached"] == ["notdownloaded"] and "notdownloaded" not in {u["sid"] for u in s["units"]}
+    shutil.copy(ROOT / "tests/synthetic_demo.json", data / "cache/unranked1.json")
+    assert A.search_units(include=["unranked1"])["not_in_index"] == ["unranked1"]
+    r = A.Run("run_n")
+    r.calls["c1"] = ("search_units", {"include": ["notdownloaded"]})
+    ev = r.from_tool(_tool_msg("c1", s))[0]
+    assert ev["result"]["not_cached"] == ["notdownloaded"]                 # the UI sees it too
 
 
 def test_fallback_keeps_the_search_filters_and_labels_an_assumed_chair(data):

@@ -138,8 +138,10 @@ def search_units(radius_km: float = 8.0, beds: list[int] | int | None = None, to
     rows.sort(key=lambda u: (-u["score"], u["counts"]["blocked"], u.get("distance_km") or 99))
     n_top = max(1, min(top, 5))
     named = [u for u in units if u["sid"] in (include or [])]
-    extra = {"not_cached": [s for s in dict.fromkeys(include or []) if not _cached(s)]}   # named, but cannot be driven
-    extra = extra if extra["not_cached"] else {}
+    asked = list(dict.fromkeys(include or []))
+    indexed = {u["sid"] for u in units}
+    extra = {k: v for k, v in {"not_cached": [s for s in asked if not _cached(s)],          # named, cannot be driven
+                               "not_in_index": [s for s in asked if _cached(s) and s not in indexed]}.items() if v}
     if (w, l) == BATCH_CHAIR:
         picked = rows[:n_top]
         out = [_row(u) for u in picked + [u for u in named if u not in picked]]
@@ -631,7 +633,7 @@ class Run:
             return [self.ev("tool", name="search_units", status="done", args=wrap_args(args),
                             result={"candidates": num(data["candidates"], "measured"),
                                     "sids": [u["sid"] for u in data["units"]],
-                                    **({"ranked_by": data["ranked_by"]} if data.get("ranked_by") else {})})]
+                                    **{k: data[k] for k in ("ranked_by", "not_cached", "not_in_index") if data.get(k)}})]
         if name == "check_units" and isinstance(data, dict) and "units" in data:
             return self.check_events(data, args)
         if name == "task":
