@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { fixtureAsScanned } from "@/lib/fixtures";
 import { json, upstream } from "@/lib/server/upstream";
 
@@ -10,6 +11,8 @@ const SID = /^[A-Za-z0-9_]{3,40}$/;
  * contract unit, marked as a replay.
  */
 export async function GET() {
+  // asked per request: the API (and its demo pack) can change after the build
+  await connection();
   const up = await upstream("/api/health");
   if (up.ok) {
     const body = (await up.res.json().catch(() => null)) as { demo?: { units?: Record<string, unknown> } } | null;
