@@ -56,14 +56,18 @@ export function useAgentRun() {
     setRun((r) => (r.status === "running" ? { ...r, status: "stopped" } : r));
   }, []);
 
-  const start = useCallback(async (message: string, profile: Record<string, unknown>, opts: { replay?: boolean } = {}) => {
+  const start = useCallback(async (message: string, profile: Record<string, unknown>, opts: { replay?: boolean; pace?: number } = {}) => {
     ctrl.current?.abort();
     const ac = new AbortController();
     ctrl.current = ac;
     setRun({ ...IDLE, status: "running" });
     setDecisions({});
     try {
-      const res = await fetch(`/api/chat${opts.replay ? "?replay=1" : ""}`, {
+      const q = new URLSearchParams();
+      if (opts.replay) q.set("replay", "1");
+      // replay speed: 0 plays a recorded run at once (screenshots, rehearsal); live runs ignore it
+      if (opts.pace !== undefined) q.set("pace", String(opts.pace));
+      const res = await fetch(`/api/chat${q.size ? `?${q}` : ""}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ message, profile }),

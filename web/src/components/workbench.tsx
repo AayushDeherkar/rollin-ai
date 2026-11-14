@@ -59,7 +59,7 @@ function useForceReduce(): boolean {
 }
 
 /** `?agent=replay` plays the recorded run instead of the live agent (labelled replay on screen). */
-function readAgentReplay(): boolean {
+export function readAgentReplay(): boolean {
   return new URLSearchParams(window.location.search).get("agent") === "replay";
 }
 
@@ -67,7 +67,7 @@ function readAgentReplay(): boolean {
  * A stable id for this browser, sent as the profile's sender_id (contract v3) so the agent's
  * profile memory carries across runs from the same browser. Random; it identifies no one.
  */
-function webSenderId(): string | undefined {
+export function webSenderId(): string | undefined {
   try {
     const key = "rollin.sender";
     let id = localStorage.getItem(key);
