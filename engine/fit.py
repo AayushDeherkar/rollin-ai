@@ -220,6 +220,7 @@ def analyze_floor(floor, room_list, chair_w, chair_l, hinges=False):
 
     def blocking_door(rid):
         """Nearest door (by rooms crossed) where the chair stops on its way to room `rid`.
+        Searches outward through unreached rooms via doors and open passages.
         Returns (opening, reached room on the near side) or (None, None)."""
         seen_r, q = {rid}, deque([rid])
         while q:
@@ -228,11 +229,12 @@ def analyze_floor(floor, room_list, chair_w, chair_l, hinges=False):
             front = [(o, x) for o in ds for x in other_side(o, cur) if reached[x]]
             if front:
                 return max(front, key=lambda ox: ox[0]["clear_m"])
-            for o in ds:
-                for x in other_side(o, cur):
-                    if x not in seen_r:
-                        seen_r.add(x)
-                        q.append(x)
+            passages = [x for i in by_id[cur]["edges"] if E[i]["type"] != "wall"
+                        for x in edge_rooms.get(i, []) if x in room_ids and x != cur]
+            for x in [x for o in ds for x in other_side(o, cur)] + passages:
+                if x not in seen_r and not reached[x]:
+                    seen_r.add(x)
+                    q.append(x)
         return None, None
 
     results = []

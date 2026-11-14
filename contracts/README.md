@@ -16,7 +16,7 @@ No real Matterport, CoStar or Vexcel data is ever stored here. Lat/lon values ar
 | `chat_events.example.jsonl` | `POST /api/chat` (SSE) | One full agent run, one JSON event per line. |
 
 ## Unit result fields added in contract v2 (additive)
-- `rooms[].path` is still `[[x, y, heading_rad], ...]` for reachable rooms. For **blocked** rooms it is now the chair's drive up to the door that stops it, ending at the chair centre nearest that door on the reachable side. It is `null` only when no door stops the chair: the room is unknown, or the chair fits nowhere in the start room.
+- `rooms[].path` is still `[[x, y, heading_rad], ...]` for reachable rooms. For **blocked** rooms it is now the chair's drive up to the door that stops it, ending at the chair centre nearest that door on the reachable side. It is `null` (and so is `blocking_door_edge`) when no measured door on the way connects to a room the chair reached. That happens when the room is unknown, when the chair fits nowhere in the start room, when the room is reached only through an open passage that is too tight, or when its only door leads outside the unit.
 - `rooms[].blocking_door_edge` is the `edge` id (it matches `floors[].doors[].edge`) of the door where the chair stops on its way to a blocked room, or `null`. This may be the door of an intermediate room, for example a bathroom reached through a blocked bedroom.
 - `rooms[].turning_space.center` is the `[x, y]` (metres, model frame) of the largest turning circle (walls only).
 

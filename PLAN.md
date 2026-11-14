@@ -169,7 +169,7 @@ Writes `out/<sid>_fit[ _hinges].json` and `out/<sid>_floor<N>_fit[ _hinges].png`
       "reason":"widest door ~<x> in clear < chair 27.0 in (short by <x> in); offset hinges ... --hinges",
       "doors":[{"type":"doorway","width_in":<x>,"clear_in_est":<x>,"center":[x,y]}],
       "turning_space":{"max_circle_in":<x>,"meets_60in":true,"walls_only":true,"center":[x,y]} | null,
-      "path":[[x,y,theta_rad], ...] | null,     // chair centre + heading, metres, model frame; blocked rooms: up to the blocking door
+      "path":[[x,y,theta_rad], ...] | null,     // chair centre + heading, metres, model frame; blocked rooms: up to the blocking door (null if no door on the way connects to a reached room)
       "blocking_door_edge":"z" | null,           // door where the chair stops (blocked rooms only)
       "polygon":[[x,y], ...]
     }]

@@ -114,3 +114,28 @@ def test_v2_hinges_example_bedroom_has_path_and_no_blocking_door():
     before, after = bed("unit_result.example.json"), bed("unit_result.hinges.example.json")
     assert before["blocking_door_edge"] and before["path"]
     assert after["blocking_door_edge"] is None and after["path"]
+
+def test_v2_blocking_door_found_through_open_passage():
+    import copy
+    from engine.fit import analyze_model
+    m = copy.deepcopy(json.loads((ROOT / "tests/synthetic_demo.json").read_text())["data"]["model"])
+    # split the bedroom with an open (invisible) passage: bed -> bed_b; bed_b has no door of its own
+    f = m["floors"][0]
+    f["vertices"] += [{"id": "m1", "position": {"x": 4.5, "y": 4}}, {"id": "m2", "position": {"x": 4.5, "y": 7}}]
+    edges = {e["id"]: e for e in f["edges"]}
+    edges["e_cg"]["vertices"] = [{"id": "m1"}, {"id": "g"}]
+    edges["e_cg"]["openings"][0]["relativeCenter"] = 0.5
+    edges["e_ef"]["vertices"] = [{"id": "m2"}, {"id": "f"}]
+    f["edges"] += [{"id": "e_cm", "type": "wall", "thickness": 0.12, "vertices": [{"id": "c"}, {"id": "m1"}], "openings": []},
+                   {"id": "e_em", "type": "wall", "thickness": 0.15, "vertices": [{"id": "e"}, {"id": "m2"}], "openings": []},
+                   {"id": "e_mm", "type": "invisible", "thickness": 0.0, "vertices": [{"id": "m1"}, {"id": "m2"}], "openings": []}]
+    rooms = {r["id"]: r for r in m["rooms"]}
+    rooms["living"]["boundary"]["edges"].append({"id": "e_cm"})
+    rooms["bed"]["boundary"]["edges"] = [{"id": "e_cg"}, {"id": "e_mm"}, {"id": "e_ef"}, {"id": "e_fg"}]
+    m["rooms"].append({"id": "bed_b", "floor": {"id": "f1"}, "classifications": [{"label": "Bedroom", "confidence": 0.9}],
+                       "boundary": {"edges": [{"id": "e_cm"}, {"id": "e_ce"}, {"id": "e_em"}, {"id": "e_mm"}]}})
+    out = analyze_model(m, "split", 27.0, 42.0)
+    by = {r["room_id"]: r for r in out["floors"][0]["rooms"]}
+    assert by["bed"]["status"] == by["bed_b"]["status"] == "blocked"
+    assert by["bed_b"]["blocking_door_edge"] == "e_cg" and by["bed_b"]["path"]
+
