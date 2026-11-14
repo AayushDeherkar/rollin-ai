@@ -85,8 +85,8 @@ def health() -> dict:
         doc = json.loads(idx.read_text())
         meta = {k: doc.get(k) for k in ("candidates", "processed", "ranked", "updated_at", "chair_in")}
     models = [p for p in (d / "cache").glob("*.json") if not p.name.startswith("aerial_")] if (d / "cache").exists() else []
-    return {"ok": True, "cached_models": len(models),
-            "batch": meta or None}
+    from engine.demo_pack import demo_status
+    return {"ok": True, "cached_models": len(models), "batch": meta or None, "demo": demo_status()}
 
 
 @app.get("/api/units")
