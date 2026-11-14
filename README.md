@@ -53,7 +53,7 @@ python -m engine.demo_pack     # writes ~/rollin-share/rollin_demo_pack.zip (it 
 The pack contains the batch index, the replay, and the model JSON, cached fit results, aerial clips and findings, and vision findings for the demo units, the replay's units and the top 20 ranked. `MANIFEST.json` lists anything missing. Unzip it at the repo root on the demo machine. Real data: never commit it.
 
 ## The agent (live `/api/chat`)
-`agent/agent.py` is a deepagents 0.7.38 orchestrator with four subagents (`search`, `geometry`, `verifier`, `outreach`) and five orchestrator tools (`search_units`, `get_unit`, `check_units`, `draft_landlord_message`, `send_message`); subagents also use `aerial_check`.
+`agent/agent.py` is a deepagents 0.7.38 orchestrator with subagents `search`, `geometry`, `outside` and `outreach` (the verifier is deterministic code) and five orchestrator tools (`search_units`, `get_unit`, `check_units`, `draft_landlord_message`, `send_message`); subagents also use `aerial_check`.
 - **Model:** `MODEL_PROVIDER` (`google` or `anthropic`) and `MODEL_NAME` from `.env`; we use `gemini-3.8-flash`. When these are set, the server attaches the agent to `POST /api/chat` automatically.
 - **Approval:** `send_message` is held by the orchestrator only and is listed in `interrupt_on`. The run pauses and emits `approval_needed`, and continues only when `POST /api/approve` is called. Every outbound text starts by saying it comes from an AI. An approved message is queued in `data/outbox/` (gitignored) for the iMessage bridge; the agent itself delivers nothing.
 - **Tracing:** LangSmith traces go to the `LANGSMITH_PROJECT` set in `.env`.
@@ -66,7 +66,7 @@ The pack contains the batch index, the replay, and the model JSON, cached fit re
   - no model thinking (`ROLLIN_THINKING_BUDGET=0`);
   - one `check_units` call for up to 4 units, backed by a disk cache of engine results (`data/cache/fit/`);
   - a compact top-3 search;
-  - four orchestrator turns, with geometry and outside in parallel, then verifier and outreach in parallel.
+  - four orchestrator turns, with geometry and outside in parallel; the verifier is code, so no model turn.
 
 ## Built with
 Matterport Model API (wall graph, openings, rooms, panoramas), Vexcel aerial imagery, CoStar records, LangChain deepagents, LangChain, LangGraph, LangSmith, Google Gemini (gemini-3.8-flash via langchain-google-genai), Photon 2.0 (@photon-ai/api), NumPy, SciPy, Shapely, Pillow, Matplotlib, FastAPI, Uvicorn, HTTPX (tests), Requests, python-dotenv, pytest, Next.js, Tailwind, shadcn/ui, Radix, Motion, Lucide, socket.io-client, tsx; fonts Big Shoulders, Public Sans, IBM Plex Mono.

@@ -13,6 +13,7 @@ from model text.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import os
 import pathlib
@@ -56,26 +57,99 @@ def _row(u: dict) -> dict:
             "reachable": f"{c['reachable']}/{total}", "with_hinges": f"{h['reachable']}/{total}"}
 
 
+RERANK_POOL = 8                      # batch candidates re-checked live when the chair is not the batch chair
+BATCH_CHAIR = (27.0, 42.0)
+_CHAIR: contextvars.ContextVar[tuple[float, float] | None] = contextvars.ContextVar("rollin_chair", default=None)
+
+
+def _chair(w: float | None, l: float | None) -> tuple[float, float]:
+    """Explicit size, else this run's chair from the person's profile, else the batch chair (assumed)."""
+    run = _CHAIR.get() or BATCH_CHAIR
+    return float(w if w else run[0]), float(l if l else run[1])
+
+
+def _cached(sid: str) -> bool:
+    return (data_dir() / "cache" / f"{sid}.json").exists()
+
+
+def _fit_pair(sid: str, w: float, l: float, data: str | None = None) -> str:
+    """Worker: both scenarios for one unit into the fit cache (process pool; `data` pins the data dir)."""
+    if data:
+        os.environ["ROLLIN_DATA_DIR"] = data
+    run_fit(sid, w, l)
+    run_fit(sid, w, l, True)
+    return sid
+
+
+_POOL = None
+
+
+def _fit_many(sids: list[str], w: float, l: float) -> None:
+    """Fill the fit cache for these units at this chair. Uncached fits take seconds each, so several run in parallel."""
+    global _POOL
+    todo = [s for s in sids if not (_fit_cached(s, w, l, False) and _fit_cached(s, w, l, True))]
+    if len(todo) > 2:
+        try:
+            from concurrent.futures import ProcessPoolExecutor
+            if _POOL is None:
+                _POOL = ProcessPoolExecutor(max_workers=min(8, os.cpu_count() or 2))
+            list(_POOL.map(_fit_pair, todo, [w] * len(todo), [l] * len(todo), [str(data_dir())] * len(todo)))
+            return
+        except Exception:                            # no worker processes available: do it here
+            _POOL = None
+    for s in todo:
+        _fit_pair(s, w, l)
+
+
+def _fit_row(sid: str, w: float, l: float) -> dict:
+    """Live counts for a search row from the (now cached) fits at this chair."""
+    a, h = run_fit(sid, w, l), run_fit(sid, w, l, True)
+    n = len(a["rooms"])
+    ok = sum(r["status"] == "reachable" for r in a["rooms"])
+    blocked = sum(r["status"] == "blocked" for r in a["rooms"])
+    return {"score": ok / n if n else 0.0, "blocked": blocked, "reachable": f"{ok}/{n}",
+            "with_hinges": f"{sum(r['status'] == 'reachable' for r in h['rooms'])}/{n}"}
+
+
 def search_units(radius_km: float = 8.0, beds: list[int] | int | None = None, top: int = 3,
-                 include: list[str] | None = None) -> dict:
-    """Best units near the Texas Medical Center from the precomputed batch (27x42 in chair), compact.
+                 include: list[str] | None = None, chair_width_in: float | None = None,
+                 chair_length_in: float | None = None) -> dict:
+    """Best units near the Texas Medical Center for the person's chair, compact. Only units with a downloaded
+    floor plan are returned. The batch is ranked for a 27x42 in chair; for any other chair the top candidates are
+    re-checked live with the person's chair and re-ranked.
 
     Args:
         radius_km: max distance from the Texas Medical Center.
         beds: acceptable bedroom counts (0 = studio), or None for any.
         top: how many units to return (max 5).
         include: unit ids the person named; always returned, even outside the radius.
+        chair_width_in: the person's chair width in inches.
+        chair_length_in: the person's chair length in inches.
     """
-    idx = _index()
-    units = idx.get("units", [])
+    w, l = _chair(chair_width_in, chair_length_in)
+    units = [u for u in _index().get("units", []) if _cached(u["sid"])]    # check_units can only drive cached plans
     if isinstance(beds, int):                    # the model sometimes passes a single count
         beds = [beds]
     rows = [u for u in units if (u.get("distance_km") or 99) <= radius_km
             and (not beds or _beds(u.get("name")) in beds)]
     rows.sort(key=lambda u: (-u["score"], u["counts"]["blocked"], u.get("distance_km") or 99))
-    picked = rows[:max(1, min(top, 5))]
-    named = [u for u in units if u["sid"] in (include or []) and u not in picked]
-    return {"candidates": len(rows), "units": [_row(u) for u in picked + named]}
+    n_top = max(1, min(top, 5))
+    named = [u for u in units if u["sid"] in (include or [])]
+    if (w, l) == BATCH_CHAIR:
+        picked = rows[:n_top]
+        out = [_row(u) for u in picked + [u for u in named if u not in picked]]
+        return {"candidates": len(rows), "chair_in": [w, l], "ranked_by": "precomputed batch (27x42 in chair)",
+                "units": out}
+    pool = rows[:max(RERANK_POOL, n_top)]
+    _fit_many([u["sid"] for u in pool + named], w, l)
+    live = {u["sid"]: _fit_row(u["sid"], w, l) for u in pool + named}
+    pool.sort(key=lambda u: (-live[u["sid"]]["score"], live[u["sid"]]["blocked"], u.get("distance_km") or 99))
+    picked = pool[:n_top]
+    out = [{"sid": u["sid"], "name": u.get("name"), "km": u.get("distance_km"),
+            "reachable": live[u["sid"]]["reachable"], "with_hinges": live[u["sid"]]["with_hinges"]}
+           for u in picked + [u for u in named if u not in picked]]
+    return {"candidates": len(rows), "chair_in": [w, l],
+            "ranked_by": f"live fit with this chair over the batch's top {len(pool)}", "units": out}
 
 
 def get_unit(sid: str) -> dict:
@@ -93,15 +167,10 @@ def run_fit(sid: str, chair_width_in: float = 27.0, chair_length_in: float = 42.
     path = data_dir() / "cache" / f"{sid}.json"
     if not path.exists():
         return {"sid": sid, "error": "model not cached"}
-    fit_cache = data_dir() / "cache" / "fit" / f"{sid}_{chair_width_in:g}x{chair_length_in:g}_{int(hinges)}_v{FIT_CACHE_V}.json"
-    key = _fit_key(path)
-    if fit_cache.exists():
-        try:                                                     # valid only for this exact model file and engine code
-            cached = json.loads(fit_cache.read_text())
-            if isinstance(cached, dict) and cached.get("_key") == key:
-                return {k: v for k, v in cached.items() if k != "_key"}
-        except (ValueError, OSError):                            # unreadable: recompute and overwrite
-            pass
+    cached = _fit_cached(sid, chair_width_in, chair_length_in, hinges)
+    if cached is not None:
+        return cached
+    fit_cache, key = _fit_path(sid, chair_width_in, chair_length_in, hinges), _fit_key(path)
     res = analyze_model(json.loads(path.read_text())["data"]["model"], sid, chair_width_in, chair_length_in, hinges)
     rooms = []
     for f in res["floors"]:
@@ -137,16 +206,37 @@ def _fit_key(model_path: pathlib.Path) -> str:
     return hashlib.sha1(model_path.read_bytes()).hexdigest()[:12] + "-" + _ENGINE_SHA
 
 
-def check_units(sids: list[str], chair_width_in: float = 27.0, chair_length_in: float = 42.0) -> dict:
+def _fit_path(sid: str, w: float, l: float, hinges: bool) -> pathlib.Path:
+    return data_dir() / "cache" / "fit" / f"{sid}_{w:g}x{l:g}_{int(hinges)}_v{FIT_CACHE_V}.json"
+
+
+def _fit_cached(sid: str, w: float, l: float, hinges: bool) -> dict | None:
+    """A cached run_fit result, valid only for this exact model file and engine code; else None."""
+    f, model = _fit_path(sid, w, l, hinges), data_dir() / "cache" / f"{sid}.json"
+    if not (f.exists() and model.exists()):
+        return None
+    try:
+        cached = json.loads(f.read_text())
+    except (ValueError, OSError):                                # unreadable: recompute and overwrite
+        return None
+    if isinstance(cached, dict) and cached.get("_key") == _fit_key(model):
+        return {k: v for k, v in cached.items() if k != "_key"}
+    return None
+
+
+def check_units(sids: list[str], chair_width_in: float | None = None, chair_length_in: float | None = None) -> dict:
     """Drive the wheelchair through up to 6 units at once, as scanned and with offset hinges. Returns, per unit,
     rooms reachable in each scenario and only the rooms that are blocked or unknown (with the measured width of
-    the door that stops the chair and the estimated shortfall)."""
+    the door that stops the chair and the estimated shortfall). Units without a downloaded floor plan are listed
+    in `not_cached` and not checked."""
+    chair_width_in, chair_length_in = _chair(chair_width_in, chair_length_in)
+    sids = list(dict.fromkeys(sids))
+    missing = [s for s in sids if not _cached(s)]
+    todo = [s for s in sids if _cached(s)]
+    _fit_many(todo[:MAX_CHECK], chair_width_in, chair_length_in)
     out = []
-    for sid in sids[:MAX_CHECK]:
+    for sid in todo[:MAX_CHECK]:
         a, h = run_fit(sid, chair_width_in, chair_length_in), run_fit(sid, chair_width_in, chair_length_in, True)
-        if "error" in a:
-            out.append({"sid": sid, "error": a["error"]})
-            continue
         hs = {r["room_id"]: r["status"] for r in h["rooms"]}
         problems = []
         for r in a["rooms"]:
@@ -164,8 +254,10 @@ def check_units(sids: list[str], chair_width_in: float = 27.0, chair_length_in: 
                     "reachable": f"{sum(r['status'] == 'reachable' for r in a['rooms'])}/{n}",
                     "with_hinges": f"{sum(r['status'] == 'reachable' for r in h['rooms'])}/{n}", "problems": problems})
     res = {"chair_in": [chair_width_in, chair_length_in], "units": out}
-    if len(sids) > MAX_CHECK:
-        res["skipped"] = sids[MAX_CHECK:]           # say so; never drop a named unit silently
+    if missing:
+        res["not_cached"] = missing                 # no floor plan downloaded: cannot be driven, said so
+    if len(todo) > MAX_CHECK:
+        res["skipped"] = todo[MAX_CHECK:]           # say so; never drop a named unit silently
     return res
 
 
@@ -184,12 +276,37 @@ def with_ai_disclosure(text: str) -> str:
     return text if "AI assistant" in text[:200] else AI_DISCLOSURE + text
 
 
-def draft_landlord_message(sid: str, questions: list[str], chair_width_in: float = 27.0) -> dict:
-    """Draft (do not send) a short message to a unit's leasing office asking only what the scan cannot answer."""
+ENTRANCE_Q = "Is the building entrance step-free, and is there an elevator?"
+
+
+def _aerial_unclear(sid: str) -> list[dict]:
+    """Unclear items from a cached aerial check for this unit (cache only; nothing is fetched)."""
+    try:
+        link = json.loads((data_dir() / "cache" / f"aerial_{sid}.json").read_text())
+        doc = json.loads((data_dir() / "cache" / pathlib.Path(str(link["findings_file"])).name).read_text())
+        return [f for f in doc.get("findings") or [] if isinstance(f, dict) and f.get("answer") == "unclear"]
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return []
+
+
+def unit_questions(sid: str, chair_width_in: float, chair_length_in: float) -> list[str]:
+    """What the scan cannot answer for one unit, from engine output and cached checks: every unknown room's door,
+    every unclear aerial item, and the entrance."""
+    qs = [f"What is the clear width of the {r['label'].lower()} door?"
+          for r in run_fit(sid, chair_width_in, chair_length_in).get("rooms", []) if r["status"] == "unknown"]
+    qs += [f["question"] for f in _aerial_unclear(sid) if f.get("question")]
+    return list(dict.fromkeys(qs + [ENTRANCE_Q]))
+
+
+def draft_landlord_message(sid: str, questions: list[str] | None = None, chair_width_in: float | None = None) -> dict:
+    """Draft (do not send) a short message to a unit's leasing office asking only what the scan cannot answer.
+    The unknown-door, unclear-aerial and entrance questions are added automatically; pass only extra questions."""
+    w, l = _chair(chair_width_in, None)
     name = get_unit(sid).get("name") or sid
-    lines = [with_ai_disclosure(f"My client uses a {chair_width_in:g}-inch-wide power wheelchair and is interested "
+    qs = list(dict.fromkeys(unit_questions(sid, w, l) + [q for q in questions or [] if isinstance(q, str) and q.strip()]))
+    lines = [with_ai_disclosure(f"My client uses a {w:g}-inch-wide power wheelchair and is interested "
                                 f"in your {name} floor plan."), "Could you help with a few questions?"]
-    lines += [f"{i}. {q}" for i, q in enumerate(questions, 1)]
+    lines += [f"{i}. {q}" for i, q in enumerate(qs, 1)]
     lines.append("Thank you!")
     return {"sid": sid, "to": f"Leasing office ({name})", "text": "\n".join(lines)}
 
@@ -208,10 +325,11 @@ def send_message(to: str, text: str) -> dict:
 
 SYSTEM = """You are Rollin', an AI assistant for hospital case managers finding apartments a wheelchair user can live in.
 Work in exactly four turns, and make the calls listed for a turn in ONE message so they run in parallel:
-1. search_units (pass any unit id the person named in `include`).
-2. task(geometry) with the 3 best sids plus any named unit, AND task(outside) for the best sid.
-3. task(verifier) with the geometry answer, AND task(outreach) for the best unit with these questions: every unknown room's
-   door width, every 'unclear' aerial item, and "Is the building entrance step-free, and is there an elevator?".
+1. search_units with the person's chair size (pass any unit id the person named in `include`).
+2. task(geometry) with the sids search_units returned plus any named unit and the person's chair size, AND task(outside)
+   for the best sid.
+3. task(outreach) for the best unit (the draft adds the unknown-door, unclear-aerial and entrance questions itself).
+   Claims are checked and labelled by code; there is no verifier step.
 4. send_message with the outreach draft and recipient (a person must approve it; you cannot send without approval).
 Then answer in at most 80 words: best unit(s) with rooms reachable as scanned and with hinges, and what is unknown.
 Use the person's exact chair size. Never invent door widths, statistics or units; unknown stays unknown. Do not use file tools."""
@@ -228,11 +346,6 @@ def subagents(model: Any) -> list[dict]:
          "system_prompt": "Call check_units ONCE with all the sids and the person's chair size. Summarise each unit's blocked "
                           "or unknown rooms with the door width and shortfall exactly as returned." + SUB_RULES,
          "tools": [check_units], "model": model},
-        {"name": "verifier", "description": "Labels each claim's basis and lists unknowns as questions.",
-         "system_prompt": "Do not call tools. Label the claims you are given: door widths measured; clear widths, shortfalls "
-                          "and turning circles estimated; the hinge gain (~1.75 in) assumed; rooms with no door unknown. "
-                          "List the unknowns as questions." + SUB_RULES,
-         "tools": [], "model": model},
         {"name": "general-purpose", "description": "Read-only helper for anything the other subagents do not cover.",
          "system_prompt": "Answer using the read-only tools. You cannot contact anyone." + SUB_RULES,
          "tools": [search_units, get_unit, check_units], "model": model},
@@ -241,8 +354,9 @@ def subagents(model: Any) -> list[dict]:
                           "Never upgrade unclear to yes." + SUB_RULES,
          "tools": [aerial_check], "model": model},
         {"name": "outreach", "description": "Drafts (never sends) a message to a leasing office.",
-         "system_prompt": "Call draft_landlord_message once with the questions you are given and return the draft text and "
-                          "recipient verbatim. You cannot send messages.",
+         "system_prompt": "Call draft_landlord_message once with the unit id (it adds the standard questions itself; pass "
+                          "`questions` only for something extra the person asked) and return the draft text and recipient "
+                          "verbatim. You cannot send messages.",
          "tools": [draft_landlord_message], "model": model},
     ]
 
@@ -353,7 +467,9 @@ def vision_findings(sid: str, chair_in: list[float] | None = None) -> list[dict]
                     "numbers": numbers, "image_url": image_url,
                     "findings": [{"item": k, "question": v.get("question", ""), "answer": v.get("answer", "unclear"),
                                   "note": v.get("note", ""), "basis": "estimated",
-                                  "label": "from defurnished panorama, estimated"} for k, v in ans.items()],
+                                  "label": "from defurnished panorama, estimated",
+                                  **({"looks": v["looks"]} if isinstance(v.get("looks"), list) else {})}
+                                 for k, v in ans.items()],
                     "evidence": {"kind": "pano", "pano_id": it["pano_id"], "image_url": image_url}})
     return out
 
@@ -386,7 +502,7 @@ def findings_from_fit(res: dict, chair_w: float) -> list[dict]:
 
 PIPELINE = ["Find candidate units near the Texas Medical Center (search)",
             "Drive the chair through each candidate's floor plan, as scanned and with offset hinges (geometry)",
-            "Check every claim and label its basis; turn unknowns into questions (verifier)",
+            "Check every claim and label its basis; turn unknowns into questions (verifier, in code)",
             "Check the building outside from aerial imagery (outside)",
             "Draft questions for the leasing office (outreach)",
             "Ask for approval before sending anything"]
@@ -451,6 +567,47 @@ class Run:
                 out.append(self.ev(f.pop("type"), **f))
         return out + self.vision_events(data["sid"], data.get("chair_in"))
 
+    def check_events(self, data: dict, args: dict, note: str | None = None) -> list[dict]:
+        """A check_units result: the tool event, both scenarios' fit events per unit, then the verify event.
+        The verifier is code, not a model turn: every claim's basis follows from where the number came from."""
+        w, l = data["chair_in"]
+        result = {"sids": [u["sid"] for u in data["units"] if "error" not in u]}
+        for k in ("not_cached", "skipped"):
+            if data.get(k):
+                result[k] = data[k]
+        out = [self.ev("tool", name="check_units", status="done", args=wrap_args(args), result=result,
+                       **({"agent": "orchestrator", "note": note} if note else {}))]
+        for u in data["units"]:
+            if "error" in u:
+                continue
+            for hinges in (False, True):                    # same engine results the tool used (disk cache)
+                out += self.fit_events(run_fit(u["sid"], w, l, hinges), {"sid": u["sid"], "hinges": hinges})
+        return out + [self.verify_event()]
+
+    def verify_event(self) -> dict:
+        checked, qs = self.checked(), self.questions()
+        unknown = sum(1 for (_, _, sc), f in self.found.items() if f["status"] == "unknown" and sc == "as scanned")
+        units = len({s for s, _ in self.fits})
+        text = (f"Checked in code across {units} unit(s): door widths measured; clear widths, shortfalls and turning "
+                "circles estimated" + ("; the offset-hinge gain assumed" if any(sc != "as scanned" for _, sc in self.fits) else "")
+                + (f"; {unknown} room(s) with no measured door stay unknown and became questions." if unknown else "."))
+        return self.ev("verify", text=text, source="code", checked=checked, questions=qs)
+
+    def ensure_shortlist(self, chair: tuple[float, float]) -> list[dict]:
+        """A live run always ends with a shortlist. If the model never had the fit engine check a unit, the
+        orchestrator checks the search's units itself (same engine and cache) and labels it as such."""
+        if any(sc == "as scanned" for _, sc in self.fits):
+            return []
+        w, l = chair
+        sids = [u["sid"] for u in (self.last_search or {}).get("units", []) if _cached(u["sid"])]
+        if not sids:
+            sids = [u["sid"] for u in search_units(chair_width_in=w, chair_length_in=l)["units"]]
+        if not sids:
+            return []
+        args = {"sids": sids, "chair_width_in": w, "chair_length_in": l}
+        return self.check_events(check_units(sids, w, l), args,
+                                 note="run by the orchestrator in code: the agent finished without checking floor plans")
+
     def from_tool(self, m: Any) -> list[dict]:
         name, args = self.calls.get(getattr(m, "tool_call_id", "") or "", (getattr(m, "name", ""), {}))
         try:
@@ -463,23 +620,13 @@ class Run:
             self.last_search = data
             return [self.ev("tool", name="search_units", status="done", args=wrap_args(args),
                             result={"candidates": num(data["candidates"], "measured"),
-                                    "sids": [u["sid"] for u in data["units"]]})]
+                                    "sids": [u["sid"] for u in data["units"]],
+                                    **({"ranked_by": data["ranked_by"]} if data.get("ranked_by") else {})})]
         if name == "check_units" and isinstance(data, dict) and "units" in data:
-            w, l = data["chair_in"]
-            out = [self.ev("tool", name="check_units", status="done", args=wrap_args(args),
-                           result={"sids": [u["sid"] for u in data["units"]]})]
-            for u in data["units"]:
-                if "error" in u:
-                    continue
-                for hinges in (False, True):                    # same engine results the tool used (disk cache)
-                    out += self.fit_events(run_fit(u["sid"], w, l, hinges), {"sid": u["sid"], "hinges": hinges})
-            return out
+            return self.check_events(data, args)
         if name == "task":
-            sub = args.get("subagent_type")
-            text = text_of(m.content)
-            if sub == "verifier":
-                return [self.ev("verify", text=text, checked=self.checked(), questions=self.questions())]
-            return [self.ev("tool", name="task", subagent=sub, status="done", result={"text": text})]
+            return [self.ev("tool", name="task", subagent=args.get("subagent_type"), status="done",
+                            result={"text": text_of(m.content)})]
         if name == "aerial_check" and isinstance(data, dict) and "findings" in data:
             summary = "; ".join(f"{f['item'].replace('_', ' ')}: {f['answer']}" for f in data["findings"])
             return [self.ev("aerial", sid=data["sid"], text=f"From aerial, estimated. {summary}.",
@@ -535,7 +682,7 @@ class Run:
             if f["status"] == "unknown" and sc == "as scanned":
                 name = self.fits.get((sid, "as scanned"), {}).get("name", sid)
                 qs.append(f"What is the clear width of the {f['room'].lower()} door in {name}?")
-        return qs + ["Is the building entrance step-free, and is there an elevator?"]
+        return qs + [ENTRANCE_Q]
 
     def shortlist(self) -> list[dict]:
         """Units the fit engine actually checked this run, best first (as scanned)."""
@@ -563,6 +710,8 @@ class Run:
             parts.append(f"Best: {sl[0]['name']} ({sl[0]['sid']}), {sl[0]['summary']}.")
         if self.pending:
             parts.append("Waiting for your approval before contacting the leasing office.")
+        if not sl:
+            parts.append("No unit with a downloaded floor plan matched, so no unit could be checked.")
         if agent_text and not self.pending:
             parts.append(agent_text)
         return self.ev("final", text=" ".join(parts) or agent_text, awaiting_approval=list(self.pending), shortlist=sl)
@@ -631,6 +780,9 @@ async def run_agent(message: str, profile: dict, run_id: str) -> AsyncIterator[d
               "metadata": {"run_id": run_id}, "run_name": "rollin-chat"}
     from agent import memory
     profile, mem = memory.resolve(message, profile)
+    chair = profile.get("chair_in") or []
+    chair = (float(chair[0]), float(chair[1])) if len(chair) == 2 else BATCH_CHAIR
+    _CHAIR.set(chair)                           # tools default to this run's chair if the model omits it
     r = Run(run_id)
     plan = {"text": "Orchestrator pipeline", "source": "orchestrator",
             "todos": [{"id": f"t{i}", "text": t, "status": "pending"} for i, t in enumerate(PIPELINE, 1)]}
@@ -659,6 +811,8 @@ async def run_agent(message: str, profile: dict, run_id: str) -> AsyncIterator[d
     state = await agent.aget_state(thread)
     msgs = state.values.get("messages", [])
     last = next((text_of(m.content) for m in reversed(msgs) if type(m).__name__ == "AIMessage" and text_of(m.content)), "")
+    for e in r.ensure_shortlist(chair):
+        yield e
     yield r.final(last)
 
 
