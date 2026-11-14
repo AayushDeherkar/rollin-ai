@@ -90,3 +90,29 @@ def test_multi_floor_units_are_not_checked(data, monkeypatch):
     two = {"name": "two", "floors": [{"id": "a"}, {"id": "b"}], "rooms": []}
     monkeypatch.setattr(V, "get_model", lambda sid: two)
     assert "multi-floor" in V.check_unit("twofloors", refresh=True)["error"]
+
+
+def test_two_looks_must_agree_or_the_answer_is_unclear():
+    a = {"bathing": {"question": "q", "answer": "bathtub", "note": "tub"}, "grab_bars": {"question": "q", "answer": "no", "note": ""}}
+    b = {"bathing": {"question": "q", "answer": "roll_in_shower", "note": "x"}, "grab_bars": {"question": "q", "answer": "no", "note": ""}}
+    out = V.agree([a, b])
+    assert out["bathing"]["answer"] == "unclear" and out["bathing"]["looks"] == ["bathtub", "roll_in_shower"]
+    assert "disagreed" in out["bathing"]["note"] and out["grab_bars"]["answer"] == "no"
+
+
+def test_ask_twice_counts_a_failed_look_as_unclear(monkeypatch):
+    calls = []
+
+    def fake(kind, room, imgs):
+        calls.append(1)
+        if len(calls) == 1:
+            return {"threshold": {"question": "q", "answer": "no", "note": ""}}
+        raise RuntimeError("no usable answer")
+    monkeypatch.setattr(V, "ask", fake)
+    out = V.ask_twice("door", "Bedroom", [])
+    assert len(calls) == V.LOOKS and out["threshold"]["answer"] == "unclear"
+
+
+def test_single_look_cache_is_redone(data, monkeypatch):
+    monkeypatch.setattr(V, "get_model", lambda sid: {"floors": [1, 2]})       # stop right after the cache check
+    assert "multi-floor" in V.check_unit("synthetic_demo")["error"]

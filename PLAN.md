@@ -234,7 +234,7 @@ None of these is a blocker. L6 and L12 are the ones to prepare answers / mitigat
   2. `geometry` — calls `run_fit(sid, w, l, hinges)`; reads the JSON; explains blockers.
   3. `vision` — for blocked/unknown rooms and bathrooms, pulls defurnished panorama faces nearest the door/bathroom and checks: tub vs roll-in shower, step at entry/balcony, raised threshold, grab bars. Every claim cites a pano id + crop.
   4. `outside` — Vexcel ortho clip around lat/lon; checks visible entrance steps/ramps, accessible parking, curb ramps. Labels everything "from aerial, estimated".
-  5. `verifier` — re-checks each claim, marks `measured` / `estimated` / `unknown`; unknowns become questions.
+  5. `verifier` — re-checks each claim, marks `measured` / `estimated` / `unknown`; unknowns become questions. (Built as deterministic code, not a model turn: the `verify` event carries `source: "code"`.)
   6. `outreach` — drafts the landlord message (questions about unknowns + the specific fix, e.g. offset hinges on the bedroom door); sends **only after approval**.
 - **Memory**: `/memories/profile.json` — device width/length/turning diameter, needs (roll-in shower, no steps), budget, area.
 - **Tools (Python functions)**: `search_units(profile)`, `run_fit(sid, w_in, l_in, hinges)`, `get_unit(sid)`, `pano_crops(sid, xy, defurnished=True)`, `aerial_check(lat, lon)`, `costar_record(sid)`, `draft_landlord_message(sid, questions)`, `send_message(to, text)` (approval-gated).

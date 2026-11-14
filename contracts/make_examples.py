@@ -125,7 +125,7 @@ def chat_events(demo: dict, demo_h: dict, other: dict, rows: list[dict]) -> list
     add("tool", name="run_fit", status="done",
         args={"sid": other["model"], "chair": chair, "hinges": False},
         result={"sid": other["model"], "scenario": other["scenario"], "counts": counts_with_basis(unit_row(other, None, None))})
-    add("verify", checked=[
+    add("verify", source="code", text="Checked in code: door widths measured; clear widths and turning circles estimated; the offset-hinge gain assumed; 1 room(s) with no measured door stay unknown and became questions.", checked=[
         {"claim": "Bedroom door width", "basis": "measured"},
         {"claim": "Clear widths (opening minus 5 cm for leaf and stop)", "basis": "estimated"},
         {"claim": "Offset hinges add about 1.75 in", "basis": "assumed"},

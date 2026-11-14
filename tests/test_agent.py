@@ -17,6 +17,7 @@ def data(tmp_path, monkeypatch):
     (tmp_path / "cache").mkdir()
     (tmp_path / "batch").mkdir()
     shutil.copy(ROOT / "tests/synthetic_demo.json", tmp_path / "cache/synthetic_demo.json")
+    shutil.copy(ROOT / "tests/synthetic_1br.json", tmp_path / "cache/synthetic_1br.json")
     ex = json.loads((ROOT / "contracts/units_list.example.json").read_text())
     (tmp_path / "batch/index.json").write_text(json.dumps({"chair_in": [27.0, 42.0], "units": ex["units"]}))
     monkeypatch.setenv("ROLLIN_DATA_DIR", str(tmp_path))
@@ -28,7 +29,7 @@ def test_send_message_is_gated_and_only_the_orchestrator_has_it():
     assert A.send_message in A.ORCHESTRATOR_TOOLS
     for sub in A.subagents(model=None):
         assert A.send_message not in sub["tools"], sub["name"]
-    assert {s["name"] for s in A.subagents(None)} == {"search", "geometry", "verifier", "outside", "outreach", "general-purpose"}
+    assert {s["name"] for s in A.subagents(None)} == {"search", "geometry", "outside", "outreach", "general-purpose"}
 
 
 def test_every_outbound_text_identifies_as_ai(data):
@@ -143,8 +144,8 @@ def test_verify_event_matches_contract(data):
     r = A.Run("run_v")
     r.calls["c1"] = ("run_fit", {"sid": "synthetic_demo"})
     r.from_tool(_tool_msg("c1", A.run_fit("synthetic_demo")))
-    r.calls["c2"] = ("task", {"subagent_type": "verifier"})
-    ev = r.from_tool(SimpleNamespace(tool_call_id="c2", name="", content="checked"))[0]
+    ev = r.verify_event()
+    assert ev["type"] == "verify" and ev["source"] == "code" and "1 room(s) with no measured door" in ev["text"]
     assert ev["type"] == "verify" and ev["checked"] and all({"claim", "basis"} <= set(c) for c in ev["checked"])
     assert {c["basis"] for c in ev["checked"]} <= BASIS and "unknown" in {c["basis"] for c in ev["checked"]}
     assert any("closet" in q for q in ev["questions"])
@@ -216,20 +217,22 @@ def test_unusable_vision_answer_is_not_cached(data, monkeypatch):
 
 
 def test_check_units_batches_both_scenarios_and_caches(data):
-    res = A.check_units(["synthetic_demo", "nope"])
+    res = A.check_units(["synthetic_demo", "nope", "synthetic_demo"])
     demo = res["units"][0]
     assert demo["reachable"] == "1/4" and demo["with_hinges"] == "2/4"
     bed = next(p for p in demo["problems"] if p["room"] == "Bedroom")
     assert bed == {"room": "Bedroom", "status": "blocked", "with_hinges": "reachable", "door_in": 28.0, "short_in_est": 1.0}
-    assert res["units"][1] == {"sid": "nope", "error": "model not cached"}
+    assert len(res["units"]) == 1 and res["not_cached"] == ["nope"]          # uncached: listed, never driven
     cached = list((data / "cache" / "fit").glob("synthetic_demo_27x42_*.json"))
     assert len(cached) == 2
     f = data / f"cache/fit/synthetic_demo_27x42_0_v{A.FIT_CACHE_V}.json"
     assert A.run_fit("synthetic_demo") == {k: v for k, v in json.loads(f.read_text()).items() if k != "_key"}
     f.write_text('{"half')                                   # a torn write is recomputed, not raised
     assert A.run_fit("synthetic_demo")["rooms"] and json.loads(f.read_text())["sid"] == "synthetic_demo"
-    many = A.check_units(["synthetic_demo"] * 7)
-    assert len(many["units"]) == A.MAX_CHECK and many["skipped"] == ["synthetic_demo"]
+    for i in range(7):
+        shutil.copy(ROOT / "tests/synthetic_demo.json", data / f"cache/synth{i}.json")
+    many = A.check_units([f"synth{i}" for i in range(7)])
+    assert len(many["units"]) == A.MAX_CHECK and many["skipped"] == ["synth6"]
 
 
 def test_check_units_events_come_from_engine_output(data):
@@ -240,12 +243,14 @@ def test_check_units_events_come_from_engine_output(data):
     assert [e["result"]["scenario"] for e in fits] == ["as scanned", "offset hinges on every door"]
     assert {e["room"] for e in evs if e["type"] == "finding" and e["scenario"] == "as scanned"} == {"Bedroom", "Bathroom", "Closet"}
     assert r.final("")["shortlist"][0]["sid"] == "synthetic_demo"
+    verify = [e for e in evs if e["type"] == "verify"]
+    assert len(verify) == 1 and evs[-1] is verify[0] and verify[0]["source"] == "code"   # verifier is code, after geometry
 
 
 def test_search_is_compact_and_includes_named_units(data):
     s = A.search_units(radius_km=0.01, include=["synthetic_demo"])
     assert s["candidates"] == 0 and [u["sid"] for u in s["units"]] == ["synthetic_demo"]
-    assert set(s["units"][0]) == {"sid", "name", "km", "reachable", "with_hinges"}
+    assert set(s["units"][0]) == {"sid", "name", "km", "reachable", "with_hinges"} and s["chair_in"] == [27.0, 42.0]
     assert A.search_units(beds=1)["candidates"] == A.search_units(beds=[1])["candidates"] == 2
 
 
@@ -258,3 +263,55 @@ def test_fit_cache_is_keyed_by_content_not_time(data):
     m = data / "cache/synthetic_demo.json"
     m.write_text(m.read_text().replace("Synthetic 1BR (narrow bedroom door)", "Renamed"))
     assert A.run_fit("synthetic_demo")["name"] == "Renamed"   # model changed: recomputed
+
+
+def test_search_only_offers_units_with_a_cached_model(data):
+    (data / "cache/synthetic_1br.json").unlink()
+    s = A.search_units(radius_km=8, top=5)
+    assert [u["sid"] for u in s["units"]] == ["synthetic_demo"] and s["candidates"] == 1
+
+
+def test_search_reranks_live_with_the_persons_chair(data):
+    batch = A.search_units(radius_km=8, top=5)
+    assert batch["ranked_by"].startswith("precomputed batch")
+    narrow = A.search_units(radius_km=8, top=5, chair_width_in=24, chair_length_in=40)
+    assert narrow["chair_in"] == [24.0, 40.0] and narrow["ranked_by"].startswith("live fit")
+    for u in narrow["units"]:                              # counts are this chair's, straight from the engine
+        a = A.run_fit(u["sid"], 24.0, 40.0)
+        assert u["reachable"] == f"{sum(r['status'] == 'reachable' for r in a['rooms'])}/{len(a['rooms'])}"
+    demo = next(u for u in narrow["units"] if u["sid"] == "synthetic_demo")
+    assert demo["reachable"] != next(u for u in batch["units"] if u["sid"] == "synthetic_demo")["reachable"]
+    token = A._CHAIR.set((24.0, 40.0))                     # tools fall back to the run's chair if the model omits it
+    try:
+        assert A.check_units(["synthetic_demo"])["chair_in"] == [24.0, 40.0]
+        assert A.search_units()["chair_in"] == [24.0, 40.0]
+    finally:
+        A._CHAIR.reset(token)
+
+
+def test_parallel_fits_match_inline_fits(data, monkeypatch):
+    for i in range(3):
+        shutil.copy(ROOT / "tests/synthetic_demo.json", data / f"cache/par{i}.json")
+    A._fit_many([f"par{i}" for i in range(3)], 25.0, 40.0)            # > 2 uncached: worker processes
+    for i in range(3):
+        assert A._fit_cached(f"par{i}", 25.0, 40.0, False) == A.run_fit("synthetic_demo", 25.0, 40.0) | {"sid": f"par{i}"}
+
+
+def test_shortlist_is_never_empty_when_the_model_skips_geometry(data):
+    r = A.Run("run_s")
+    assert r.final("")["shortlist"] == [] and "No unit" in r.final("")["text"]
+    r = A.Run("run_s2")
+    r.calls["c1"] = ("search_units", {})
+    r.from_tool(_tool_msg("c1", A.search_units(radius_km=8)))
+    evs = r.ensure_shortlist((27.0, 42.0))
+    assert evs[0]["name"] == "check_units" and evs[0]["agent"] == "orchestrator" and "in code" in evs[0]["note"]
+    fin = r.final("")
+    assert fin["shortlist"] and {u["sid"] for u in fin["shortlist"]} <= {"synthetic_demo", "synthetic_1br"}
+    assert r.ensure_shortlist((27.0, 42.0)) == []                        # geometry ran: nothing added
+
+
+def test_draft_adds_the_unknowns_itself(data):
+    d = A.draft_landlord_message("synthetic_demo")
+    assert "closet door" in d["text"] and A.ENTRANCE_Q in d["text"] and d["text"].startswith("Hi, this is an AI")
+    extra = A.draft_landlord_message("synthetic_demo", ["Is there parking?", A.ENTRANCE_Q])
+    assert extra["text"].count(A.ENTRANCE_Q) == 1 and "Is there parking?" in extra["text"]

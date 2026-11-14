@@ -7,7 +7,8 @@ room's stopping door. Each target gets the nearest panorama of the unit's *defur
 its four side faces (as a 2x2 grid) and floor face go to the configured vision model with fixed questions:
   bathroom: bathtub / roll-in shower / step-in shower / unclear; grab bars yes/no/unclear
   door:     step or raised threshold yes/no/unclear
-Answers are validated in code; anything the picture cannot show is "unclear". Every claim cites its pano id and is
+Answers are validated in code; anything the picture cannot show is "unclear". Each target is asked twice
+independently; an answer is kept only when both looks agree, otherwise it is "unclear" (both looks are stored). Every claim cites its pano id and is
 labelled "from defurnished panorama, estimated". Results: data/cache/vision/<sid>.json (+ the images it used).
 """
 from __future__ import annotations
@@ -138,11 +139,42 @@ def ask(kind: str, room: str, imgs: list[Image.Image]) -> dict:
     return out
 
 
+LOOKS = 2                                         # each target is asked this many times; any disagreement -> unclear
+
+
+def agree(runs: list[dict]) -> dict:
+    """Combine independent answers to the same questions: kept only where every look agrees, else 'unclear'."""
+    out = {}
+    for k, v in runs[0].items():
+        answers = [r.get(k, {}).get("answer", "unclear") for r in runs]
+        if len(set(answers)) == 1:
+            out[k] = {**v, "looks": answers}
+        else:
+            out[k] = {"question": v["question"], "answer": "unclear", "looks": answers,
+                      "note": f"two looks disagreed ({' vs '.join(a.replace('_', ' ') for a in answers)})"}
+    return out
+
+
+def ask_twice(kind: str, room: str, imgs: list[Image.Image]) -> dict:
+    """LOOKS independent calls in parallel; a look that fails counts as all-unclear rather than as agreement."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(_):
+        try:
+            return ask(kind, room, imgs)
+        except RuntimeError:
+            return {k: {"question": q, "answer": "unclear", "note": "no usable answer"} for k, (q, _) in QUESTIONS[kind].items()}
+    with ThreadPoolExecutor(LOOKS) as ex:
+        return agree(list(ex.map(one, range(LOOKS))))
+
+
 def check_unit(sid: str, refresh: bool = False) -> dict:
     """Vision findings for a unit's bathrooms and blocked doors (cached)."""
     path = vision_dir() / f"{sid}.json"
     if path.exists() and not refresh:
-        return json.loads(path.read_text())
+        doc = json.loads(path.read_text())
+        if doc.get("looks") == LOOKS:                  # older single-look results are redone
+            return doc
     if len(get_model(sid).get("floors") or []) > 1:
         return {"sid": sid, "error": "multi-floor unit: panoramas cannot be matched to a storey, not checked"}
     view = ((query(Q_VIEW, {"id": sid}).get("model") or {}).get("view") or {}).get("id")
@@ -170,9 +202,9 @@ def check_unit(sid: str, refresh: bool = False) -> dict:
         items.append({**{k: t[k] for k in ("kind", "room_id", "room")},
                       **({"door_in": t["door_in"]} if "door_in" in t else {}),
                       "pano_id": pano["id"], "pano_distance_m": round(dist, 2), "image": name,
-                      "answers": ask(t["kind"], t["room"], [grid, floor]), "label": LABEL})
+                      "answers": ask_twice(t["kind"], t["room"], [grid, floor]), "label": LABEL})
     res = {"sid": sid, "view": "matterport.model.defurnished", "model": os.environ.get("MODEL_NAME"), "chair_in": [27.0, 42.0],
-           "items": items, "images": images}
+           "looks": LOOKS, "items": items, "images": images}
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(res, indent=1))
     os.replace(tmp, path)
