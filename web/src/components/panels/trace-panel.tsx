@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotionConfig } from "motion/react";
 import { DUR, EASE_DRAFT } from "@/lib/motion";
 import { EmptyNote, Panel, type PanelState } from "@/components/sheet/panel";
 
@@ -39,7 +39,7 @@ function AgentActive() {
 }
 
 function TraceLoading() {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   const rows = [0.8, 0.6, 0.9, 0.5];
   return (
     <ol aria-busy="true" aria-label="Agent steps loading" className="flex flex-col gap-6 px-6 py-6">

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotionConfig } from "motion/react";
 import { DUR, EASE_DRAFT } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { EmptyNote, Panel, type PanelState } from "@/components/sheet/panel";
@@ -47,7 +47,7 @@ function NorthArrow() {
 
 /** Loading: construction lines drawn in, as a drafter would block out a plan. */
 function PlanLoading() {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   const lines = ["M80 60 H520", "M80 60 V340", "M520 60 V340", "M80 340 H520", "M300 60 V340", "M80 200 H300"];
   return (
     <div aria-busy="true" className="flex h-full flex-col items-center justify-center gap-5 p-8">

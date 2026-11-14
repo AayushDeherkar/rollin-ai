@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotionConfig } from "motion/react";
 import { Ban, Check, CircleHelp } from "lucide-react";
 import type { Drive } from "@/lib/chair";
 import type { Floor } from "@/lib/contract";
@@ -42,7 +42,7 @@ export function ChairCallout({
   gutter: { x: number; w: number } | null;
   scenario: string;
 }) {
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionConfig();
   const content = useRef<HTMLDivElement>(null);
   const [BOX_H, setBoxH] = useState(BOX_H_GUESS);
   useEffect(() => {

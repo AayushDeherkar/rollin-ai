@@ -11,3 +11,4 @@ npm run dev        # http://localhost:3000
 - Design rules: [DESIGN.md](DESIGN.md). All values: [tokens.css](tokens.css).
 - Data: reads only `../contracts/*.example.json` (synthetic) until the API in PLAN.md §7.2 exists.
 - Preview panel states: `/?state=empty`, `/?state=loading`.
+- Reduced motion without changing the OS setting: `/?motion=reduce` (Motion and the CSS duration tokens both follow it).
