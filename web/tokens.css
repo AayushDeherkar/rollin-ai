@@ -1,0 +1,71 @@
+/*
+ * Rollin' design tokens — the only source of colour, type, size, radius and motion.
+ * Direction: an architect's drafting sheet on canary trace paper. See web/DESIGN.md.
+ * Nothing in web/src may use a colour, font, font size or easing that is not defined here.
+ * Mirror of the motion values for JS lives in src/lib/motion.ts (keep the two in sync).
+ */
+
+:root {
+  /* ── Ground and linework ─────────────────────────────── */
+  --paper: #efe6c6; /* canary trace paper */
+  --paper-deep: #e4d8b0; /* paper seen through two sheets: hover, selected row */
+  --paper-lift: #f6f0da; /* bare paper under the plan, slightly brighter */
+  --rule: #b8ab82; /* faint construction line */
+  --rule-strong: #8c8163; /* panel borders, sheet frame inner line */
+  --ink: #1b1f2a; /* technical-pen blue-black: walls, text */
+  --ink-soft: #4a4840; /* secondary text, dimension extension lines */
+
+  /* ── The one accent: the agent is acting now ─────────── */
+  --agent: #1f3fa6; /* cobalt markup pencil */
+  --agent-wash: #d5d9e6; /* agent highlight behind text */
+
+  /* ── Room / door status (always paired with a pattern or icon) ── */
+  --reach: #2e6a3b; /* drafting green: reachable */
+  --reach-wash: #cdd6ad;
+  --block: #a8231c; /* redline: blocked / not passable */
+  --block-wash: #ebc6ad;
+  --unknown: #5e5949; /* graphite: not measured */
+  --unknown-wash: #ddd4b6;
+
+  /* ── Type families (set by next/font in src/app/layout.tsx) ── */
+  --font-display: var(--font-big-shoulders), "Arial Narrow", sans-serif;
+  --font-text: var(--font-public-sans), "Helvetica Neue", sans-serif;
+  --font-measure: var(--font-plex-mono), ui-monospace, monospace;
+
+  /* ── Type scale (projector at 1440x900: nothing below 16px) ── */
+  --text-sm: 16px; /* smallest allowed: captions, labels */
+  --text-base: 18px; /* body */
+  --text-lg: 22px; /* panel headings, callout figures */
+  --text-xl: 28px;
+  --text-2xl: 36px;
+  --text-3xl: 52px; /* wordmark / empty-state titles */
+  --leading-tight: 1.1;
+  --leading-text: 1.45;
+  --tracking-display: 0.02em;
+
+  /* ── Space, line and radius ──────────────────────────── */
+  --space: 4px; /* Tailwind spacing unit: p-4 = 16px */
+  --line-hair: 1px;
+  --line-wall: 3px; /* plan walls at the default zoom */
+  --line-frame: 2px;
+  --radius: 2px; /* drafting: nearly square */
+  --panel-left: 340px;
+  --panel-right: 400px;
+  --titleblock-h: 76px;
+
+  /* ── Motion: one curve, one duration scale, nothing bounces ── */
+  --ease-draft: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-1: 160ms; /* state feedback: hover, press */
+  --dur-2: 320ms; /* colour and label changes */
+  --dur-3: 640ms; /* room status swap */
+  --dur-4: 1280ms; /* drawing-in, settle after the chair stops */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-1: 0ms;
+    --dur-2: 0ms;
+    --dur-3: 0ms;
+    --dur-4: 0ms;
+  }
+}

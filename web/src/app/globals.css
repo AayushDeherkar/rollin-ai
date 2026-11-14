@@ -1,0 +1,147 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "../../tokens.css";
+
+/*
+ * Tailwind's default palette, type scale, fonts and radii are switched off so the
+ * only utilities that exist are the ones built from tokens.css.
+ */
+@theme {
+  --color-*: initial;
+  --text-*: initial;
+  --font-*: initial;
+  --radius-*: initial;
+  --ease-*: initial;
+  --shadow-*: initial;
+}
+
+@theme inline {
+  --spacing: var(--space);
+
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+  --color-paper-lift: var(--paper-lift);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-agent: var(--agent);
+  --color-agent-wash: var(--agent-wash);
+  --color-reach: var(--reach);
+  --color-reach-wash: var(--reach-wash);
+  --color-block: var(--block);
+  --color-block-wash: var(--block-wash);
+  --color-unknown: var(--unknown);
+  --color-unknown-wash: var(--unknown-wash);
+  --color-transparent: transparent;
+
+  /* shadcn semantic names, all pointing at tokens */
+  --color-background: var(--paper);
+  --color-foreground: var(--ink);
+  --color-primary: var(--ink);
+  --color-primary-foreground: var(--paper);
+  --color-secondary: var(--paper-deep);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--paper-deep);
+  --color-muted-foreground: var(--ink-soft);
+  --color-accent: var(--paper-deep);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--block);
+  --color-border: var(--rule-strong);
+  --color-input: var(--rule-strong);
+  --color-ring: var(--agent);
+  --color-card: var(--paper);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--paper-lift);
+  --color-popover-foreground: var(--ink);
+
+  --font-display: var(--font-display);
+  --font-sans: var(--font-text);
+  --font-mono: var(--font-measure);
+
+  /* shadcn's small variants map to the 16px floor: nothing on screen is smaller */
+  --text-xs: var(--text-sm);
+  --text-xs--line-height: var(--leading-text);
+  --text-sm: var(--text-sm);
+  --text-sm--line-height: var(--leading-text);
+  --text-base: var(--text-base);
+  --text-base--line-height: var(--leading-text);
+  --text-lg: var(--text-lg);
+  --text-lg--line-height: 1.3;
+  --text-xl: var(--text-xl);
+  --text-xl--line-height: var(--leading-tight);
+  --text-2xl: var(--text-2xl);
+  --text-2xl--line-height: var(--leading-tight);
+  --text-3xl: var(--text-3xl);
+  --text-3xl--line-height: 1;
+
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius);
+  --radius-full: 9999px;
+
+  --ease-draft: var(--ease-draft);
+}
+
+/* shadcn components read these raw names (e.g. color-mix in button.tsx); alias them to tokens */
+:root {
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--paper);
+  --secondary: var(--paper-deep);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-deep);
+  --muted-foreground: var(--ink-soft);
+  --accent: var(--paper-deep);
+  --accent-foreground: var(--ink);
+  --destructive: var(--block);
+  --border: var(--rule-strong);
+  --input: var(--rule-strong);
+  --ring: var(--agent);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring;
+  }
+  html {
+    font-size: var(--text-base);
+  }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-text);
+    font-size: var(--text-base);
+    line-height: var(--leading-text);
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: var(--line-frame) solid var(--agent);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--agent-wash);
+    color: var(--ink);
+  }
+}
+
+@layer utilities {
+  /* every measurement: mono, tabular figures, slashed zero */
+  .measure {
+    font-family: var(--font-measure);
+    font-variant-numeric: tabular-nums slashed-zero;
+    letter-spacing: 0;
+  }
+  .display {
+    font-family: var(--font-display);
+    letter-spacing: var(--tracking-display);
+    line-height: var(--leading-tight);
+  }
+  .transition-draft {
+    transition-timing-function: var(--ease-draft);
+    transition-duration: var(--dur-2);
+  }
+}
