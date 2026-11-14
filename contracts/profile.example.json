@@ -1,0 +1,27 @@
+{
+ "sender_id": "synthetic_sender_1",
+ "chair_in": [
+  27.0,
+  42.0
+ ],
+ "turning_in": 60.0,
+ "needs": [
+  "bedroom",
+  "bathroom",
+  "roll_in_shower",
+  "step_free_entry"
+ ],
+ "budget": {
+  "max_monthly_usd": 1400
+ },
+ "area": {
+  "label": "Texas Medical Center",
+  "lat": 29.7095,
+  "lon": -95.3982,
+  "radius_km": 8.0
+ },
+ "beds": [
+  1,
+  2
+ ]
+}

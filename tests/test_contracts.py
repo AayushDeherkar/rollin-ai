@@ -139,3 +139,22 @@ def test_v2_blocking_door_found_through_open_passage():
     assert by["bed"]["status"] == by["bed_b"]["status"] == "blocked"
     assert by["bed_b"]["blocking_door_edge"] == "e_cg" and by["bed_b"]["path"]
 
+
+
+def test_profile_example_shape():
+    p = load("profile.example.json")
+    assert set(p) == {"sender_id", "chair_in", "turning_in", "needs", "budget", "area", "beds"}
+    assert len(p["chair_in"]) == 2 and set(p["area"]) == {"label", "lat", "lon", "radius_km"}
+    assert set(p["budget"]) == {"max_monthly_usd"} and all(isinstance(b, int) for b in p["beds"])
+
+
+def test_shortlist_units_have_plans_from_the_same_run():
+    events = [json.loads(l) for l in (C / "chat_events.example.jsonl").read_text().splitlines() if l.strip()]
+    fitted = {e["result"]["sid"] for e in events if e["type"] == "tool" and e.get("name") == "run_fit"}
+    final = events[-1]
+    assert final["type"] == "final" and final["shortlist"]
+    for u in final["shortlist"]:
+        assert u["sid"] in fitted, f"{u['sid']} is shortlisted but the run never checked it"
+        plan = C / ("unit_result.example.json" if u["sid"] == "synthetic_demo" else f"unit_result.{u['sid']}.example.json")
+        assert plan.exists(), f"no plan example for {u['sid']}"
+    assert any(e["type"] == "aerial" for e in events)

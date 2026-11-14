@@ -30,6 +30,18 @@ def run_fit(name: str, hinges: bool) -> dict:
     return json.loads((ROOT / f"out/{name}_fit{'_hinges' if hinges else ''}.json").read_text())
 
 
+# Request profile for POST /api/chat {message, profile}. Synthetic sender; sizes in inches.
+PROFILE = {
+    "sender_id": "synthetic_sender_1",
+    "chair_in": [27.0, 42.0],
+    "turning_in": 60.0,
+    "needs": ["bedroom", "bathroom", "roll_in_shower", "step_free_entry"],
+    "budget": {"max_monthly_usd": 1400},
+    "area": {"label": "Texas Medical Center", "lat": 29.7095, "lon": -95.3982, "radius_km": 8.0},
+    "beds": [1, 2],
+}
+
+
 def batch_row(scanned: dict, hinged: dict) -> dict:
     """Same row shape engine/batch.py writes, from synthetic results."""
     lat, lon = FAKE_LOC[scanned["model"]]
@@ -71,6 +83,7 @@ def chat_events(demo: dict, demo_h: dict, other: dict, rows: list[dict]) -> list
                    "run_id": "run_example_001", "type": type_, **body})
 
     add("plan", text="Find units near the Medical Center the chair can live in; check bedroom and bathroom access.",
+        profile={"sender_id": PROFILE["sender_id"], "chair_in": [num(v, "asked", "in", source="user") for v in PROFILE["chair_in"]]},
         todos=[{"id": "t1", "text": "Search units within 8 km of the Medical Center", "status": "in_progress"},
                {"id": "t2", "text": "Drive the 27x42 in chair through each floor plan", "status": "pending"},
                {"id": "t3", "text": "Try offset hinges on blocked doors", "status": "pending"},
@@ -81,7 +94,7 @@ def chat_events(demo: dict, demo_h: dict, other: dict, rows: list[dict]) -> list
         result={"candidates": num(len(rows), "measured"), "sids": [r["sid"] for r in rows]})
     add("tool", name="run_fit", status="done",
         args={"sid": demo["model"], "chair": chair, "hinges": False},
-        result={"scenario": demo["scenario"], "counts": counts_with_basis(unit_row(demo, None, None))})
+        result={"sid": demo["model"], "scenario": demo["scenario"], "counts": counts_with_basis(unit_row(demo, None, None))})
     add("finding", sid=demo["model"], room_id=bed["room_id"], room=bed["label"], status=bed["status"],
         text=f"Bedroom door is {bed_door['width_in']} in wide; about {bed_door['clear_in_est']} in clear, "
              f"{round(w - bed_door['clear_in_est'], 1)} in short for a {w:g} in chair.",
@@ -92,7 +105,7 @@ def chat_events(demo: dict, demo_h: dict, other: dict, rows: list[dict]) -> list
                   "center": [num(c, "measured", "m") for c in bed_door["center"]]})
     add("tool", name="run_fit", status="done",
         args={"sid": demo["model"], "chair": chair, "hinges": True},
-        result={"scenario": demo_h["scenario"], "counts": counts_with_basis(unit_row(demo_h, None, None))})
+        result={"sid": demo_h["model"], "scenario": demo_h["scenario"], "counts": counts_with_basis(unit_row(demo_h, None, None))})
     add("finding", sid=demo["model"], room_id=bed_h["room_id"], room=bed_h["label"], status=bed_h["status"],
         text="With offset hinges on the bedroom door the chair reaches the bedroom.",
         numbers={"hinge_gain": num(hinge_gain, "assumed", "in"),
@@ -108,7 +121,7 @@ def chat_events(demo: dict, demo_h: dict, other: dict, rows: list[dict]) -> list
         numbers={"door_width": num(None, "unknown", "in")})
     add("tool", name="run_fit", status="done",
         args={"sid": other["model"], "chair": chair, "hinges": False},
-        result={"scenario": other["scenario"], "counts": counts_with_basis(unit_row(other, None, None))})
+        result={"sid": other["model"], "scenario": other["scenario"], "counts": counts_with_basis(unit_row(other, None, None))})
     add("verify", checked=[
         {"claim": "Bedroom door width", "basis": "measured"},
         {"claim": "Clear widths (opening minus 5 cm for leaf and stop)", "basis": "estimated"},
@@ -152,9 +165,13 @@ def main() -> None:
              "total": len(rows), "units": rows,
              "source": {"kind": "synthetic example", "updated_at": None, "processed": len(rows), "no_data": 0}}
     (C / "units_list.example.json").write_text(json.dumps(units, indent=1) + "\n")
+    # every unit the final shortlist names ships a plan, so the UI can open it in fixture mode
+    (C / "unit_result.synthetic_1br.example.json").write_text(json.dumps(other, indent=1) + "\n")
+    (C / "unit_result.synthetic_1br.hinges.example.json").write_text(json.dumps(other_h, indent=1) + "\n")
+    (C / "profile.example.json").write_text(json.dumps(PROFILE, indent=1) + "\n")
     events = chat_events(demo, demo_h, other, rows)
     (C / "chat_events.example.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
-    print(f"wrote 4 contract examples; {len(rows)} units, {len(events)} events")
+    print(f"wrote 7 contract examples; {len(rows)} units, {len(events)} events")
 
 
 if __name__ == "__main__":
