@@ -41,6 +41,23 @@ function shortlistOf(run: AgentRun): ShortlistUnit[] | null {
   return [...(list as (ShortlistUnit & { rank?: unknown })[])].sort((a, b) => (num(a.rank) ?? 1e9) - (num(b.rank) ?? 1e9));
 }
 
+/** the longest unit name a shortlist row keeps, so the row fits one line on a phone */
+const NAME_MAX = 28;
+
+/** "Unit name, 1.2 km": one line, the name cut short if it would wrap */
+function unitLine(u: ShortlistUnit): string {
+  const name = u.name ?? u.sid;
+  const short = name.length > NAME_MAX ? `${name.slice(0, NAME_MAX - 1).trimEnd()}…` : name;
+  const km = num(u.distance_km);
+  return km === null ? short : `${short}, ${km.toFixed(1)} km`;
+}
+
+/** the summary's headline clause ("2 of 4 rooms reachable"), marked as an estimate; the plans link has the rest */
+function fitLine(summary: string | undefined): string {
+  const head = summary?.split(";")[0]?.trim();
+  return head ? `${head} (est.)` : "No room count yet";
+}
+
 export function resultsText(
   run: AgentRun,
   units: ShortlistUnit[],
@@ -60,14 +77,10 @@ export function resultsText(
     return lines.join("\n\n");
   }
   const who = chair ? `a ${chair[0]} × ${chair[1]} in chair` : "your chair";
-  const rows = top.map((u, i) => {
-    const km = num(u.distance_km);
-    const where = km === null ? "" : ` (${km.toFixed(1)} km)`;
-    return `${i + 1}. ${u.name ?? u.sid}${where}: ${u.summary ?? "no summary"}`;
-  });
+  const rows = top.map((u, i) => `${i + 1}. ${unitLine(u)}\n${fitLine(u.summary)}`);
   const title = fromThisSearch
-    ? `Top ${top.length} for ${who}, estimated from the floor plans:`
-    : `The search returned no shortlist. Top ${top.length} of the latest ranked list (not specific to your message), estimated from the floor plans:`;
+    ? `Top ${top.length} for ${who}, estimated from floor plans:`
+    : `No shortlist from this search. Top ${top.length} of the latest ranked list, not specific to your message, estimated from floor plans:`;
   lines.push(`${title}\n${rows.join("\n")}`);
   const web = webUrl.replace(/\/+$/, "");
   const at = planSid === null ? -1 : top.findIndex((u) => u.sid === planSid);
