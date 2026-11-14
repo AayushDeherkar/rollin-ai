@@ -43,6 +43,8 @@ export interface ApproveResult {
 export interface Rollin {
   run(message: string, profile: Record<string, unknown>): Promise<AgentRun>;
   units(): Promise<ShortlistUnit[]>;
+  /** whether the web app can open this unit's plan (the API has its model cached) */
+  hasPlan(sid: string): Promise<boolean>;
   approve(actionId: string, approved: boolean): Promise<ApproveResult>;
 }
 
@@ -101,6 +103,15 @@ export function webRollin(baseUrl: string, runTimeoutMs = 180_000): Rollin {
       if (!res.ok) return [];
       const body = (await res.json()) as { units?: ShortlistUnit[] };
       return body.units ?? [];
+    },
+    async hasPlan(sid) {
+      try {
+        const res = await fetch(`${base}/api/units/${encodeURIComponent(sid)}`, { signal: AbortSignal.timeout(10_000) });
+        await res.body?.cancel();
+        return res.ok;
+      } catch {
+        return false;
+      }
     },
     async approve(actionId, approved) {
       const res = await fetch(`${base}/api/approve`, {

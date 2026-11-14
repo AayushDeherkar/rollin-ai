@@ -11,7 +11,7 @@ const contractRun: AgentEvent[] = readFileSync(new URL("../../contracts/chat_eve
   .filter((l) => l.trim())
   .map((l) => ({ ...JSON.parse(l), replay: true }));
 
-function fake(events: AgentEvent[] = contractRun, replay = true) {
+function fake(events: AgentEvent[] = contractRun, replay = true, noPlan: string[] = []) {
   const calls: { approve: [string, boolean][]; run: Record<string, unknown>[] } = { approve: [], run: [] };
   const rollin: Rollin = {
     async run(_m, profile) {
@@ -20,6 +20,9 @@ function fake(events: AgentEvent[] = contractRun, replay = true) {
     },
     async units() {
       return [];
+    },
+    async hasPlan(sid) {
+      return !noPlan.includes(sid);
     },
     async approve(actionId, approved): Promise<ApproveResult> {
       calls.approve.push([actionId, approved]);
@@ -169,4 +172,22 @@ test("only plain-text iMessages from a person to the agent are handled", () => {
   const fromAgent = structuredClone(msg);
   fromAgent.data.object.sentBy.kind = "agent";
   assert.equal(inboundFrom(fromAgent), null);
+});
+
+test("the plans link opens a listed unit that has a plan, or the app when none does", async () => {
+  const sids = (contractRun.find((e) => e.type === "final")?.shortlist as { sid: string }[]).map((u) => u.sid);
+  assert.ok(sids.length >= 2);
+  const link = async (noPlan: string[]) => {
+    const { rollin } = fake(contractRun, true, noPlan);
+    const out = await talk(new Conversations(rollin, "http://web.test/"), "27 x 42 chair");
+    return out.find((t) => t.includes("Top "))!;
+  };
+  const all = await link([]);
+  assert.match(all, /See the plans: http:\/\/web\.test\/\?sid=/);
+  const second = await link([sids[0]]);
+  assert.match(second, /opens unit 2\): http:\/\/web\.test\/\?sid=/);
+  assert.ok(second.includes(`sid=${encodeURIComponent(sids[1])}`));
+  const none = await link(sids);
+  assert.match(none, /No floor plan is cached for these \d yet\. Browse the units that have one: http:\/\/web\.test$/m);
+  assert.doesNotMatch(none, /\?sid=/);
 });
