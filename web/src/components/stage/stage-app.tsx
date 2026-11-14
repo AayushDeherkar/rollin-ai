@@ -5,20 +5,28 @@
  * floating over it (web/DESIGN.md, "The stage"). Three steps: Chair, Search, Apartment.
  * The three-panel layout stays at /classic, and is where the stage sends you if 3D cannot run.
  */
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import { MotionConfig } from "motion/react";
-import type * as THREE from "three";
+import * as THREE from "three";
 import { PatternDefs } from "@/components/sheet/status";
 import { readWebgl } from "@/components/plan/plan-stage";
 import { PRESETS, type ChairIn, type Step } from "@/lib/stage";
 import { useAgentRun } from "@/lib/agent";
-import { useUnitsList } from "@/lib/data";
+import { useUnitPair, useUnitsList } from "@/lib/data";
+import { buildDrive, defaultTarget } from "@/lib/chair";
+import { useDriveProgress } from "@/lib/drive-progress";
+import { floorBounds } from "@/lib/plan-geometry";
+import { isSynthetic, roomFrame, verdict, type VisionResult } from "@/lib/apartment";
+import type { Floor } from "@/lib/contract";
 import { readSearch } from "@/lib/search";
 import type { UnitRow } from "@/lib/contract";
 import { readAgentReplay, webSenderId } from "@/components/workbench";
 import { AgentPill, ApprovalFocus, BestFits, FieldLegend, Narration } from "./search-overlay";
 import { FieldScene, unitPosition } from "./field-scene";
+import { ApartmentScene, modelCentre, modelToWorld } from "./apartment-scene";
+import { ApartmentLegend, EvidencePanel, RoomCard, RoomStrip, VerdictLine, type EvidenceKind } from "./apartment-overlay";
+import type { PoseGoal } from "./stage-canvas";
 import { StepBar } from "./step-bar";
 import { ChairPlate } from "./chair-plate";
 import { ChairScene } from "./chair-scene";
@@ -60,17 +68,32 @@ export function StageApp() {
 function readEntry() {
   const q = new URLSearchParams(window.location.search);
   const pace = q.get("pace");
-  return { search: q.get("search") === "1", pace: pace !== null && Number.isFinite(Number(pace)) ? Number(pace) : undefined };
+  const sid = q.get("sid");
+  return {
+    search: q.get("search") === "1",
+    pace: pace !== null && Number.isFinite(Number(pace)) ? Number(pace) : undefined,
+    /** `?sid=<model id>` opens step 3 on that unit */
+    sid: sid && /^[A-Za-z0-9_]{3,40}$/.test(sid) ? sid : null,
+  };
 }
+
+/** The room the chair heads for first: a blocked bedroom the engine names a door for, else the engine's default. */
+function firstRoom(floor: Floor): string | null {
+  const bed = floor.rooms.find((r) => r.status === "blocked" && /bed/i.test(r.label) && r.blocking_door_edge && r.path?.length);
+  return bed?.room_id ?? defaultTarget(floor);
+}
+
+/** `?sid=` units the list does not carry stand at the medical center */
+const ORIGIN: [number, number, number] = [0, 0, 0];
 
 function Stage() {
   const [entry] = useState(readEntry);
-  const [step, setStep] = useState<Step>(entry.search ? "search" : "chair");
+  const [step, setStep] = useState<Step>(entry.sid ? "apartment" : entry.search ? "search" : "chair");
   const [chair, setChair] = useState<ChairIn>(PRESETS[1].chair);
   /** the chair the search was started with: the profile sent to /api/chat */
   const [profile, setProfile] = useState<ChairIn | null>(entry.search ? PRESETS[1].chair : null);
   /** the unit the apartment step shows */
-  const [sid, setSid] = useState<string | null>(null);
+  const [sid, setSid] = useState<string | null>(entry.sid);
   const available: Record<Step, boolean> = { chair: true, search: profile !== null, apartment: sid !== null };
 
   const agent = useAgentRun();
@@ -103,23 +126,151 @@ function Stage() {
     // once, on load
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const open = useCallback((next: string) => {
-    setSid(next);
-    setStep("apartment");
-  }, []);
   const chosenPoint = useMemo(() => {
     const u = sid ? units.find((r) => r.sid === sid) : null;
     return u && origin ? unitPosition(u, origin) : null;
   }, [sid, units, origin]);
+  const at = chosenPoint ?? ORIGIN;
 
+  // ── step 3: the apartment ──
+  const pair = useUnitPair(sid);
+  const both = pair.status === "ready" ? pair.data : null;
+  const [hinges, setHinges] = useState(false);
+  const unit = both ? (hinges && both.hinges ? both.hinges : both.asScanned) : null;
+  const floor = unit?.floors[0] ?? null;
+  const scannedFloor = both?.asScanned.floors[0] ?? null;
+  const hingesFloor = both?.hinges?.floors[0] ?? null;
+  /** the room the user picked (camera flies there); before that, the chair heads for the first room */
+  const [pick, setPick] = useState<{ sid: string; room: string } | null>(null);
+  const picked = pick && pick.sid === sid ? pick.room : null;
+  const target = picked ?? (scannedFloor ? firstRoom(scannedFloor) : null);
+  const [runId, setRunId] = useState(0);
+  const [glide, setGlide] = useState(true);
+  const [ride, setRide] = useState(false);
+  const drive = useMemo(() => (unit && floor && target ? buildDrive(unit, floor, target) : null), [unit, floor, target]);
+  const driving = glide && drive != null;
+  const lastKind = useRef(drive?.kind);
+  useEffect(() => {
+    // re-drive when the outcome changes (a room turns reachable with hinges): the chair rolls in
+    if (lastKind.current === drive?.kind) return;
+    lastKind.current = drive?.kind;
+    setGlide(true);
+    setRunId((n) => n + 1);
+  }, [drive?.kind]);
+  const onStart = useCallback(() => setGlide(true), []);
+  const onSettled = useCallback(() => setGlide(false), []);
+  const { progress, s: route } = useDriveProgress(drive, runId, onStart, onSettled);
+  // the door the ruler measures: where the chair stops as scanned, kept when hinges are tried
+  const rulerEdge = useMemo(() => {
+    if (!both || !scannedFloor || !target) return null;
+    const d = buildDrive(both.asScanned, scannedFloor, target);
+    return d?.kind === "blocked" ? (d.door?.edge ?? null) : null;
+  }, [both, scannedFloor, target]);
+  const live = pair.status === "ready" && pair.origin === "live" && unit !== null && !isSynthetic(unit);
+  const [evidence, setEvidence] = useState<EvidenceKind | null>(null);
+  /** the door the tour is about: the one clicked in the model, or the ruler's door when opened from the card */
+  const [tourEdge, setTourEdge] = useState<string | null>(null);
+  const showEvidence = useCallback(
+    (kind: EvidenceKind | null) => {
+      if (kind === "tour") setTourEdge(rulerEdge);
+      setEvidence(kind);
+    },
+    [rulerEdge],
+  );
+  const [vision, setVision] = useState<VisionResult | null>(null);
+  useEffect(() => {
+    if (!sid || !live) return;
+    const ac = new AbortController();
+    fetch(`/api/vision/${encodeURIComponent(sid)}`, { signal: ac.signal })
+      .then((r) => (r.ok ? (r.json() as Promise<VisionResult>) : null))
+      .then((v) => !ac.signal.aborted && setVision(v))
+      .catch(() => {});
+    return () => ac.abort();
+  }, [sid, live]);
+  const photoFor = (roomId: string | null) => (vision && vision.sid === sid && roomId ? (vision.items.find((i) => i.room_id === roomId) ?? null) : null);
+
+  const open = useCallback((next: string) => {
+    setSid(next);
+    setStep("apartment");
+    setHinges(false);
+    setRide(false);
+    setEvidence(null);
+    setGlide(true);
+    setRunId((n) => n + 1);
+  }, []);
+  const selectRoom = useCallback(
+    (roomId: string) => {
+      if (!sid) return;
+      setPick({ sid, room: roomId });
+      setEvidence(null);
+      setRide(false);
+      setGlide(true);
+      setRunId((n) => n + 1);
+    },
+    [sid],
+  );
+  const toggleRide = useCallback(() => {
+    setRide((r) => !r);
+    setGlide(true);
+    setRunId((n) => n + 1);
+  }, []);
+
+  const scratch = useRef({ a: new THREE.Vector3(), b: new THREE.Vector3() });
   const pose = useCallback(
-    (out: { pos: THREE.Vector3; target: THREE.Vector3 }) => {
+    (out: PoseGoal) => {
       if (step === "chair") {
         out.pos.set(2.2, 1.5, 2.6);
         out.target.set(-0.35, 0.45, 0);
-      } else if (step === "apartment" && chosenPoint) {
-        const [x, , z] = chosenPoint;
-        out.pos.set(x + 9, 16, z + 13);
+      } else if (step === "apartment") {
+        const [x, , z] = at;
+        if (!floor) {
+          out.pos.set(x + 9, 16, z + 13);
+          out.target.set(x, 0, z);
+          return;
+        }
+        const c = modelCentre(floor);
+        const b = floorBounds(floor);
+        const span = Math.max(b.maxX - b.minX, b.maxY - b.minY, 4);
+        if (ride && drive) {
+          // at seated eye height (a drawing proportion, 1.2 m), just behind the chair, looking down the path
+          const p = progress.get();
+          const [cx, cy, theta] = route.at(p);
+          // the direction of travel: ahead along the path, or the last stretch of it once the chair has arrived
+          const [ax, ay] = route.at(Math.min(1, p + 0.04));
+          const [bx, by] = route.at(Math.max(0, p - 0.04));
+          let dx = ax - cx;
+          let dy = ay - cy;
+          if (Math.hypot(dx, dy) < 1e-3) [dx, dy] = [cx - bx, cy - by];
+          if (Math.hypot(dx, dy) < 1e-3) [dx, dy] = [Math.cos(theta), Math.sin(theta)];
+          const n = Math.hypot(dx, dy) || 1;
+          const [wx, , wz] = modelToWorld(at, c, [cx, cy]);
+          const fx = dx / n;
+          const fz = -dy / n;
+          out.pos.set(wx - fx * 1.1, 1.2, wz - fz * 1.1);
+          out.target.set(wx + fx * 3, 0.6, wz + fz * 3);
+          out.rate = 6;
+          out.fov = 75;
+          return;
+        }
+        const { a } = scratch.current;
+        const rulerDoor = rulerEdge ? floor.doors.find((d) => d.edge === rulerEdge) : null;
+        if (!driving && rulerDoor) {
+          // the chair has stopped at a door (or rolled through it with hinges): close in on the door and its ruler
+          a.set(...modelToWorld(at, c, rulerDoor.center, 0.6));
+          out.target.copy(a);
+          out.pos.set(a.x + 3.2, 8.5, a.z + 5.5);
+          return;
+        }
+        const room = picked ? floor.rooms.find((r) => r.room_id === picked) : null;
+        if (room) {
+          const f = roomFrame(room);
+          const k = Math.max(1, f.size / 3);
+          a.set(...modelToWorld(at, c, f.centre));
+          out.target.copy(a);
+          out.pos.set(a.x + 3 * k, 8 * k, a.z + 5 * k);
+          return;
+        }
+        out.pos.set(x + span * 0.5, span * 0.95, z + span * 0.8);
         out.target.set(x, 0, z);
       } else {
         // high over the medical center, the field filling the screen; a little off-centre
@@ -128,11 +279,11 @@ function Stage() {
         out.target.set(4, 0, -4);
       }
     },
-    [step, chosenPoint],
+    [step, at, floor, ride, drive, driving, picked, progress, route, rulerEdge],
   );
 
   return (
-    <div className="fixed inset-0 overflow-hidden bg-paper">
+    <div className="fixed inset-0 overflow-clip bg-paper">
       <PatternDefs />
       {/* isolate: the scene's labels stack inside the canvas layer, under every plate */}
       <div className="absolute inset-0 isolate">
@@ -145,8 +296,31 @@ function Stage() {
               status={view.status}
               ranked={view.shortlist.map((u) => u.sid)}
               chosen={sid}
-              mode={step === "search" ? "full" : step === "apartment" ? "chosen" : "hidden"}
+              mode={step === "search" ? "full" : "hidden"}
               onPick={open}
+            />
+          )}
+          {unit && floor && (
+            <ApartmentScene
+              at={at}
+              shown={step === "apartment"}
+              ruler={driving ? null : rulerEdge}
+              unit={unit}
+              floor={floor}
+              drive={drive}
+              driving={driving}
+              progress={progress}
+              s={route}
+              selectedRoom={target}
+              onRoomSelect={selectRoom}
+              onDoorOpen={
+                live
+                  ? (edge: string) => {
+                      setTourEdge(edge);
+                      setEvidence("tour");
+                    }
+                  : undefined
+              }
             />
           )}
         </StageCanvas>
@@ -186,6 +360,134 @@ function Stage() {
           )}
         </>
       )}
+      {step === "apartment" && (
+        <Apartment
+          sid={sid}
+          pair={pair}
+          unit={unit}
+          scannedFloor={scannedFloor}
+          hingesFloor={hingesFloor}
+          hinges={hinges}
+          target={target}
+          picked={picked}
+          drive={drive}
+          ride={ride}
+          live={live}
+          evidence={evidence}
+          photoFor={photoFor}
+          rulerEdge={rulerEdge}
+          tourEdge={tourEdge}
+          onRoom={selectRoom}
+          onHinges={setHinges}
+          onRide={toggleRide}
+          onEvidence={showEvidence}
+        />
+      )}
     </div>
+  );
+}
+
+function Apartment({
+  sid,
+  pair,
+  unit,
+  scannedFloor,
+  hingesFloor,
+  hinges,
+  target,
+  picked,
+  drive,
+  ride,
+  live,
+  evidence,
+  photoFor,
+  rulerEdge,
+  tourEdge,
+  onRoom,
+  onHinges,
+  onRide,
+  onEvidence,
+}: {
+  sid: string | null;
+  pair: ReturnType<typeof useUnitPair>;
+  unit: import("@/lib/contract").UnitResult | null;
+  scannedFloor: Floor | null;
+  hingesFloor: Floor | null;
+  hinges: boolean;
+  target: string | null;
+  picked: string | null;
+  drive: ReturnType<typeof buildDrive>;
+  ride: boolean;
+  live: boolean;
+  evidence: EvidenceKind | null;
+  photoFor: (roomId: string | null) => import("@/lib/apartment").VisionItem | null;
+  rulerEdge: string | null;
+  /** the door the open tour is about */
+  tourEdge: string | null;
+  onRoom: (id: string) => void;
+  onHinges: (on: boolean) => void;
+  onRide: () => void;
+  onEvidence: (k: EvidenceKind | null) => void;
+}) {
+  if (pair.status === "error") {
+    return (
+      <div className="pointer-events-none absolute top-28 left-6">
+        <p role="alert" className="pointer-events-auto max-w-[56ch] border border-rule-strong bg-paper-lift px-5 py-3 text-base">
+          This apartment’s plan could not be loaded: {pair.message}. Go back to Search and open another.
+        </p>
+      </div>
+    );
+  }
+  if (!unit || !scannedFloor || !sid) {
+    return (
+      <p role="status" className="pointer-events-none absolute top-28 left-6 border border-rule-strong bg-paper-lift px-5 py-3 text-base">
+        Building the apartment…
+      </p>
+    );
+  }
+  const v = verdict(scannedFloor, hingesFloor, hinges);
+  const room = scannedFloor.rooms.find((r) => r.room_id === target) ?? null;
+  const hingesRoom = room ? (hingesFloor?.rooms.find((r) => r.room_id === room.room_id) ?? null) : null;
+  const photo = photoFor(room?.room_id ?? null);
+  const floor = unit.floors[0];
+  const hint = !picked ? "Pick a room below to fly there." : v.fixable && !hinges ? "A red door frame can often be fixed: try offset hinges." : null;
+  return (
+    <>
+      <div className="pointer-events-none absolute top-28 left-6 flex flex-col items-start gap-3">
+        <VerdictLine unit={unit} verdict={v} replay={pair.status === "ready" && pair.origin === "replay" ? (pair.reason ?? "") : null} />
+        {!evidence && <ApartmentLegend hint={hint} />}
+        {evidence && (
+          <EvidencePanel
+            kind={evidence}
+            sid={sid}
+            unit={unit}
+            door={tourEdge ? (floor.doors.find((d) => d.edge === tourEdge) ?? null) : null}
+            photo={photo}
+            onClose={() => onEvidence(null)}
+          />
+        )}
+      </div>
+      {room && (
+        <div className="pointer-events-none absolute top-28 right-6">
+          <RoomCard
+            room={room}
+            hingesRoom={hingesRoom}
+            drive={drive}
+            chairIn={unit.chair_in}
+            withHinges={hinges}
+            photo={photo}
+            hasTour={live && rulerEdge !== null}
+            hasAerial={live}
+            riding={ride}
+            onHinges={onHinges}
+            onRide={onRide}
+            onEvidence={onEvidence}
+          />
+        </div>
+      )}
+      <div className="pointer-events-none absolute inset-x-6 bottom-6 flex items-end">
+        <RoomStrip rooms={(hinges && hingesFloor ? hingesFloor : scannedFloor).rooms} selected={target} onSelect={onRoom} />
+      </div>
+    </>
   );
 }

@@ -6,7 +6,7 @@
  * step (even mid-flight) bends the path instead of cutting it. Reduced motion: the camera is set
  * on its goal at once. Lazy-loaded by the stage (no SSR).
  */
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Grid } from "@react-three/drei";
 import { useReducedMotionConfig } from "motion/react";
@@ -15,18 +15,34 @@ import { Boundary, Guards } from "@/components/dollhouse/dollhouse";
 import { readPalette } from "@/lib/tokens";
 
 /** Where the camera should be and what it looks at, written into `out` each frame. */
-export type Pose = (out: { pos: THREE.Vector3; target: THREE.Vector3 }, t: number) => void;
+export type Pose = (out: PoseGoal, t: number) => void;
+/** `rate` overrides how fast the camera closes on the goal this frame (riding along follows tightly) */
+export interface PoseGoal {
+  pos: THREE.Vector3;
+  target: THREE.Vector3;
+  rate?: number;
+  /** vertical field of view this frame, degrees (riding along sees wider, as a person does) */
+  fov?: number;
+}
 
 /** how quickly the camera closes on its goal (per second): unhurried, no overshoot */
 const EASE_RATE = 1.6;
+const FOV = 38;
 
 export function StageCanvas({ pose, onFallback, children }: { pose: Pose; onFallback: (reason: string) => void; children?: ReactNode }) {
   const [palette] = useState(readPalette);
+  useEffect(() => {
+    // the canvas can measure its box before layout settles (a step opened straight from the
+    // address) and then never draw; one resize after mount makes it measure again
+    const id = requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+    return () => cancelAnimationFrame(id);
+  }, []);
   return (
     <Boundary onError={(m) => onFallback(`The 3D stage failed: ${m}`)}>
       <Canvas
         dpr={[1, 1.5]}
-        camera={{ fov: 38, position: [2.2, 1.5, 2.6], near: 0.05, far: 2000 }}
+        resize={{ scroll: false, debounce: 0 }}
+        camera={{ fov: FOV, position: [2.2, 1.5, 2.6], near: 0.05, far: 2000 }}
         gl={{ antialias: true, powerPreference: "high-performance" }}
       >
         <color attach="background" args={[palette.paper]} />
@@ -70,19 +86,27 @@ function Table({ rule, ruleStrong }: { rule: string; ruleStrong: string }) {
 function Director({ pose }: { pose: Pose }) {
   const reduce = useReducedMotionConfig();
   const st = useRef({
-    goal: { pos: new THREE.Vector3(), target: new THREE.Vector3() },
+    goal: { pos: new THREE.Vector3(), target: new THREE.Vector3() } as PoseGoal,
     look: new THREE.Vector3(0, 0.45, 0),
     first: true,
   });
   useFrame(({ camera, clock }, dt) => {
     const s = st.current;
+    s.goal.rate = undefined;
+    s.goal.fov = undefined;
     pose(s.goal, clock.elapsedTime);
     // the first frame and reduced motion: be there, no flight
-    const k = reduce || s.first ? 1 : 1 - Math.exp(-Math.min(dt, 0.1) * EASE_RATE);
+    const k = reduce || s.first ? 1 : 1 - Math.exp(-Math.min(dt, 0.1) * (s.goal.rate ?? EASE_RATE));
     s.first = false;
     camera.position.lerp(s.goal.pos, k);
     s.look.lerp(s.goal.target, k);
     camera.lookAt(s.look);
+    const cam = camera as THREE.PerspectiveCamera;
+    const fov = s.goal.fov ?? FOV;
+    if (Math.abs(cam.fov - fov) > 0.05) {
+      cam.fov += (fov - cam.fov) * k;
+      cam.updateProjectionMatrix();
+    }
   });
   return null;
 }
