@@ -4,7 +4,7 @@
  * Client-side loading from this app's own /api routes (which forward to the Rollin' API, or
  * replay the contract fixtures when it is not reachable). Every result says where it came from.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   ORIGIN_HEADER,
   REPLAY_REASON_HEADER,
@@ -24,6 +24,38 @@ interface Got<T> {
   reason: string | null;
 }
 
+class HttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Units the API answered 404 for (no model cached). The default pick skips them; the list
+ * says so. Kept for the session: the batch's cache does not change while the page is open.
+ */
+let noPlan: readonly string[] = [];
+const noPlanListeners = new Set<() => void>();
+function markNoPlan(sid: string) {
+  if (noPlan.includes(sid)) return;
+  noPlan = [...noPlan, sid];
+  noPlanListeners.forEach((l) => l());
+}
+const NONE: readonly string[] = [];
+export function useNoPlan(): readonly string[] {
+  return useSyncExternalStore(
+    (l) => {
+      noPlanListeners.add(l);
+      return () => noPlanListeners.delete(l);
+    },
+    () => noPlan,
+    () => NONE,
+  );
+}
+
 async function getJson<T>(url: string, signal: AbortSignal): Promise<Got<T>> {
   const res = await fetch(url, { signal, cache: "no-store" });
   const body = await res.json().catch((err: unknown) => {
@@ -33,7 +65,7 @@ async function getJson<T>(url: string, signal: AbortSignal): Promise<Got<T>> {
   if (!res.ok) {
     const detail =
       body && typeof body.detail === "string" ? body.detail : res.statusText;
-    throw new Error(detail || `HTTP ${res.status}`);
+    throw new HttpError(detail || `HTTP ${res.status}`, res.status);
   }
   const origin: Origin =
     res.headers.get(ORIGIN_HEADER) === "live" ? "live" : "replay";
@@ -95,7 +127,10 @@ export function useUnitPair(sid: string | null): Load<UnitPair> {
   return useKeyedLoad(sid, async (signal) => {
     const base = `/api/units/${encodeURIComponent(sid ?? "")}`;
     const [a, h] = await Promise.all([
-      getJson<UnitResult>(base, signal),
+      getJson<UnitResult>(base, signal).catch((err: unknown) => {
+        if (sid && err instanceof HttpError && err.status === 404) markNoPlan(sid);
+        throw err;
+      }),
       getJson<UnitResult>(`${base}?hinges=1`, signal).catch((err: unknown) => {
         if (signal.aborted) throw err;
         return null; // a unit without a hinges result still draws as scanned
