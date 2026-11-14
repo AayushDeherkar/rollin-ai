@@ -185,9 +185,9 @@ test("the plans link opens a listed unit that has a plan, or the app when none d
   const all = await link([]);
   assert.match(all, /See the plans: http:\/\/web\.test\/\?sid=/);
   const second = await link([sids[0]]);
-  assert.match(second, /opens unit 2\): http:\/\/web\.test\/\?sid=/);
+  assert.match(second, /couldn't open the floor plan for unit 1, so this opens unit 2\): http:\/\/web\.test\/\?sid=/);
   assert.ok(second.includes(`sid=${encodeURIComponent(sids[1])}`));
   const none = await link(sids);
-  assert.match(none, /No floor plan is cached for these \d yet\. Browse the units that have one: http:\/\/web\.test$/m);
+  assert.match(none, /I couldn't open the floor plans for these \d\. Browse the units whose plans open: http:\/\/web\.test$/m);
   assert.doesNotMatch(none, /\?sid=/);
 });

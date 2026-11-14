@@ -72,8 +72,8 @@ export function resultsText(
   const web = webUrl.replace(/\/+$/, "");
   const at = planSid === null ? -1 : top.findIndex((u) => u.sid === planSid);
   if (at === 0) lines.push(`See the plans: ${web}/?sid=${encodeURIComponent(top[0].sid)}`);
-  else if (at > 0) lines.push(`See the plans (no floor plan is cached for unit 1 yet, so this opens unit ${at + 1}): ${web}/?sid=${encodeURIComponent(top[at].sid)}`);
-  else lines.push(`No floor plan is cached for these ${top.length} yet. Browse the units that have one: ${web}`);
+  else if (at > 0) lines.push(`See the plans (I couldn't open the floor plan for unit 1, so this opens unit ${at + 1}): ${web}/?sid=${encodeURIComponent(top[at].sid)}`);
+  else lines.push(`I couldn't open the floor plans for these ${top.length}. Browse the units whose plans open: ${web}`);
   return lines.join("\n\n");
 }
 
