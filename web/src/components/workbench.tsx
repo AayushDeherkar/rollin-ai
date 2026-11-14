@@ -116,15 +116,45 @@ function Sheet() {
   const onStart = useCallback(() => setDriving(true), []);
   const onSettled = useCallback(() => setDriving(false), []);
 
-  const listItems: UnitListItem[] = rows.map((r) => ({
+  // the list follows the scenario: with offset hinges it shows and ranks by the API's with_hinges figures,
+  // in the API's own order (score, then fewer blocked, then nearer, then id)
+  const hingesOn = scenario === "hinges";
+  const ranked = rows
+    .map((r) => {
+      const h = hingesOn && r.with_hinges ? r.with_hinges : null;
+      return { r, score: h?.score ?? r.score, counts: h?.counts ?? r.counts, summary: h?.summary ?? r.summary };
+    })
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        a.counts.blocked - b.counts.blocked ||
+        (a.r.distance_km ?? 0) - (b.r.distance_km ?? 0) ||
+        a.r.sid.localeCompare(b.r.sid),
+    );
+  const listItems: UnitListItem[] = ranked.map(({ r, counts, summary }, i) => ({
     sid: r.sid,
+    rank: i + 1,
     name: r.name,
-    counts: r.counts,
+    counts,
+    summary,
+    distanceKm: r.distance_km ?? null,
     note: hasPlan(r.sid) ? null : "No plan in the replay",
   }));
   if (sid && !rows.some((r) => r.sid === sid) && entry) {
-    listItems.unshift({ sid, name: entry.asScanned.name, counts: countRooms(entry.asScanned), note: "Opened by id, not in the ranked list" });
+    const shown = hingesOn && entry.hinges ? entry.hinges : entry.asScanned;
+    listItems.unshift({
+      sid,
+      rank: null,
+      name: entry.asScanned.name,
+      counts: countRooms(shown),
+      summary: null,
+      distanceKm: null,
+      note: "Opened by id, not in the ranked list",
+    });
   }
+  const caption = rows.length
+    ? `Ranked by share of rooms the chair reaches${hingesOn ? ", with offset hinges" : ", as scanned"}. Counts and distances are estimated.`
+    : null;
 
   const listState: PanelState = preview ?? (list.status === "loading" ? "loading" : listItems.length ? "ready" : "empty");
   const planState: PanelState = preview ?? (pair.status === "loading" && sid ? "loading" : unit ? "ready" : "empty");
@@ -144,6 +174,7 @@ function Sheet() {
             items={listItems}
             selected={sid}
             replayReason={listReplay}
+            caption={caption}
             emptyNote={list.status === "error" ? `The unit list could not be loaded: ${list.message}` : null}
             onSelect={(next) => {
               // the unit already on the plan: nothing to load or drive
