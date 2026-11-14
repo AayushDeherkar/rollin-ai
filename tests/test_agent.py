@@ -315,3 +315,21 @@ def test_draft_adds_the_unknowns_itself(data):
     assert "closet door" in d["text"] and A.ENTRANCE_Q in d["text"] and d["text"].startswith("Hi, this is an AI")
     extra = A.draft_landlord_message("synthetic_demo", ["Is there parking?", A.ENTRANCE_Q])
     assert extra["text"].count(A.ENTRANCE_Q) == 1 and "Is there parking?" in extra["text"]
+
+
+def test_named_uncached_unit_is_reported_not_dropped(data):
+    s = A.search_units(radius_km=8, include=["notdownloaded", "synthetic_demo"])
+    assert s["not_cached"] == ["notdownloaded"] and "notdownloaded" not in {u["sid"] for u in s["units"]}
+
+
+def test_fallback_keeps_the_search_filters_and_labels_an_assumed_chair(data):
+    r = A.Run("run_f")
+    r.calls["c1"] = ("search_units", {})
+    r.from_tool(_tool_msg("c1", A.search_units(radius_km=0.01)))          # the person's search matched nothing
+    assert r.ensure_shortlist((27.0, 42.0)) == [] and r.final("")["shortlist"] == []
+    r = A.Run("run_g")                                                     # no search, no chair given
+    ev = r.ensure_shortlist((27.0, 42.0), chair_asked=False)[0]
+    assert ev["args"]["chair_width_in"] == {"value": 27.0, "basis": "assumed", "unit": "in"}
+    r = A.Run("run_h")
+    ev = r.ensure_shortlist((25.0, 40.0))[0]
+    assert ev["args"]["chair_width_in"]["basis"] == "asked"
