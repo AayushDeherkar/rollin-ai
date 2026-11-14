@@ -173,6 +173,7 @@ def test_aerial_event_and_api(data, monkeypatch):
     r.calls["c9"] = ("aerial_check", {"sid": "synthetic_demo"})
     ev = r.from_tool(_tool_msg("c9", {"sid": "synthetic_demo", **res}))[0]
     assert ev["type"] == "aerial" and ev["label"] == "from aerial, estimated" and ev["image_url"] == "/api/aerial/synthetic_demo"
+    assert ev["text"].startswith("From aerial, estimated.") and "curb ramps: unclear" in ev["text"]
     _numbers_have_basis(ev, ev["id"])
     from agent.server import app
     c = TestClient(app)
@@ -187,3 +188,28 @@ def test_aerial_failure_is_reported_not_guessed(data, monkeypatch):
     import engine.vexcel as V
     monkeypatch.setattr(V, "aerial_check_unit", lambda sid: (_ for _ in ()).throw(RuntimeError("HTTP 403")))
     assert A.aerial_check("synthetic_demo") == {"sid": "synthetic_demo", "error": "aerial check failed: RuntimeError"}
+
+
+def test_aerial_error_becomes_a_tool_error_event():
+    r = A.Run("run_e")
+    r.calls["c1"] = ("aerial_check", {"sid": "x"})
+    ev = r.from_tool(_tool_msg("c1", {"sid": "x", "error": "aerial check failed: RuntimeError"}))
+    assert len(ev) == 1 and ev[0]["type"] == "tool" and ev[0]["status"] == "error"
+
+
+def test_unusable_vision_answer_is_not_cached(data, monkeypatch):
+    import engine.vexcel as V
+    (data / "cache").mkdir(exist_ok=True)
+    img = data / "cache" / f"{V.key_for(29.7, -95.4)}.jpg"
+    img.write_bytes(b"\xff\xd8\xff fake")
+    monkeypatch.setenv("MODEL_PROVIDER", "google")
+    monkeypatch.setenv("MODEL_NAME", "x")
+
+    class _Model:
+        def invoke(self, msgs):
+            return SimpleNamespace(content="I can't analyse this image.")
+    import langchain.chat_models as cm
+    monkeypatch.setattr(cm, "init_chat_model", lambda *a, **k: _Model())
+    with pytest.raises(RuntimeError):
+        V.aerial_check(29.7, -95.4)
+    assert not img.with_suffix(".findings.json").exists()

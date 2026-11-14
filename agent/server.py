@@ -84,7 +84,8 @@ def health() -> dict:
     if idx.exists():
         doc = json.loads(idx.read_text())
         meta = {k: doc.get(k) for k in ("candidates", "processed", "ranked", "updated_at", "chair_in")}
-    return {"ok": True, "cached_models": len(list((d / "cache").glob("*.json"))) if (d / "cache").exists() else 0,
+    models = [p for p in (d / "cache").glob("*.json") if not p.name.startswith("aerial_")] if (d / "cache").exists() else []
+    return {"ok": True, "cached_models": len(models),
             "batch": meta or None}
 
 

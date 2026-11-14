@@ -337,10 +337,16 @@ class Run:
                 return [self.ev("verify", text=text, checked=self.checked(), questions=self.questions())]
             return [self.ev("tool", name="task", subagent=sub, status="done", result={"text": text})]
         if name == "aerial_check" and isinstance(data, dict) and "findings" in data:
-            return [self.ev("aerial", sid=data["sid"], image_url=f"/api/aerial/{data['sid']}", label="from aerial, estimated",
+            summary = "; ".join(f"{f['item'].replace('_', ' ')}: {f['answer']}" for f in data["findings"])
+            return [self.ev("aerial", sid=data["sid"], text=f"From aerial, estimated. {summary}.",
+                            image_url=f"/api/aerial/{data['sid']}", label="from aerial, estimated",
                             source=data.get("source"), numbers={"clip_size": num(data.get("clip_m"), "assumed", "m")},
+                            evidence={"kind": "aerial"},
                             findings=[{k: f[k] for k in ("item", "question", "answer", "note", "basis", "label")}
                                       for f in data["findings"]])]
+        if name == "aerial_check" and isinstance(data, dict) and "error" in data:
+            return [self.ev("tool", name="aerial_check", status="error", args=wrap_args(args),
+                            result={"sid": data.get("sid"), "error": data["error"]})]
         if name in ("get_unit", "draft_landlord_message"):
             return [self.ev("tool", name=name, status="done", args=wrap_args(args),
                             result=data if name == "draft_landlord_message" else {"sid": args.get("sid")})]

@@ -84,7 +84,12 @@ def ask_vision(jpeg: bytes) -> dict:
     content = model.invoke([msg]).content
     text = content if isinstance(content, str) else "".join(p.get("text", "") for p in content if isinstance(p, dict))
     m = re.search(r"\{.*\}", text, re.S)
-    raw = json.loads(m.group(0)) if m else {}
+    try:
+        raw = json.loads(m.group(0)) if m else {}
+    except ValueError:
+        raw = {}
+    if not isinstance(raw, dict) or not any(k in raw for k in QUESTIONS):
+        raise RuntimeError("vision model gave no usable answer")   # not cached; reported as a failure, never as findings
     out = {}
     for k in QUESTIONS:
         v = raw.get(k) or {}
