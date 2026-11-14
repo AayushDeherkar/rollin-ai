@@ -37,6 +37,8 @@ export interface PlanEvent extends Base {
   type: "plan";
   text: string;
   todos?: Todo[];
+  /** the profile the run uses (contract v3): who is asking and the chair, each number with its basis */
+  profile?: { sender_id?: string; chair_in?: Num[] | null };
 }
 export interface ToolEvent extends Base {
   type: "tool";
@@ -54,6 +56,23 @@ export interface FindingEvent extends Base {
   text: string;
   numbers?: Record<string, Num>;
   evidence?: { kind: string; edge?: string; center?: Num[] } | null;
+  /** the fit the finding came from: "as scanned" or "offset hinges on every door" */
+  scenario?: string;
+  /** aerial: GET /api/aerial/{sid}, its label ("from aerial, estimated"), who made the image */
+  image_url?: string;
+  label?: string;
+  source?: string;
+  /** what a model saw in an image; every answer carries its basis and label */
+  findings?: VisionFinding[];
+}
+
+export interface VisionFinding {
+  item: string;
+  question: string;
+  answer: "yes" | "no" | "unclear" | string;
+  note?: string;
+  basis: Basis;
+  label?: string;
 }
 export interface VerifyEvent extends Base {
   type: "verify";
