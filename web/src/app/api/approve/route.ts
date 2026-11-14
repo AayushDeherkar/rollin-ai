@@ -24,7 +24,12 @@ export async function POST(req: NextRequest) {
       { reason: "Synthetic contract run played by the web app" },
     );
   }
-  const up = await upstream("/api/approve", { method: "POST", body: raw, headers: { "content-type": "application/json" } });
-  if (up.ok) return json(await up.res.json(), "live");
+  // an approved live action is carried out before the API answers, so allow it time
+  const up = await upstream("/api/approve", { method: "POST", body: raw, headers: { "content-type": "application/json" } }, 30_000);
+  if (up.ok) {
+    const result: unknown = await up.res.json().catch(() => null);
+    if (result) return json(result, "live");
+    return json({ detail: "API accepted the decision but sent no result" }, "live", { status: 502 });
+  }
   return json({ detail: up.reason }, "live", { status: up.status ?? 503 });
 }

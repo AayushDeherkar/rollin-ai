@@ -11,22 +11,31 @@ export const LOCAL_REPLAY_TAG = "_webreplay";
 
 const sleep = (ms: number, signal: AbortSignal) =>
   new Promise<void>((resolve) => {
-    const t = setTimeout(resolve, ms);
-    signal.addEventListener("abort", () => (clearTimeout(t), resolve()), { once: true });
+    const onAbort = () => (clearTimeout(t), resolve());
+    const t = setTimeout(() => (signal.removeEventListener("abort", onAbort), resolve()), ms);
+    signal.addEventListener("abort", onAbort, { once: true });
   });
 
 export async function localReplayStream(pace: number, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> {
   // next dev and next start run from web/; the contracts sit beside it
   const file = path.join(process.cwd(), "..", "contracts", "chat_events.example.jsonl");
-  const lines = (await readFile(file, "utf8")).split("\n").filter((l) => l.trim());
+  type Ev = Record<string, unknown> & { type: string; id: string; ts?: string };
+  const events: Ev[] = [];
+  for (const line of (await readFile(file, "utf8")).split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      events.push(JSON.parse(line) as Ev);
+    } catch {
+      /* skip a malformed line rather than break the stream */
+    }
+  }
   const runId = `${LOCAL_REPLAY_TAG.slice(1)}_${Math.random().toString(16).slice(2, 10)}`;
   const enc = new TextEncoder();
   return new ReadableStream<Uint8Array>({
     async start(controller) {
       controller.enqueue(enc.encode(": rollin event stream (local replay)\n\n"));
-      for (const line of lines) {
+      for (const ev of events) {
         if (signal.aborted) break;
-        const ev = JSON.parse(line) as Record<string, unknown> & { type: string; id: string; ts?: string };
         if (pace > 0) await sleep((DELAY_S[ev.type] ?? 1) * pace * 1000, signal);
         if (signal.aborted) break;
         const out: Record<string, unknown> = { ...ev, recorded_ts: ev.ts, ts: new Date().toISOString(), run_id: runId, replay: true };

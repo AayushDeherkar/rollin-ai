@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { ORIGIN_HEADER, REPLAY_REASON_HEADER, type Origin } from "@/lib/contract";
-import { upstream } from "@/lib/server/upstream";
+import { headerSafe, json, upstream } from "@/lib/server/upstream";
 import { localReplayStream } from "@/lib/server/replay-run";
 
 function sse(body: ReadableStream<Uint8Array>, origin: Origin, reason?: string): Response {
@@ -10,7 +10,7 @@ function sse(body: ReadableStream<Uint8Array>, origin: Origin, reason?: string):
     "x-accel-buffering": "no",
     [ORIGIN_HEADER]: origin,
   };
-  if (reason) headers[REPLAY_REASON_HEADER] = reason;
+  if (reason) headers[REPLAY_REASON_HEADER] = headerSafe(reason);
   return new Response(body, { headers });
 }
 
@@ -32,7 +32,12 @@ export async function POST(req: NextRequest) {
     reason = live.ok ? "API sent no stream" : live.reason;
   }
   const recorded = await upstream(`/api/chat?replay=1&pace=${pace}`, init, 8000);
-  if (recorded.ok && recorded.res.body) return sse(recorded.res.body, "replay", `Recorded run from the API. ${reason}`.slice(0, 200));
+  if (recorded.ok && recorded.res.body) return sse(recorded.res.body, "replay", `Recorded run from the API. ${reason}`);
   const why = recorded.ok ? "API sent no stream" : recorded.reason;
-  return sse(await localReplayStream(pace, req.signal), "replay", `Synthetic contract run. ${why}`.slice(0, 200));
+  try {
+    return sse(await localReplayStream(pace, req.signal), "replay", `Synthetic contract run. ${why}`);
+  } catch {
+    // e.g. a deploy that ships web/ without contracts/ beside it
+    return json({ detail: `No agent available. ${why}` }, "replay", { status: 503 });
+  }
 }

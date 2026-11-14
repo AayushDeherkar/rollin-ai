@@ -55,6 +55,9 @@ export function Timeline({
           const sid = typeof t.args?.sid === "string" ? t.args.sid : null;
           if (t.name === "run_fit" && sid) fitHinges[sid] = t.args?.hinges === true;
         }
+        // read now: Step renders after this loop ends, when later fits have changed the map
+        const sid = "sid" in ev && typeof ev.sid === "string" ? ev.sid : null;
+        const hinges = sid ? (fitHinges[sid] ?? false) : false;
         return (
           <motion.li
             key={`${ev.run_id}:${ev.id}:${i}`}
@@ -65,7 +68,7 @@ export function Timeline({
           >
             <span className="measure pt-0.5 text-right text-sm text-ink-soft">{i + 1}</span>
             <div className="flex min-w-0 flex-col gap-2">
-              <Step ev={ev} decisions={decisions} onDecide={onDecide} onEvidence={onEvidence} shownEvidence={shownEvidence} fitHinges={fitHinges} />
+              <Step ev={ev} decisions={decisions} onDecide={onDecide} onEvidence={onEvidence} shownEvidence={shownEvidence} hinges={hinges} />
             </div>
           </motion.li>
         );
@@ -89,14 +92,15 @@ function Step({
   onDecide,
   onEvidence,
   shownEvidence,
-  fitHinges,
+  hinges,
 }: {
   ev: AgentEvent;
   decisions: Record<string, Decision>;
   onDecide: (actionId: string, approved: boolean) => void;
   onEvidence: (e: Evidence) => void;
   shownEvidence: string | null;
-  fitHinges: Record<string, boolean>;
+  /** whether the last fit of this event's unit before it used offset hinges */
+  hinges: boolean;
 }) {
   switch (ev.type) {
     case "plan": {
@@ -144,7 +148,7 @@ function Step({
       const status = f.status && f.status in STATUS ? f.status : null;
       const canShow = Boolean(f.sid && f.room_id);
       const evidence: Evidence | null = canShow
-        ? { eventId: f.id, sid: f.sid!, roomId: f.room_id!, hinges: fitHinges[f.sid!] ?? false }
+        ? { eventId: f.id, sid: f.sid!, roomId: f.room_id!, hinges }
         : null;
       const body = (
         <>

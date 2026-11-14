@@ -24,6 +24,8 @@ export type Decision =
   | { state: "done"; result: ApproveResult }
   | { state: "error"; approved: boolean; message: string };
 
+export const ALREADY_DECIDED = "already decided";
+
 const IDLE: Run = { status: "idle", events: [], origin: null, reason: null, error: null };
 
 /** Split an SSE buffer into complete messages; returns the JSON payloads and the unparsed rest. */
@@ -109,6 +111,11 @@ export function useAgentRun() {
         body: JSON.stringify({ action_id: actionId, approved }),
       });
       const body = await res.json().catch(() => null);
+      if (res.status === 409) {
+        // decided before (e.g. a retry after a slow answer): final, not an error to retry
+        setDecisions((d) => ({ ...d, [actionId]: { state: "done", result: { action_id: actionId, approved, status: ALREADY_DECIDED } } }));
+        return;
+      }
       if (!res.ok) throw new Error(body && typeof body.detail === "string" ? body.detail : `HTTP ${res.status}`);
       setDecisions((d) => ({ ...d, [actionId]: { state: "done", result: body as ApproveResult } }));
     } catch (err) {

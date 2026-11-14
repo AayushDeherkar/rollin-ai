@@ -2,7 +2,7 @@
 
 import { Send, X } from "lucide-react";
 import type { ApprovalEvent } from "@/lib/agent-events";
-import type { Decision } from "@/lib/agent";
+import { ALREADY_DECIDED, type Decision } from "@/lib/agent";
 
 /**
  * The approval gate, drawn as a card the user must answer. Nothing is sent without "Send".
@@ -20,15 +20,24 @@ export function ApprovalCard({
   const sending = decision?.state === "sending";
   const decided = decision?.state === "done";
   return (
-    <section aria-label="Approval needed" className="flex flex-col gap-3 border-2 border-ink bg-paper-lift p-3">
-      <p className="display text-xl leading-tight font-semibold">Send these questions to the leasing office?</p>
+    <section
+      aria-label="Approval needed"
+      className="flex flex-col gap-3 border-2 border-ink bg-paper-lift p-3"
+    >
+      <p className="display text-xl leading-tight font-semibold">
+        Send these questions to the leasing office?
+      </p>
       {event.to?.label && (
         <p className="text-sm">
           <span className="text-ink-soft">To </span>
           <span className="font-semibold">{event.to.label}</span>
         </p>
       )}
-      {event.draft && <blockquote className="border-l-2 border-rule-strong pl-3 text-base">{event.draft}</blockquote>}
+      {event.draft && (
+        <blockquote className="border-l-2 border-rule-strong pl-3 text-base">
+          {event.draft}
+        </blockquote>
+      )}
       {event.reason && <p className="text-sm text-ink-soft">{event.reason}</p>}
 
       {!decided && (
@@ -62,13 +71,16 @@ export function ApprovalCard({
         <p role="status" className="text-base font-semibold">
           {decision.result.replay
             ? "Not sent: this is a replayed run."
-            : decision.result.approved
-              ? capitalise(decision.result.status)
-              : "Not sent. The agent will not contact them."}
+            : decision.result.status === ALREADY_DECIDED
+              ? "This was already decided."
+              : decision.result.approved
+                ? capitalise(decision.result.status)
+                : "Not sent. The agent will not contact them."}
         </p>
       )}
     </section>
   );
 }
 
-const capitalise = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+const capitalise = (s: string) =>
+  s ? s.charAt(0).toUpperCase() + s.slice(1) : s;

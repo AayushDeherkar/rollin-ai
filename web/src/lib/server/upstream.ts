@@ -47,8 +47,16 @@ export async function upstream(path: string, init?: RequestInit, timeoutMs = TIM
   return { ok: false, status: res.status, reason: `API answered ${res.status}: ${detail}`.slice(0, 200) };
 }
 
+/** HTTP header values must be Latin-1 with no line breaks; reasons come from upstream text. */
+export const headerSafe = (s: string) =>
+  s
+    .replace(/[^\x20-\x7e]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 200);
+
 export function json(body: unknown, origin: Origin, init: { status?: number; reason?: string } = {}): Response {
   const headers: Record<string, string> = { "content-type": "application/json", [ORIGIN_HEADER]: origin, "cache-control": "no-store" };
-  if (init.reason) headers[REPLAY_REASON_HEADER] = init.reason;
+  if (init.reason) headers[REPLAY_REASON_HEADER] = headerSafe(init.reason);
   return new Response(JSON.stringify(body), { status: init.status ?? 200, headers });
 }
