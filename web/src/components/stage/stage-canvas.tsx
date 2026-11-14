@@ -23,6 +23,8 @@ export interface PoseGoal {
   rate?: number;
   /** vertical field of view this frame, degrees (riding along sees wider, as a person does) */
   fov?: number;
+  /** be on the goal this frame, no flight (presenter mode opening on, or resetting to, a set view) */
+  snap?: boolean;
 }
 
 /** how quickly the camera closes on its goal (per second): unhurried, no overshoot */
@@ -33,9 +35,15 @@ export function StageCanvas({ pose, onFallback, children }: { pose: Pose; onFall
   const [palette] = useState(readPalette);
   useEffect(() => {
     // the canvas can measure its box before layout settles (a step opened straight from the
-    // address) and then never draw; one resize after mount makes it measure again
-    const id = requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
-    return () => cancelAnimationFrame(id);
+    // address, or presenter mode) and then never draw; a resize makes it measure again. One right
+    // after mount is not always late enough on a slow first load, so two more follow.
+    const nudge = () => window.dispatchEvent(new Event("resize"));
+    const id = requestAnimationFrame(nudge);
+    const timers = [400, 1500].map((ms) => window.setTimeout(nudge, ms));
+    return () => {
+      cancelAnimationFrame(id);
+      timers.forEach((t) => window.clearTimeout(t));
+    };
   }, []);
   return (
     <Boundary onError={(m) => onFallback(`The 3D stage failed: ${m}`)}>
@@ -94,9 +102,10 @@ function Director({ pose }: { pose: Pose }) {
     const s = st.current;
     s.goal.rate = undefined;
     s.goal.fov = undefined;
+    s.goal.snap = undefined;
     pose(s.goal, clock.elapsedTime);
     // the first frame and reduced motion: be there, no flight
-    const k = reduce || s.first ? 1 : 1 - Math.exp(-Math.min(dt, 0.1) * (s.goal.rate ?? EASE_RATE));
+    const k = reduce || s.first || s.goal.snap ? 1 : 1 - Math.exp(-Math.min(dt, 0.1) * (s.goal.rate ?? EASE_RATE));
     s.first = false;
     camera.position.lerp(s.goal.pos, k);
     s.look.lerp(s.goal.target, k);

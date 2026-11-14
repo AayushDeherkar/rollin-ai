@@ -25,7 +25,8 @@ export interface DriveProgress {
  * the chair is placed where the drive ends. `onStart` / `onSettled` keep the caller's
  * "driving" state in step with the animation; they must be stable.
  */
-export function useDriveProgress(drive: Drive | null, runId: number, onStart: () => void, onSettled: () => void): DriveProgress {
+/** `instant`: the chair is put where the drive ends, without rolling there (presenter mode's opening view) */
+export function useDriveProgress(drive: Drive | null, runId: number, onStart: () => void, onSettled: () => void, instant = false): DriveProgress {
   const reduce = useReducedMotionConfig();
   // key on the route's values: a scenario switch that leaves the route unchanged must not replay
   const routeKey = drive ? JSON.stringify(drive.route) : "";
@@ -35,7 +36,7 @@ export function useDriveProgress(drive: Drive | null, runId: number, onStart: ()
 
   useEffect(() => {
     if (!drive) return;
-    if (reduce || s.length === 0) {
+    if (reduce || instant || s.length === 0) {
       progress.jump(1);
       onSettled();
       return;
@@ -45,7 +46,7 @@ export function useDriveProgress(drive: Drive | null, runId: number, onStart: ()
     const controls = animate(progress, 1, { duration: glideSeconds(s.length), ease: EASE_DRAFT, onComplete: onSettled });
     return () => controls.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s, runId, reduce, drive == null]);
+  }, [s, runId, reduce, instant, drive == null]);
 
   return { progress, s };
 }

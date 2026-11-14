@@ -74,6 +74,8 @@ function readEntry() {
     pace: pace !== null && Number.isFinite(Number(pace)) ? Number(pace) : undefined,
     /** `?sid=<model id>` opens step 3 on that unit */
     sid: sid && /^[A-Za-z0-9_]{3,40}$/.test(sid) ? sid : null,
+    /** `?demo=1`: presenter mode. Step 3 on the demo unit, the chair already stopped at the bedroom door; R resets */
+    demo: q.get("demo") === "1",
   };
 }
 
@@ -88,7 +90,7 @@ const ORIGIN: [number, number, number] = [0, 0, 0];
 
 function Stage() {
   const [entry] = useState(readEntry);
-  const [step, setStep] = useState<Step>(entry.sid ? "apartment" : entry.search ? "search" : "chair");
+  const [step, setStep] = useState<Step>(entry.sid || entry.demo ? "apartment" : entry.search ? "search" : "chair");
   const [chair, setChair] = useState<ChairIn>(PRESETS[1].chair);
   /** the chair the search was started with: the profile sent to /api/chat */
   const [profile, setProfile] = useState<ChairIn | null>(entry.search ? PRESETS[1].chair : null);
@@ -159,7 +161,9 @@ function Stage() {
   }, [drive?.kind]);
   const onStart = useCallback(() => setGlide(true), []);
   const onSettled = useCallback(() => setGlide(false), []);
-  const { progress, s: route } = useDriveProgress(drive, runId, onStart, onSettled);
+  /** presenter mode's set view: the chair is placed at the end of its drive and the camera is put on the door, no flight */
+  const [still, setStill] = useState(entry.demo);
+  const { progress, s: route } = useDriveProgress(drive, runId, onStart, onSettled, still);
   // the door the ruler measures: where the chair stops as scanned, kept when hinges are tried
   const rulerEdge = useMemo(() => {
     if (!both || !scannedFloor || !target) return null;
@@ -192,6 +196,7 @@ function Stage() {
   const open = useCallback((next: string) => {
     setSid(next);
     setStep("apartment");
+    setStill(false);
     setHinges(false);
     setRide(false);
     setEvidence(null);
@@ -202,6 +207,7 @@ function Stage() {
     (roomId: string) => {
       if (!sid) return;
       setPick({ sid, room: roomId });
+      setStill(false);
       setEvidence(null);
       setRide(false);
       setGlide(true);
@@ -210,10 +216,53 @@ function Stage() {
     [sid],
   );
   const toggleRide = useCallback(() => {
+    setStill(false);
     setRide((r) => !r);
     setGlide(true);
     setRunId((n) => n + 1);
   }, []);
+
+  const toggleHinges = useCallback((on: boolean) => {
+    setStill(false);
+    setHinges(on);
+  }, []);
+
+  // ── presenter mode ──
+  /** back to the opening view: demo unit, bedroom, as scanned, chair stopped at the door */
+  const reset = useCallback(() => {
+    setStep("apartment");
+    setPick(null);
+    setHinges(false);
+    setRide(false);
+    setEvidence(null);
+    setGlide(true);
+    setStill(true);
+    setRunId((n) => n + 1);
+  }, []);
+  useEffect(() => {
+    if (!entry.demo) return;
+    const ac = new AbortController();
+    fetch("/api/demo", { signal: ac.signal })
+      .then((r) => (r.ok ? (r.json() as Promise<{ sid?: unknown }>) : null))
+      .then((d) => {
+        if (!ac.signal.aborted && typeof d?.sid === "string") setSid(d.sid);
+      })
+      .catch(() => {});
+    return () => ac.abort();
+  }, [entry.demo]);
+  useEffect(() => {
+    if (!entry.demo) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "r" && e.key !== "R") return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      e.preventDefault();
+      reset();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [entry.demo, reset]);
 
   const scratch = useRef({ a: new THREE.Vector3(), b: new THREE.Vector3() });
   const pose = useCallback(
@@ -259,6 +308,7 @@ function Stage() {
           a.set(...modelToWorld(at, c, rulerDoor.center, 0.6));
           out.target.copy(a);
           out.pos.set(a.x + 3.2, 8.5, a.z + 5.5);
+          if (still) out.snap = true;
           return;
         }
         const room = picked ? floor.rooms.find((r) => r.room_id === picked) : null;
@@ -279,7 +329,7 @@ function Stage() {
         out.target.set(4, 0, -4);
       }
     },
-    [step, at, floor, ride, drive, driving, picked, progress, route, rulerEdge],
+    [step, at, floor, ride, drive, driving, picked, progress, route, rulerEdge, still],
   );
 
   return (
@@ -378,7 +428,7 @@ function Stage() {
           rulerEdge={rulerEdge}
           tourEdge={tourEdge}
           onRoom={selectRoom}
-          onHinges={setHinges}
+          onHinges={toggleHinges}
           onRide={toggleRide}
           onEvidence={showEvidence}
         />
