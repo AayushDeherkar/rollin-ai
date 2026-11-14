@@ -15,7 +15,7 @@
 **Main track:** Healthcare (only one allowed).
 **Special tracks to enter:** CoStar (primary), Amazon Practical AI, LangChain deepagents, Photon (Agents in iMessage, built on Photon 2.0; confirm track requirements), Peri Forward Deployed (only if we complete a real consultation with evidence).
 
-**Status at time of writing:** the core fit engine (`engine/fit.py`) is built and verified on real Matterport data. Demo apartment found: `demo-backup` (<unit>): as scanned, a 27" chair reaches only the living room and laundry; with offset hinges the bedroom flips to reachable; bathrooms stay blocked behind a <x>" door.
+**Status at time of writing:** the core fit engine (`engine/fit.py`) is built and verified on real Matterport data. The demo units are referenced by alias only (`demo-main`, `demo-backup`, `demo-pass`, `demo-sparse`); their ids live in the gitignored `data/demo_units.json`, never in this repo.
 
 ---
 
@@ -87,7 +87,7 @@ If a number can't be verified in 5 minutes, drop it. Never invent statistics.
 - Quickstart reference: `https://beta-app.matterport.com/2026-princeton-hackathon/quickstart` (ships `models_index.csv` and `AGENTS.md` — download both into `data/`).
 
 ### 4.2 What's in the dataset
-- 14,945 models: "Commercial Spaces" folder 13,014 (many are apartment units named like `<unit name>`), "Residential Spaces" 1,930. 232 have aerial Gaussian splats + drone photos.
+- 14,945 models: "Commercial Spaces" folder 13,014 (many are apartment units named like `<beds>BR, <baths>BA - <size>SF`), "Residential Spaces" 1,930. 232 have aerial Gaussian splats + drone photos.
 - `models_index.csv`: one row per model — sid, name, segment, lat/lon, address, CoStar property id or Homes listing id where known, splat yes/no, pano and room counts, created dates, `ai_summary` flag. The API has **no geo search**; filter this CSV by lat/lon.
 - Every model has a **defurnished view** (same panoramas, furniture removed): `view(type: "matterport.model.defurnished") { id }`, then query that id like a model.
 - Vexcel: `POST https://api.vexcelgroup.com/v2/ortho/extract` with `X-API-KEY` header; clips a 7.5 cm/px orthophoto to a WKT polygon around lat/lon. Houston and LA only (elsewhere 403). Vexcel's own tutorial (link on the Vexcel keys card) covers parcels, roof attributes, obliques, object detection, embedding search.
@@ -115,21 +115,22 @@ query L($o: String) { models(query: "*", offset: $o) { totalResults nextOffset r
 Merge Q1+Q2+Q3 into `{"data":{"model":{name, floors, rooms}}}` — the engine's `--file` format.
 
 **Data facts learned from 21 real apartments:**
-- Units typically have 5–13 measured openings; some have only 2 (e.g. `redacted-unit-03`). Missing doors → rooms are **unknown**, never failed.
+- Units typically have 5–13 measured openings; some have only 2. Missing doors → rooms are **unknown**, never failed.
 - Opening `type` is `doorway` or `opening`; treat both as passages.
 - Opening `height` / `lowerElevation` are unreliable (docs sample shows 0.1 m) — ignore them.
-- Openings < 18 in (seen: <x>", <x>") are scan artifacts — flagged, not used.
+- Openings < 18 in are scan artifacts — flagged, not used.
 - Rooms labelled `Void` are ignored; some rooms have no classification or an empty boundary.
 - Common real door widths 21–25 in (baths, closets) — this is why so many rooms fail for a 27 in chair.
 - Wall-graph coordinates are metres, model frame, Z up. **Showcase SDK uses a different frame**: `api_to_sdk(x, y, z) = (x, z, -y)`.
 
 ### 4.4 Known demo units
-| sid | name | result (27×42 in chair) | use |
-|---|---|---|---|
-| `demo-backup` | <unit name> | Re-verified Nov 14 ~08:30 from a fresh fetch. As scanned: <n> of <m> rooms reachable (living room, laundry). Bedroom blocked: <x>" door, ~<x>" clear, <x> in short → reachable with hinges (second living area also flips, <x>" door). Bathroom suite (two rooms joined by a <x>" door) stays blocked: its only ways in are a <x>" door (from the second living area) and a <x>" door (from the bedroom) | **Main demo** (before/after) |
-| `demo-pass` | <unit name> | Fully reachable (<x>" closet door bypassed via a <x>" opening); <x>" bathroom turning circle | "Pass" contrast |
-| `redacted-unit-03` | <unit name> | Reachable; only 2 doors in scan; no entry door | Example of sparse data |
-Other candidates with narrow doors (from a 21-unit scan): `redacted-unit-04`, `redacted-unit-05`, `redacted-unit-06`, `redacted-unit-07`, `redacted-unit-08`, `redacted-unit-09`.
+| alias | role | use |
+|---|---|---|
+| `demo-main` | Main before/after demo: a bedroom the chair can't enter that offset hinges fix, and a bathroom that stays blocked | **Main demo** |
+| `demo-backup` | Same story, second unit | Backup |
+| `demo-pass` | Fully reachable contrast | "Pass" contrast |
+| `demo-sparse` | Few doors in the scan, so some rooms are unknown | Example of sparse data |
+Alias → model id: `data/demo_units.json` (gitignored; share it directly, never through GitHub). CoStar terms: floor plans and property-identifiable data are not republished in this repo.
 
 ---
 
@@ -155,20 +156,20 @@ Writes `out/<sid>_fit[ _hinges].json` and `out/<sid>_floor<N>_fit[ _hinges].png`
 **Output contract (`contracts/unit_result.example.json`)**
 ```jsonc
 {
-  "model": "demo-backup", "name": "<unit name>",
+  "model": "synthetic_demo", "name": "Synthetic 1BR (narrow bedroom door)",
   "chair_in": [27.0, 42.0], "scenario": "as scanned" | "offset hinges on every door",
   "floors": [{
     "floor": "0", "start_room": "25",
     "walls":  [{"edge":"z","type":"wall","thickness":0.12,"a":[x,y],"b":[x,y]}],
-    "doors":  [{"edge":"z","type":"doorway","width_in":<x>,"clear_in_est":<x>,"passable":false,"center":[x,y]}],
+    "doors":  [{"edge":"z","type":"doorway","width_in":26.0,"clear_in_est":24.0,"passable":false,"center":[x,y]}],
     "artifacts": [{"edge":"...","width_in":1.1}],
     "openings_found": 10, "artifacts_ignored": 0,
     "rooms": [{
-      "room_id":"<room>","label":"Bedroom","area_m2":<x>,
+      "room_id":"bed","label":"Bedroom","area_m2":9,
       "status":"reachable|blocked|unknown",
-      "reason":"widest door ~<x> in clear < chair 27.0 in (short by <x> in); offset hinges ... --hinges",
-      "doors":[{"type":"doorway","width_in":<x>,"clear_in_est":<x>,"center":[x,y]}],
-      "turning_space":{"max_circle_in":<x>,"meets_60in":true,"walls_only":true,"center":[x,y]} | null,
+      "reason":"widest way in (door from Living Room) ~26.0 in clear < chair 27.0 in (short by 1.0 in); offset hinges ...",
+      "doors":[{"type":"doorway","width_in":28.0,"clear_in_est":26.0,"center":[x,y]}],
+      "turning_space":{"max_circle_in":59.1,"meets_60in":false,"walls_only":true,"center":[x,y]} | null,
       "path":[[x,y,theta_rad], ...] | null,     // chair centre + heading, metres, model frame; blocked rooms: up to the blocking door (null if no door on the way connects to a reached room)
       "blocking_door_edge":"z" | null,           // door where the chair stops (blocked rooms only)
       "polygon":[[x,y], ...]
@@ -269,7 +270,7 @@ Layout (one screen, projector-first, ≥16 px body text, high contrast, one acce
 ### Person A (Aayush) — data, engine, agent (Python)
 | # | Task | Done when | Est. |
 |---|---|---|---|
-| A1 | Create repo, push starter folder, add `.env.example`, `.gitignore`, `requirements.txt` | Both can clone & run engine on `data/cache/demo-backup.json` | 0.5 h |
+| A1 | Create repo, push starter folder, add `.env.example`, `.gitignore`, `requirements.txt` | Both can clone & run engine on `data/cache/<demo-main sid>.json` | 0.5 h |
 | A2 | `engine/matterport.py`: client with 3-query split, 4× retry, disk cache `data/cache/<sid>.json` | `python -m engine.matterport <sid>` caches a model | 1 h |
 | A3 | `engine/batch.py`: download `models_index.csv`; filter apartments near Texas Medical Center (≈ 29.71 N, −95.40 W — verify) within ~8 km; fetch + run engine for 27×42 chair; write `data/batch/index.json` (ranked) | ≥150 units processed and ranked | 2 h (mostly waiting) |
 | A4 | FastAPI `agent/server.py`: `/api/units`, `/api/units/{sid}` from cache | B's UI loads real data | 1 h |
@@ -285,7 +286,7 @@ Layout (one screen, projector-first, ≥16 px body text, high contrast, one acce
 |---|---|---|---|
 | B1 | `web/` scaffold: Next.js + Tailwind + shadcn/ui + Motion; design tokens; 3-panel layout | Renders with fixtures | 1 h |
 | B2 | Floor-plan SVG renderer from contract (walls, doors with inch labels, room polygons by status) | Matches the engine PNG | 2 h |
-| B3 | Chair animation along `path` (rect w×l rotated by theta), before/after hinge toggle with animated room colour change | The money shot works on `demo-backup` | 2 h |
+| B3 | Chair animation along `path` (rect w×l rotated by theta), before/after hinge toggle with animated room colour change | The money shot works on `demo-main` | 2 h |
 | B4 | Map + ranked list from `/api/units` | Click unit → loads plan | 1.5 h |
 | B5 | Agent trace panel (SSE), evidence chips, approval card | Streams a real run | 2 h |
 | B6 | Matterport embed + jump to door (Showcase SDK `Sweep.moveTo`, coordinate conversion) | Click red door → tour moves there | 2 h |
@@ -354,7 +355,7 @@ Layout (one screen, projector-first, ≥16 px body text, high contrast, one acce
 ### 11.1 The 2-minute pitch
 | Time | Content |
 |---|---|
-| 0:00–0:25 | Already on screen: `demo-backup`. The chair glides from the living room, **jams red at the bedroom door — "<x> inches short."** Click → 3D tour jumps to that door. Toggle hinges → it turns green. Bathrooms stay red: "24-inch door. The agent will ask." |
+| 0:00–0:25 | Already on screen: `demo-main`. The chair glides from the living room, **jams red at the bedroom door, with the shortfall in inches.** Click → 3D tour jumps to that door. Toggle hinges → it turns green. The bathroom stays red: "The agent will ask." |
 | 0:25–0:45 | "This is Maria [illustrative]. Spinal-cord injury, rehab in Houston's Medical Center, ready to go home. Her chair is 27 inches. Listing sites give her one checkbox, filled in by the landlord." |
 | 0:45–1:25 | Live: case manager texts the agent (iMessage). Trace streams: plan → 180 units checked → 12 fully reachable → top 3 → unknowns → "Approve message to leasing office?" → yes → teammate's phone buzzes. |
 | 1:25–1:45 | How: Matterport wall graph + measured doors → motion planning for her exact chair; defurnished panoramas for fixtures; Vexcel for the entrance; deepagents with approval. Estimates are labelled. |

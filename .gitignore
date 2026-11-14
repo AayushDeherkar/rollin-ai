@@ -14,6 +14,7 @@ data/batch/
 data/replay/
 data/outbox/
 data/memory/
+data/demo_units.json
 data/models/
 .DS_Store
 .pytest_cache/

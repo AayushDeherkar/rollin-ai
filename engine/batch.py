@@ -5,7 +5,7 @@
 
 Centre: Texas Medical Center, Houston, 29.7095 N, -95.3982 W (latitude.to; Wikipedia's district point
 29.7062, -95.4088 is ~1 km west). Candidates: rows of data/raw/models_index.csv with coordinates inside the
-radius whose name looks like a unit ("<unit name>", "2BR, 2BA", "Studio"), nearest first.
+radius whose name looks like a unit ("<n> BR, <n> BA - <size> SF", "<n>BR, <n>BA", "Studio"), nearest first.
 Each unit is run as scanned and with offset hinges. Resumable: units with a result file are not refetched.
 Outputs (gitignored): data/batch/results/<sid>.json, data/batch/index.json (rewritten as it goes).
 """

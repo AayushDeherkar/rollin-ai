@@ -3,8 +3,8 @@ Rollin' fit engine: can a specific wheelchair reach every room of a Matterport m
 
 Usage:
     (keys come from .env; live fetches are cached in data/cache/<sid>.json)
-    python fit.py redacted-unit-03              # default chair 27 x 42 in
-    python fit.py redacted-unit-03 25 40        # chair width, length in inches
+    python fit.py <sid|demo-main>              # default chair 27 x 42 in
+    python fit.py <sid|demo-main> 25 40        # chair width, length in inches
     python fit.py --file model.json        # run on a saved API response
     python fit.py --file model.json --hinges   # what-if: offset hinges on every door
 
@@ -382,7 +382,9 @@ def main(argv):
         mid = os.path.splitext(os.path.basename(argv[1]))[0]
         rest = argv[2:]
     else:
-        mid = argv[0]
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from engine.demo_units import resolve
+        mid = resolve(argv[0])
         model = fetch(mid)
         rest = argv[1:]
     chair_w = float(rest[0]) * IN if len(rest) > 0 else 27 * IN

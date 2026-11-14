@@ -20,9 +20,10 @@ import zipfile
 from datetime import datetime, timezone
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from engine.demo_units import demo_sids  # noqa: E402
 
-# main demo first, then backup, alternatives, the fully reachable contrast, the sparse-door example
-DEMO_UNITS = ["demo-main", "demo-backup", "redacted-unit-02", "redacted-unit-01", "demo-pass", "demo-sparse"]
+# demo units come from the gitignored data/demo_units.json (aliases demo-main, demo-backup, demo-pass, demo-sparse)
 TOP_N = 20
 SID = re.compile(r"^[A-Za-z0-9_]{3,40}$")
 BAD = (OSError, ValueError, KeyError, TypeError, AttributeError)
@@ -59,7 +60,7 @@ def unit_list(d: pathlib.Path) -> list[str]:
     except BAD:
         top = []
     top = [s for s in top if isinstance(s, str) and SID.match(s)]
-    return list(dict.fromkeys(DEMO_UNITS + _replay_sids(d) + top))
+    return list(dict.fromkeys(demo_sids() + _replay_sids(d) + top))
 
 
 def _inside(base: pathlib.Path, name: object) -> pathlib.Path | None:
@@ -102,14 +103,16 @@ def demo_status() -> dict:
     """What the offline demo has and lacks right now (GET /api/health)."""
     d = data_dir()
     units = {}
-    for sid in DEMO_UNITS:
+    for sid in demo_sids():
         f = unit_files(d, sid)
         units[sid] = {k: bool(v) for k, v in f.items() if k != "fit"}
     missing = [f"{sid}:{k}" for sid, u in units.items() for k, ok in u.items() if not ok]
     for name, p in (("batch index", d / "batch" / "index.json"), ("replay", d / "replay" / "run.jsonl")):
         if not p.exists():
             missing.insert(0, name)
-    return {"main_unit": DEMO_UNITS[0], "units": units,
+    if not demo_sids():
+        missing.insert(0, "data/demo_units.json (gitignored alias file)")
+    return {"main_unit": "demo-main", "units": units,
             "index": (d / "batch" / "index.json").exists(), "replay": (d / "replay" / "run.jsonl").exists(),
             "missing": missing}
 
@@ -120,7 +123,7 @@ def build(out: pathlib.Path) -> dict:
     if ROOT.resolve() in out.parents:
         raise SystemExit(f"refusing to write real data inside the repo: {out}")
     entries: dict[str, pathlib.Path] = {}
-    for p in (d / "batch" / "index.json", d / "replay" / "run.jsonl", d / "raw" / "models_index.csv"):
+    for p in (d / "batch" / "index.json", d / "replay" / "run.jsonl", d / "raw" / "models_index.csv", d / "demo_units.json"):
         if p.exists():
             entries[p.relative_to(d).as_posix()] = p
     per_unit = {}
@@ -131,14 +134,14 @@ def build(out: pathlib.Path) -> dict:
             entries[p.relative_to(d).as_posix()] = p
     status = demo_status()
     manifest = {"built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                "demo_units": DEMO_UNITS, "units": per_unit, "missing_for_demo": status["missing"],
+                "demo_units": demo_sids(), "units": per_unit, "missing_for_demo": status["missing"],
                 "files": sorted(entries)}
     out.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for arc, p in sorted(entries.items()):
             z.write(p, f"data/{arc}")
         z.writestr("MANIFEST.json", json.dumps(manifest, indent=1))
-        z.writestr("README.txt", README.format(main=DEMO_UNITS[0]))
+        z.writestr("README.txt", README.format(main=(demo_sids() or ["<demo-main sid>"])[0]))
     return {"zip": str(out), "files": len(entries), "units": len(per_unit), "missing": status["missing"],
             "bytes": out.stat().st_size}
 
