@@ -122,14 +122,15 @@ function Sheet() {
   const ranked = rows
     .map((r) => {
       const h = hingesOn && r.with_hinges ? r.with_hinges : null;
-      return { r, score: h?.score ?? r.score, counts: h?.counts ?? r.counts, summary: h?.summary ?? r.summary };
+      // an older batch index has no hinges summary: show none rather than the as-scanned one
+      return { r, score: h ? h.score : r.score, counts: h ? h.counts : r.counts, summary: h ? h.summary || null : r.summary };
     })
     .sort(
       (a, b) =>
         b.score - a.score ||
         a.counts.blocked - b.counts.blocked ||
         (a.r.distance_km ?? 0) - (b.r.distance_km ?? 0) ||
-        a.r.sid.localeCompare(b.r.sid),
+        (a.r.sid < b.r.sid ? -1 : a.r.sid > b.r.sid ? 1 : 0), // code-point order, as Python sorts
     );
   const listItems: UnitListItem[] = ranked.map(({ r, counts, summary }, i) => ({
     sid: r.sid,
@@ -179,8 +180,8 @@ function Sheet() {
             onSelect={(next) => {
               // the unit already on the plan: nothing to load or drive
               if (next === sid) return;
+              // the scenario stays: the list is ranked by it, so changing it here would re-sort under the cursor
               setChosen(next);
-              setScenario("scanned");
               setDriving(true);
             }}
           />
