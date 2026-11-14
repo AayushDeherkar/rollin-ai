@@ -317,6 +317,27 @@ def render(floor_res, path_png, title):
     plt.close(fig)
 
 
+def analyze_model(model, mid, chair_w_in=27.0, chair_l_in=42.0, hinges=False, render_dir=None):
+    """Engine result for one model (contract: contracts/unit_result.example.json). PNGs only if render_dir."""
+    chair_w, chair_l = chair_w_in * IN, chair_l_in * IN
+    by_floor = {}
+    for r in model.get("rooms", []):
+        by_floor.setdefault((r.get("floor") or {}).get("id"), []).append(r)
+    tag = "_hinges" if hinges else ""
+    report = {"model": mid, "name": model.get("name"), "chair_in": [chair_w_in, chair_l_in],
+              "scenario": "offset hinges on every door" if hinges else "as scanned", "floors": []}
+    for i, f in enumerate(model["floors"]):
+        res = analyze_floor(f, by_floor.get(f["id"], []) or (by_floor.get(None, []) if len(model["floors"]) == 1 else []),
+                            chair_w, chair_l, hinges)
+        draw = res.pop("_draw", None)
+        if draw and render_dir:
+            os.makedirs(render_dir, exist_ok=True)
+            render({**res, "_draw": draw}, os.path.join(render_dir, f"{mid}_floor{i}_fit{tag}.png"),
+                   f"{model.get('name')} - chair {chair_w_in:.0f}x{chair_l_in:.0f} in" + (" - with offset hinges" if hinges else ""))
+        report["floors"].append(res)
+    return report
+
+
 def main(argv):
     hinges = "--hinges" in argv
     argv = [a for a in argv if a != "--hinges"]
@@ -332,20 +353,9 @@ def main(argv):
     chair_w = float(rest[0]) * IN if len(rest) > 0 else 27 * IN
     chair_l = float(rest[1]) * IN if len(rest) > 1 else 42 * IN
 
-    by_floor = {}
-    for r in model.get("rooms", []):
-        by_floor.setdefault((r.get("floor") or {}).get("id"), []).append(r)
-    os.makedirs("out", exist_ok=True)
     tag = "_hinges" if hinges else ""
-    report = {"model": mid, "name": model.get("name"), "chair_in": [chair_w / IN, chair_l / IN],
-              "scenario": "offset hinges on every door" if hinges else "as scanned", "floors": []}
-    for i, f in enumerate(model["floors"]):
-        res = analyze_floor(f, by_floor.get(f["id"], []) or (by_floor.get(None, []) if len(model["floors"]) == 1 else []),
-                            chair_w, chair_l, hinges)
-        if "_draw" in res:
-            render(res, f"out/{mid}_floor{i}_fit{tag}.png", f"{model.get('name')} - chair {chair_w/IN:.0f}x{chair_l/IN:.0f} in" + (" - with offset hinges" if hinges else ""))
-            res.pop("_draw")
-        report["floors"].append(res)
+    report = analyze_model(model, mid, chair_w / IN, chair_l / IN, hinges, render_dir="out")
+    os.makedirs("out", exist_ok=True)
     json.dump(report, open(f"out/{mid}_fit{tag}.json", "w"), indent=1)
 
     for f in report["floors"]:
