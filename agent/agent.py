@@ -4,7 +4,8 @@
 
 Model: MODEL_PROVIDER (google | anthropic) + MODEL_NAME from .env. LangSmith tracing follows LANGSMITH_* in .env.
 Tools read only local data (data/cache, data/batch). `send_message` is the only outbound tool: it is held by
-the orchestrator alone (no subagent has it), it is in `interrupt_on`, and it runs only after POST /api/approve
+the orchestrator alone (no subagent has it; we supply our own read-only `general-purpose` subagent so deepagents
+does not add its default one with the main tools), it is in `interrupt_on`, and it runs only after POST /api/approve
 resumes the graph. Even then it only queues the message in data/outbox/ for the messaging bridge.
 Events streamed to the UI follow contracts/chat_events.example.jsonl. Findings come from engine output, never
 from model text.
@@ -154,6 +155,9 @@ def subagents(model: Any) -> list[dict]:
          "system_prompt": "Re-check each claim with run_fit using the user's exact chair size. Label it measured (door widths, walls), estimated (clear width, "
                           "turning circle), assumed (hinge gain ~1.75 in) or unknown. List unknowns as questions for the landlord.",
          "tools": [run_fit, get_unit], "model": model},
+        {"name": "general-purpose", "description": "Read-only helper for anything the other subagents do not cover.",
+         "system_prompt": "Answer using the read-only tools. You cannot contact anyone.",
+         "tools": [search_units, get_unit, run_fit], "model": model},
         {"name": "outreach", "description": "Drafts (never sends) a message to a leasing office.",
          "system_prompt": "Call draft_landlord_message once with the questions you are given. Return the draft text and recipient. "
                           "You cannot send messages.",
@@ -229,11 +233,15 @@ def findings_from_fit(res: dict, chair_w: float) -> list[dict]:
         if r["status"] == "reachable":
             continue
         stop = r.get("blocking_door")
-        numbers = {"door_widths": [num(w, "measured", "in") for w in r["door_widths_in"]]}
+        widths = r["door_widths_in"]
+        numbers = {"door_count": num(len(widths), "measured")}
+        if widths:
+            numbers["widest_door_width"] = num(max(widths), "measured", "in")
         if stop:
             numbers.update(blocking_door_width=num(stop["width_in"], "measured", "in"),
-                           clear_width=num(stop["clear_in_est"], "estimated", "in"),
-                           shortfall=num(round(chair_w - stop["clear_in_est"], 1), "estimated", "in"))
+                           clear_width=num(stop["clear_in_est"], "estimated", "in"))
+            if stop["clear_in_est"] < chair_w:             # a door that fits but a route too tight has no shortfall
+                numbers["shortfall"] = num(round(chair_w - stop["clear_in_est"], 1), "estimated", "in")
         if r.get("turning_circle_in") is not None:
             numbers["turning_circle"] = num(r["turning_circle_in"], "estimated", "in", note="walls only")
         if r["status"] == "unknown":
@@ -260,6 +268,7 @@ class Run:
         self.pending: list[str] = []
         self.calls: dict[str, tuple[str, dict]] = {}
         self.fits: dict[tuple[str, str], dict] = {}          # (sid, scenario) -> raw room counts from run_fit
+        self.found: dict[tuple[str, str, str], dict] = {}     # (sid, room_id, scenario) -> finding summary
 
     def ev(self, type_: str, **body) -> dict:
         self.n += 1
@@ -297,6 +306,7 @@ class Run:
                 key = (f["sid"], f["room_id"], f["scenario"])
                 if key not in self.seen_findings:
                     self.seen_findings.add(key)
+                    self.found[key] = {"room": f["room"], "status": f["status"], "turning": "turning_circle" in f["numbers"]}
                     out.append(self.ev(f.pop("type"), **f))
             return out
         if name == "search_units" and isinstance(data, dict):
@@ -308,7 +318,7 @@ class Run:
             sub = args.get("subagent_type")
             text = text_of(m.content)
             if sub == "verifier":
-                return [self.ev("verify", text=text)]
+                return [self.ev("verify", text=text, checked=self.checked(), questions=self.questions())]
             return [self.ev("tool", name="task", subagent=sub, status="done", result={"text": text})]
         if name in ("get_unit", "draft_landlord_message"):
             return [self.ev("tool", name=name, status="done", args=wrap_args(args),
@@ -316,20 +326,43 @@ class Run:
         return []
 
     def from_interrupt(self, interrupt: Any, thread: dict) -> list[dict]:
-        out = []
-        for i, req in enumerate(interrupt.value.get("action_requests", [])):
-            if req.get("name") != "send_message":
-                continue
-            action_id = f"act_{self.run_id}_{len(self.pending) + 1}"
-            text = with_ai_disclosure(req["args"].get("text", ""))
-            approvals.register(approvals.Pending(action_id=action_id, run_id=self.run_id, action="send_message",
-                                                 payload={"to": req["args"].get("to"), "text": text},
-                                                 on_resolve=lambda approved, t=thread: resume(t, approved)))
-            self.pending.append(action_id)
-            out.append(self.ev("approval_needed", action_id=action_id, action="send_message",
-                               to={"label": req["args"].get("to")}, draft=text,
-                               reason="Outbound messages always need a person's approval."))
+        """One approval per interrupt: the middleware needs one decision per batched request, all at once."""
+        reqs = interrupt.value.get("action_requests", [])
+        msgs = [{"to": r["args"].get("to"), "draft": with_ai_disclosure(r["args"].get("text", ""))}
+                for r in reqs if r.get("name") == "send_message"]
+        if not msgs:
+            return []
+        action_id = f"act_{self.run_id}_{len(self.pending) + 1}"
+        approvals.register(approvals.Pending(
+            action_id=action_id, run_id=self.run_id, action="send_message", payload={"messages": msgs},
+            on_resolve=lambda approved, t=thread, n=len(reqs), m=msgs: resume(t, approved, n, m)))
+        self.pending.append(action_id)
+        if len(msgs) == 1:
+            draft = msgs[0]["draft"]
+        else:
+            draft = "\n\n".join(f"Message {i} to {x['to']}:\n{x['draft']}" for i, x in enumerate(msgs, 1))
+        return [self.ev("approval_needed", action_id=action_id, action="send_message", to={"label": msgs[0]["to"]},
+                        draft=draft, messages=msgs, reason="Outbound messages always need a person's approval.")]
+
+    def checked(self) -> list[dict]:
+        """Basis of every kind of claim this run has made so far (from engine output, not model text)."""
+        out = [{"claim": "Door widths from the scan", "basis": "measured"},
+               {"claim": "Clear widths (opening minus ~5 cm for door leaf and stop)", "basis": "estimated"}]
+        if any(sc != "as scanned" for _, sc in self.fits):
+            out.append({"claim": "Offset hinges add about 1.75 in of clear width", "basis": "assumed"})
+        if any(f.get("turning") for f in self.found.values()):
+            out.append({"claim": "Bathroom turning circle", "basis": "estimated", "note": "walls only"})
+        if any(f["status"] == "unknown" for f in self.found.values()):
+            out.append({"claim": "Rooms with no measured door", "basis": "unknown"})
         return out
+
+    def questions(self) -> list[str]:
+        qs = []
+        for (sid, _rid, sc), f in self.found.items():
+            if f["status"] == "unknown" and sc == "as scanned":
+                name = self.fits.get((sid, "as scanned"), {}).get("name", sid)
+                qs.append(f"What is the clear width of the {f['room'].lower()} door in {name}?")
+        return qs + ["Is the building entrance step-free, and is there an elevator?"]
 
     def shortlist(self) -> list[dict]:
         """Units the fit engine actually checked this run, best first (as scanned)."""
@@ -362,14 +395,46 @@ class Run:
         return self.ev("final", text=" ".join(parts) or agent_text, awaiting_approval=list(self.pending), shortlist=sl)
 
 
-def resume(thread: dict, approved: bool) -> dict:
-    """Called by POST /api/approve: continue the paused graph with the person's decision."""
+def _queued(msgs: list[dict], since: set[str]) -> int:
+    """How many of these exact messages landed in the outbox after `since` (a listing taken before resuming)."""
+    box = data_dir() / "outbox"
+    if not box.exists():
+        return 0
+    want = {(m["to"], m["draft"]) for m in msgs}
+    n = 0
+    for p in box.glob("*.json"):
+        if p.name not in since:
+            rec = json.loads(p.read_text())
+            n += (rec.get("to"), rec.get("text")) in want
+    return n
+
+
+def resume(thread: dict, approved: bool, n_requests: int = 1, msgs: list[dict] | None = None) -> dict:
+    """Called by POST /api/approve: continue the paused graph with the person's decision for every batched request.
+    The status comes from the outbox, so a model error after queueing cannot report a queued message as unsent."""
     from langgraph.types import Command
+    msgs = msgs or []
+    box = data_dir() / "outbox"
+    before = {p.name for p in box.glob("*.json")} if box.exists() else set()
     decision = {"type": "approve"} if approved else {"type": "reject", "message": "The case manager declined."}
-    out = get_agent().invoke(Command(resume={"decisions": [decision]}), thread)
-    sent = [m for m in out["messages"] if getattr(m, "name", "") == "send_message"]
-    return {"status": (json.loads(text_of(sent[-1].content)).get("status") if sent and approved else
-                       "declined: nothing sent"), "final_text": text_of(out["messages"][-1].content)}
+    error, final_text = None, ""
+    try:
+        out = get_agent().invoke(Command(resume={"decisions": [decision] * n_requests}), thread)
+        final_text = text_of(out["messages"][-1].content)
+    except Exception as e:                          # decide below whether anything was queued
+        error = type(e).__name__
+    queued = _queued(msgs, before) if approved else 0
+    if error and not queued:
+        raise RuntimeError(f"agent failed before queueing: {error}")
+    if queued:
+        status = (f"queued {queued} of {len(msgs)} message(s) in the outbox for the messaging bridge "
+                  "(not delivered by the agent)")
+    else:
+        status = "approved, but the agent did not queue a message" if approved else "declined: nothing sent"
+    res = {"status": status, "queued": queued, "final_text": final_text}
+    if error:
+        res["warning"] = f"the agent stopped after queueing ({error}); the queued message stands"
+    return res
 
 
 async def run_agent(message: str, profile: dict, run_id: str) -> AsyncIterator[dict]:

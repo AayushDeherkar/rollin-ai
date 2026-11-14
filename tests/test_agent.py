@@ -28,7 +28,7 @@ def test_send_message_is_gated_and_only_the_orchestrator_has_it():
     assert A.send_message in A.ORCHESTRATOR_TOOLS
     for sub in A.subagents(model=None):
         assert A.send_message not in sub["tools"], sub["name"]
-    assert {s["name"] for s in A.subagents(None)} == {"search", "geometry", "verifier", "outreach"}
+    assert {s["name"] for s in A.subagents(None)} == {"search", "geometry", "verifier", "outreach", "general-purpose"}
 
 
 def test_every_outbound_text_identifies_as_ai(data):
@@ -76,13 +76,15 @@ def test_events_follow_the_contract(data):
     for e in events + [fin]:
         assert {"id", "ts", "run_id", "type"} <= set(e) and e["type"] in EVENT_TYPES
         _numbers_have_basis(e, e["id"])
+    for f in findings:                                   # UI renders each numbers entry as one Num
+        assert all(isinstance(v, dict) and "value" in v and "basis" in v for v in f["numbers"].values())
 
 
 def test_interrupt_registers_a_live_approval(data, monkeypatch):
     from agent import approvals
     approvals.clear()
     calls = []
-    monkeypatch.setattr(A, "resume", lambda thread, approved: calls.append(approved) or {"status": "queued"})
+    monkeypatch.setattr(A, "resume", lambda thread, approved, *rest: calls.append(approved) or {"status": "queued"})
     r = A.Run("run_i")
     it = SimpleNamespace(value={"action_requests": [{"name": "send_message", "args": {"to": "Leasing", "text": "Hi"}}]})
     ev = r.from_interrupt(it, {"configurable": {"thread_id": "run_i"}})[0]
@@ -94,3 +96,63 @@ def test_interrupt_registers_a_live_approval(data, monkeypatch):
 def test_not_configured_without_model_env(monkeypatch):
     monkeypatch.delenv("MODEL_NAME", raising=False)
     assert A.configured() is False
+
+
+def test_one_approval_covers_a_batched_interrupt(data, monkeypatch):
+    from agent import approvals
+    approvals.clear()
+    seen = []
+    monkeypatch.setattr(A, "resume", lambda thread, approved, n, msgs: seen.append((approved, n, len(msgs))) or {"status": "ok"})
+    r = A.Run("run_b")
+    it = SimpleNamespace(value={"action_requests": [{"name": "send_message", "args": {"to": "Office A", "text": "a"}},
+                                                    {"name": "send_message", "args": {"to": "Office B", "text": "b"}}]})
+    evs = r.from_interrupt(it, {"configurable": {"thread_id": "run_b"}})
+    assert len(evs) == 1 and len(evs[0]["messages"]) == 2 and "Office B" in evs[0]["draft"]
+    approvals.resolve(evs[0]["action_id"], False)
+    assert seen == [(False, 2, 2)]                       # one decision per batched request
+
+
+class _FakeAgent:
+    def __init__(self, write=None, fail=False):
+        self.write, self.fail, self.cmd = write, fail, None
+
+    def invoke(self, cmd, thread):
+        self.cmd = cmd
+        if self.write:
+            A.send_message(*self.write)
+        if self.fail:
+            raise TimeoutError("model timed out")
+        return {"messages": [SimpleNamespace(content="done")]}
+
+
+def test_resume_reports_from_the_outbox(data, monkeypatch):
+    msgs = [{"to": "Office", "draft": A.with_ai_disclosure("hi")}]
+    fake = _FakeAgent(write=("Office", "hi"), fail=True)              # queued, then the model errors
+    monkeypatch.setattr(A, "get_agent", lambda: fake)
+    res = A.resume({"configurable": {"thread_id": "t"}}, True, 1, msgs)
+    assert res["queued"] == 1 and "queued 1 of 1" in res["status"] and "warning" in res
+    assert fake.cmd.resume == {"decisions": [{"type": "approve"}]}
+    monkeypatch.setattr(A, "get_agent", lambda: _FakeAgent(fail=True))   # errors before queueing: retryable
+    with pytest.raises(RuntimeError):
+        A.resume({"configurable": {"thread_id": "t"}}, True, 1, msgs)
+    monkeypatch.setattr(A, "get_agent", lambda: _FakeAgent())
+    assert A.resume({"configurable": {"thread_id": "t"}}, False, 1, msgs)["status"] == "declined: nothing sent"
+
+
+def test_verify_event_matches_contract(data):
+    r = A.Run("run_v")
+    r.calls["c1"] = ("run_fit", {"sid": "synthetic_demo"})
+    r.from_tool(_tool_msg("c1", A.run_fit("synthetic_demo")))
+    r.calls["c2"] = ("task", {"subagent_type": "verifier"})
+    ev = r.from_tool(SimpleNamespace(tool_call_id="c2", name="", content="checked"))[0]
+    assert ev["type"] == "verify" and ev["checked"] and all({"claim", "basis"} <= set(c) for c in ev["checked"])
+    assert {c["basis"] for c in ev["checked"]} <= BASIS and "unknown" in {c["basis"] for c in ev["checked"]}
+    assert any("closet" in q for q in ev["questions"])
+
+
+def test_no_negative_shortfall_when_a_door_fits():
+    res = {"sid": "s", "scenario": "as scanned", "rooms": [{"room_id": "r", "label": "Bedroom", "status": "blocked",
+           "reason": "the door from Hall fits, but the route to it is too tight to turn into", "door_widths_in": [32.0],
+           "blocking_door": {"edge": "e", "width_in": 32.0, "clear_in_est": 30.0}, "turning_circle_in": None}]}
+    f = A.findings_from_fit(res, 27.0)[0]
+    assert "shortfall" not in f["numbers"] and f["numbers"]["blocking_door_width"]["value"] == 32.0
