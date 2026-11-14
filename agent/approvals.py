@@ -37,8 +37,19 @@ class AlreadyResolved(RuntimeError):
     pass
 
 
+class DuplicateAction(RuntimeError):
+    pass
+
+
+class ActionFailed(RuntimeError):
+    pass
+
+
 def register(p: Pending) -> Pending:
+    """Register once: an id can never be reset to undecided (that could send twice)."""
     with _lock:
+        if p.action_id in _pending:
+            raise DuplicateAction(p.action_id)
         _pending[p.action_id] = p
     return p
 
@@ -59,7 +70,12 @@ def resolve(action_id: str, approved: bool) -> dict[str, Any]:
     if p.replay:
         p.result = {"status": "not sent: replayed run", "replay": True}
     elif p.on_resolve is not None:
-        p.result = p.on_resolve(approved)
+        try:
+            p.result = p.on_resolve(approved)
+        except Exception as e:                      # the decision did not take effect: allow a retry
+            with _lock:
+                p.approved = None
+            raise ActionFailed(f"{p.action}: {type(e).__name__}") from e
     else:
         p.result = {"status": "approved, but no live agent is attached" if approved else "declined"}
     return {"action_id": action_id, "approved": approved, "action": p.action, "run_id": p.run_id, **p.result}

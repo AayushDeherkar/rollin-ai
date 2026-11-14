@@ -91,7 +91,8 @@ async def stream(events: AsyncIterator[dict]) -> AsyncIterator[str]:
 
 
 @router.post("/api/chat")
-async def chat(req: ChatRequest, replay: bool = False, pace: float = Query(1.0, ge=0, le=10)):
+async def chat(req: ChatRequest | None = None, replay: bool = False, pace: float = Query(1.0, ge=0, le=10)):
+    req = req or ChatRequest()                      # replay needs no body
     headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
     if replay:
         return StreamingResponse(stream(replay_events(pace)), media_type="text/event-stream", headers=headers)
@@ -113,3 +114,5 @@ def approve(req: ApproveRequest) -> dict:
         raise HTTPException(404, f"unknown action_id {req.action_id}")
     except approvals.AlreadyResolved:
         raise HTTPException(409, f"{req.action_id} was already decided")
+    except approvals.ActionFailed as e:
+        raise HTTPException(502, f"{e}; nothing was recorded, you can approve again")

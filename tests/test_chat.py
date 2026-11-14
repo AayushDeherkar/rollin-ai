@@ -80,3 +80,52 @@ def test_live_runner_is_streamed_when_attached(client, monkeypatch):
     monkeypatch.setattr(chat, "live_runner", fake)
     events = read_sse(client, url="/api/chat", body={"message": "hello"})
     assert [e["event"] for e in events] == ["plan", "final"] and events[0]["data"]["text"] == "hello"
+
+
+def test_replay_and_live_work_without_a_body(client):
+    with client.stream("POST", "/api/chat?replay=1&pace=0") as r:
+        assert r.status_code == 200 and "event: final" in r.read().decode()
+    assert client.post("/api/chat").status_code == 503
+
+
+def _live(approvals, action_id, calls, fail=False):
+    def send(approved):
+        calls.append(approved)
+        if fail:
+            raise ConnectionError("provider down")
+        return {"status": "sent" if approved else "declined"}
+    return approvals.register(approvals.Pending(action_id=action_id, run_id="r", action="send_message",
+                                                payload={}, on_resolve=send))
+
+
+def test_live_action_runs_once_and_decline_never_sends(client):
+    from agent import approvals
+    calls = []
+    _live(approvals, "live_1", calls)
+    assert client.post("/api/approve", json={"action_id": "live_1", "approved": True}).json()["status"] == "sent"
+    assert client.post("/api/approve", json={"action_id": "live_1", "approved": True}).status_code == 409
+    assert calls == [True]
+    with pytest.raises(approvals.DuplicateAction):              # re-registering can't reset a decision
+        _live(approvals, "live_1", calls)
+    _live(approvals, "live_2", calls)
+    assert client.post("/api/approve", json={"action_id": "live_2", "approved": False}).json()["status"] == "declined"
+    assert calls == [True, False]
+
+
+def test_failed_send_can_be_retried(client):
+    from agent import approvals
+    calls = []
+    p = _live(approvals, "live_3", calls, fail=True)
+    r = client.post("/api/approve", json={"action_id": "live_3", "approved": True})
+    assert r.status_code == 502 and approvals.get("live_3").approved is None
+    p.on_resolve = lambda approved: {"status": "sent"}
+    assert client.post("/api/approve", json={"action_id": "live_3", "approved": True}).json()["status"] == "sent"
+
+
+def test_replay_action_with_a_callback_still_never_sends(client):
+    from agent import approvals
+    calls = []
+    approvals.register(approvals.Pending(action_id="rp", run_id="r", action="send_message", payload={},
+                                         replay=True, on_resolve=lambda a: calls.append(a) or {"status": "sent"}))
+    assert client.post("/api/approve", json={"action_id": "rp", "approved": True}).json()["replay"] is True
+    assert calls == []
