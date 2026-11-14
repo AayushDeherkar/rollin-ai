@@ -1,31 +1,36 @@
 /*
  * Rollin' design tokens — the only source of colour, type, size, radius and motion.
- * Direction: an architect's drafting sheet on canary trace paper. See web/DESIGN.md.
+ * Direction: a site model at night: near-black ground, pale card walls, status that glows
+ * only a little. See web/DESIGN.md. Token names keep their jobs from the drafting sheet:
+ * "paper" is the ground, "ink" is linework and text.
  * Nothing in web/src may use a colour, font, font size or easing that is not defined here.
  * Mirror of the motion values for JS lives in src/lib/motion.ts (keep the two in sync).
  */
 
 :root {
+  color-scheme: dark; /* native scrollbars and form controls match the night ground */
   /* ── Ground and linework ─────────────────────────────── */
-  --paper: #efe6c6; /* canary trace paper */
-  --paper-deep: #e4d8b0; /* paper seen through two sheets: hover, selected row */
-  --paper-lift: #f6f0da; /* bare paper under the plan, slightly brighter */
-  --rule: #b8ab82; /* faint construction line */
-  --rule-strong: #8c8163; /* panel borders, sheet frame inner line */
-  --ink: #1b1f2a; /* technical-pen blue-black: walls, text */
-  --ink-soft: #4a4840; /* secondary text, dimension extension lines */
+  --paper: #0f1113; /* the night ground around the model */
+  --paper-deep: #1d2024; /* a step lighter: hover, selected row, skeletons */
+  --paper-lift: #15181b; /* the base board under the model and the plan */
+  --rule: #2b2f34; /* faint construction line */
+  --rule-strong: #4a5057; /* panel borders, sheet frame inner line */
+  --ink: #ebe7dc; /* pale model card: walls, text */
+  --ink-soft: #a9a59a; /* secondary text, dimension extension lines */
 
   /* ── The one accent: the agent is acting now ─────────── */
-  --agent: #1f3fa6; /* cobalt markup pencil */
-  --agent-wash: #d5d9e6; /* agent highlight behind text */
+  --agent: #8ea2ff; /* cobalt, lifted for the dark ground */
+  --agent-wash: #232a45; /* agent highlight behind text */
 
   /* ── Room / door status (always paired with a pattern or icon) ── */
-  --reach: #2e6a3b; /* drafting green: reachable */
-  --reach-wash: #cdd6ad;
-  --block: #a8231c; /* redline: blocked / not passable */
-  --block-wash: #ebc6ad;
-  --unknown: #5e5949; /* graphite: not measured */
-  --unknown-wash: #ddd4b6;
+  --reach: #7cc98b; /* green: reachable */
+  --reach-wash: #1b3122;
+  --block: #ff7a6b; /* red: blocked / not passable */
+  --block-wash: #3b1c18;
+  --unknown: #a39f94; /* graphite: not measured */
+  --unknown-wash: #26251f;
+  /* how much a status floor glows in the 3D model (emissive intensity, 0..1) */
+  --glow: 0.22;
 
   /* ── Type families (set by next/font in src/app/layout.tsx) ── */
   --font-display: var(--font-big-shoulders), "Arial Narrow", sans-serif;
