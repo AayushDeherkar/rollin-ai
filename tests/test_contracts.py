@@ -91,3 +91,26 @@ def test_chat_events_contract():
     for e in events:
         assert {"id", "ts", "type"} <= set(e) and e["type"] in EVENT_TYPES
         _numbers_have_basis(e, e["id"])
+
+
+def test_v2_blocked_rooms_drive_to_the_blocking_door():
+    r = run_fit("synthetic_demo")
+    floor = r["floors"][0]
+    doors = {d["edge"]: d for d in floor["doors"]}
+    for room in floor["rooms"]:
+        assert "blocking_door_edge" in room
+        if room["status"] == "blocked":
+            assert room["blocking_door_edge"] in doors and room["path"]
+            end, door = room["path"][-1], doors[room["blocking_door_edge"]]["center"]
+            assert ((end[0] - door[0]) ** 2 + (end[1] - door[1]) ** 2) ** 0.5 < 0.75    # stops at the door
+        else:
+            assert room["blocking_door_edge"] is None
+        if room["turning_space"]:
+            assert len(room["turning_space"]["center"]) == 2
+
+
+def test_v2_hinges_example_bedroom_has_path_and_no_blocking_door():
+    bed = lambda f: next(x for x in load(f)["floors"][0]["rooms"] if x["label"] == "Bedroom")
+    before, after = bed("unit_result.example.json"), bed("unit_result.hinges.example.json")
+    assert before["blocking_door_edge"] and before["path"]
+    assert after["blocking_door_edge"] is None and after["path"]

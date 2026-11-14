@@ -37,7 +37,7 @@ uvicorn agent.server:app --port 8000 --reload
 - Without real data, the web app can build against the files in `contracts/`.
 
 ## Built with
-Matterport Model API (wall graph, openings, rooms, panoramas), Vexcel aerial imagery, CoStar records, LangChain deepagents, Photon Spectrum, NumPy, SciPy, Shapely, Pillow, Matplotlib, FastAPI, Uvicorn, HTTPX (tests), Requests, python-dotenv, pytest, Next.js, Tailwind, shadcn/ui.
+Matterport Model API (wall graph, openings, rooms, panoramas), Vexcel aerial imagery, CoStar records, LangChain deepagents, Photon 2.0 (@photon-ai/api), NumPy, SciPy, Shapely, Pillow, Matplotlib, FastAPI, Uvicorn, HTTPX (tests), Requests, python-dotenv, pytest, Next.js, Tailwind, shadcn/ui, Radix, Motion, Lucide; fonts Big Shoulders, Public Sans, IBM Plex Mono.
 
 ## What we built vs. what we used
 (fill in before submission; disclose AI-assisted coding)

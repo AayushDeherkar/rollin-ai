@@ -4,7 +4,7 @@ Project: **Rollin'** (HackPrinceton Fall 2026). Full plan: `PLAN.md` — read se
 Deadline: Sunday Nov 15, 8:00 AM ET. Feature freeze: Sunday 2:00 AM ET.
 
 ## Ownership (do not edit outside your owner's paths)
-- Person A = **Aayush** (engine, agent, data, Python): `engine/`, `agent/`, `data/`, `tests/`, `requirements.txt`, `contracts/`, `README.md`, `PLAN.md`, `CLAUDE.md`, `.gitignore`, `.env.example`
+- Person A = **Aayush** (engine, agent, data, Python): `engine/`, `agent/`, `data/`, `tests/`, `requirements.txt`, `contracts/`, `README.md`, `PLAN.md`, `CLAUDE.md`, `.gitignore`, `.env.example`, `.github/`
 - Person B = **Aarohi** (web, messaging, TypeScript): `web/`, `messaging/`, `docs/` (including all `package.json` / lockfiles inside them). Aarohi edits nothing else; she requests changes to shared files (`contracts/`, `README.md`, `PLAN.md`, `CLAUDE.md`) through the manager.
 - Before every merge: `git diff --name-only origin/main...HEAD` must list only paths you own.
 If your task needs a change in another area, stop and say so instead of making it.
