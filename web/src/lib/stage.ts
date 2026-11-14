@@ -43,7 +43,7 @@ export const PRESETS: { id: string; label: string; chair: ChairIn }[] = [
 
 export const CHAIR_LIMITS = { width: [18, 36], length: [20, 56] } as const;
 
-/** the turning space the engine checks rooms against, inches */
+/** the turning space the engine checks bathrooms against (walls only), inches */
 export const TURNING_IN = 60;
 
 /** the circle the footprint sweeps turning in place about its centre: its diagonal, inches */

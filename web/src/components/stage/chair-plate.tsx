@@ -16,7 +16,7 @@ export function ChairPlate({ chair, onChair, onFind }: { chair: ChairIn; onChair
         <h1 id="chair-title" className="display text-2xl font-bold">
           Size your chair
         </h1>
-        <p className="text-base text-ink-soft">Rollin’ drives this footprint through every apartment’s measured doors.</p>
+        <p className="text-base text-ink-soft">Rollin’ drives this footprint through each apartment’s doorways.</p>
       </div>
       <div role="group" aria-label="Start from" className="flex gap-2">
         {PRESETS.map((p) => (
@@ -49,7 +49,7 @@ export function ChairPlate({ chair, onChair, onFind }: { chair: ChairIn; onChair
         <li className="flex items-start gap-3">
           <RingSwatch dashed />
           <span className="text-ink-soft">
-            The <span className="measure">{TURNING_IN} in</span> turning space every room is checked for.
+            The <span className="measure">{TURNING_IN} in</span> turning space bathrooms are checked for (walls only).
           </span>
         </li>
       </ul>

@@ -3,7 +3,7 @@
 /**
  * Step 1 on the table: the chair at full size at the origin, its footprint, the circle it
  * sweeps turning in place (computed from width and length), and the 60 in turning space the
- * engine checks rooms against as a dashed reference ring. Resizes live with the sliders.
+ * engine checks bathrooms against (walls only) as a dashed reference ring. Resizes live with the sliders.
  */
 import { useMemo, useState } from "react";
 import { Line } from "@react-three/drei";
