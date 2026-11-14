@@ -16,16 +16,25 @@ export function apiBase(): string | null {
 
 export type Upstream = { ok: true; res: Response } | { ok: false; status: number | null; reason: string };
 
-/** Fetch from the API; never throws. A non-2xx answer comes back with its status and detail. */
+/**
+ * Fetch from the API; never throws. A non-2xx answer comes back with its status and detail.
+ * The timeout covers the answer's headers only, so a streamed body (SSE) can run as long as it
+ * needs; `signal` (e.g. the browser's request) cancels it at any point.
+ */
 export async function upstream(path: string, init?: RequestInit, timeoutMs = TIMEOUT_MS): Promise<Upstream> {
   const base = apiBase();
   if (!base) return { ok: false, status: null, reason: "ROLLIN_API_URL is not set" };
+  const connect = new AbortController();
+  const timer = setTimeout(() => connect.abort(), timeoutMs);
+  const signal = init?.signal ? AbortSignal.any([init.signal, connect.signal]) : connect.signal;
   let res: Response;
   try {
-    res = await fetch(base + path, { ...init, cache: "no-store", signal: init?.signal ?? AbortSignal.timeout(timeoutMs) });
+    res = await fetch(base + path, { ...init, cache: "no-store", signal });
   } catch {
     // the address stays server-side; the browser only learns that the API did not answer
     return { ok: false, status: null, reason: "API not reachable" };
+  } finally {
+    clearTimeout(timer);
   }
   if (res.ok) return { ok: true, res };
   let detail = res.statusText;
