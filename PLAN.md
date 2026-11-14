@@ -130,6 +130,7 @@ Merge Q1+Q2+Q3 into `{"data":{"model":{name, floors, rooms}}}` — the engine's 
 | `demo-backup` | Same story, second unit | Backup |
 | `demo-pass` | Fully reachable contrast | "Pass" contrast |
 | `demo-sparse` | Few doors in the scan, so some rooms are unknown | Example of sparse data |
+
 Alias → model id: `data/demo_units.json` (gitignored; share it directly, never through GitHub). CoStar terms: floor plans and property-identifiable data are not republished in this repo.
 
 ---

@@ -77,3 +77,9 @@ def test_unsafe_sids_are_skipped(data):
 def test_status_without_alias_file_says_so(data):
     (data / "demo_units.json").unlink()
     assert D.demo_status()["missing"][0].startswith("data/demo_units.json")
+
+
+@pytest.mark.parametrize("extra", [None, 5, "abc"])
+def test_malformed_extra_never_breaks_health(data, extra):
+    (data / "demo_units.json").write_text(json.dumps({"demo-main": "synthunit01", "extra": extra}))
+    assert D.demo_status()["units"] == {"synthunit01": {"model": True, "aerial": True, "vision": False}}

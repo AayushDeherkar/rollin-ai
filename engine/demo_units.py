@@ -40,4 +40,5 @@ def demo_sids() -> list[str]:
     """The demo units in alias order, then any extras; empty if the file is absent."""
     d = load()
     sids = [d[a] for a in ALIASES if isinstance(d.get(a), str)]
-    return list(dict.fromkeys(sids + [s for s in d.get("extra", []) if isinstance(s, str)]))
+    extra = d.get("extra") if isinstance(d.get("extra"), list) else []
+    return list(dict.fromkeys(sids + [s for s in extra if isinstance(s, str)]))

@@ -16,23 +16,25 @@ def test_synthetic_blocks_narrow_bathroom():
     assert by["Closet"]["status"] == "unknown"
 
 def _demo_main():
-    from engine.demo_units import load
+    from engine.demo_units import load, path
     d = load()
-    sid = d.get("demo-main")
-    return (sid, (d.get("expect") or {}).get("demo-main") or {}) if sid else (None, {})
+    sid, expect = d.get("demo-main"), (d.get("expect") or {}).get("demo-main") or {}
+    cache = path().parent / "cache" / f"{sid}.json" if sid else None
+    return sid, expect, cache
 
 
-@pytest.mark.skipif(_demo_main()[0] is None or not (ROOT / f"data/cache/{_demo_main()[0]}.json").exists(),
-                    reason="real data is local-only (data/demo_units.json and data/cache are gitignored)")
+@pytest.mark.skipif(not (_demo_main()[0] and _demo_main()[1] and _demo_main()[2].exists()),
+                    reason="real data is local-only: needs data/demo_units.json with an expect block, and the cache")
 def test_demo_main_matches_its_expected_story():
-    sid, expect = _demo_main()
-    cache = ROOT / f"data/cache/{sid}.json"
+    sid, expect, cache = _demo_main()
     before, after = run(cache), run(cache, "--hinges")
     st = lambda r, label: {x["status"] for f in r["floors"] for x in f["rooms"] if x["label"] == label}
     for label in expect.get("flips_with_hinges", []):
         assert "blocked" in st(before, label) and "reachable" in st(after, label)
     for label in expect.get("stays_blocked", []):
-        assert st(after, label) == {"blocked"}
+        assert st(before, label) == {"blocked"} and st(after, label) == {"blocked"}
+
+
 def test_output_matches_contract_keys():
     r = run(ROOT / "tests/synthetic_1br.json")
     ex = json.load(open(ROOT / "contracts/unit_result.example.json"))
