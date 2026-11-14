@@ -46,7 +46,7 @@ Status is never colour alone. Every status has a colour, a fill pattern (`Patter
 
 ```
 ┌───────────────────────────── sheet frame (2px ink, hairline inside) ─────────────────────────────┐
-│ Units (340)            │ Plan (fluid, brighter paper)                │ Agent (400)              │
+│ Units (300)            │ Plan (fluid, brighter paper)                │ Agent (360)              │
 │ ranked list, counts    │ walls, rooms by status, door dimension      │ plan → tool → finding    │
 │ ✓ ⊘ ? per unit         │ lines, legend, chair, scenario toggle       │ chips, approval card     │
 ├──────────┬─────────────┴──────────┬───────────────────┬──────────────┴──────────┬──────────────┤

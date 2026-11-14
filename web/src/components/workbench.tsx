@@ -8,6 +8,8 @@ import { TitleBlock } from "@/components/sheet/title-block";
 import { UnitList, type UnitListItem } from "@/components/panels/unit-list";
 import { PlanPanel } from "@/components/panels/plan-panel";
 import { TracePanel } from "@/components/panels/trace-panel";
+import { FloorPlan } from "@/components/plan/floor-plan";
+import { PlanLegend } from "@/components/plan/plan-legend";
 
 const UNITS: UnitListItem[] = [{ unit: fixtureAsScanned, source: FIXTURE_LABEL }];
 
@@ -26,7 +28,7 @@ function usePreviewState(): Preview {
 
 export function Workbench() {
   const preview = usePreviewState();
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(UNITS[0]?.unit.model ?? null);
   const unit = UNITS.find((u) => u.unit.model === selected)?.unit ?? null;
 
   const listState: PanelState = preview ?? "ready";
@@ -43,9 +45,14 @@ export function Workbench() {
           <UnitList state={listState} items={UNITS} selected={selected} onSelect={setSelected} />
           <div className="flex min-h-0 border-x border-rule-strong">
             <PlanPanel state={planState} title={unit ? unit.name : "Plan"} className="flex-1">
-              <div className="flex h-full items-center justify-center p-8 text-base text-ink-soft">
-                Floor plan renderer lands in b/plan-svg.
-              </div>
+              {unit && (
+                <div className="flex h-full flex-col">
+                  <div className="min-h-0 flex-1">
+                    <FloorPlan unit={unit} />
+                  </div>
+                  <PlanLegend unit={unit} floor={unit.floors[0]} />
+                </div>
+              )}
             </PlanPanel>
           </div>
           <TracePanel state={traceState} />

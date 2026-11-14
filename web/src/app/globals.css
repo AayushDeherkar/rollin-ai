@@ -140,6 +140,13 @@
     letter-spacing: var(--tracking-display);
     line-height: var(--leading-tight);
   }
+  /* paper halo behind text drawn over hatching, like a cleared lettering patch */
+  .plan-halo {
+    paint-order: stroke;
+    stroke: var(--paper-lift);
+    stroke-width: 5px;
+    stroke-linejoin: round;
+  }
   .transition-draft {
     transition-timing-function: var(--ease-draft);
     transition-duration: var(--dur-2);

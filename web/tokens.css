@@ -49,8 +49,8 @@
   --line-wall: 3px; /* plan walls at the default zoom */
   --line-frame: 2px;
   --radius: 2px; /* drafting: nearly square */
-  --panel-left: 340px;
-  --panel-right: 400px;
+  --panel-left: 300px;
+  --panel-right: 360px;
   --titleblock-h: 76px;
 
   /* ── Motion: one curve, one duration scale, nothing bounces ── */
