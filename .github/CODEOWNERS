@@ -1,0 +1,10 @@
+# Person A
+/engine/   @PERSON_A_GITHUB
+/agent/    @PERSON_A_GITHUB
+/requirements.txt @PERSON_A_GITHUB
+# Person B
+/web/       @PERSON_B_GITHUB
+/messaging/ @PERSON_B_GITHUB
+/docs/devpost/ @PERSON_B_GITHUB
+# Shared
+/contracts/ @PERSON_A_GITHUB @PERSON_B_GITHUB

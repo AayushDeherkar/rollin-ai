@@ -1,0 +1,11 @@
+numpy
+scipy
+shapely>=2
+pillow
+matplotlib
+requests
+python-dotenv
+fastapi
+uvicorn
+pytest
+# deepagents  # pin the exact version you install (fast-moving beta)

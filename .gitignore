@@ -1,0 +1,15 @@
+.env
+out/
+node_modules/
+.next/
+__pycache__/
+*.pyc
+*.ply
+*.zip
+data/raw/
+data/cache/
+data/models/
+.DS_Store
+.pytest_cache/
+
+!data/cache/.gitkeep
