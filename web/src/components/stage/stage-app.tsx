@@ -142,9 +142,12 @@ function Stage() {
     },
     [startAgent, entry.pace],
   );
+  const [allOpen, setAllOpen] = useState(false);
+  const closeAll = useCallback(() => setAllOpen(false), []);
   const find = useCallback(() => {
     // a new run asks afresh, even if a replay reuses the last run's action id
     setDismissed(null);
+    setAllOpen(false);
     setProfile(chair);
     setStep("search");
     search(chair);
@@ -298,6 +301,7 @@ function Stage() {
       if (b <= 3 && !demoSid && !sid) return;
       cut.current = 3;
       setBeat(b);
+      setAllOpen(false);
       setEvidence(null);
       if (b <= 3) {
         if (demoSid) setSid(demoSid);
@@ -338,8 +342,6 @@ function Stage() {
   /** the agent's trace, opened from the pill: it takes the right rail while open */
   const [traceOpen, setTraceOpen] = useState(false);
   /** the "All apartments" list in the search step's right rail */
-  const [allOpen, setAllOpen] = useState(false);
-  const closeAll = useCallback(() => setAllOpen(false), []);
   /** "More" (M): everything the pitch leaves out, one keypress away */
   const [more, setMore] = useState(false);
   useEffect(() => {
@@ -559,7 +561,7 @@ function Stage() {
                 {traceOpen && agent.run.status !== "idle" ? (
                   <AgentTrace run={agent.run} decisions={agent.decisions} onDecide={agent.decide} onEvidence={(e) => open(e.sid)} onClose={() => setTraceOpen(false)} />
                 ) : allOpen ? (
-                  <AllUnits units={units} chair={list.status === "ready" ? listChair(list.data) : null} onOpen={open} onClose={closeAll} />
+                  <AllUnits units={units} chair={list.status === "ready" ? listChair(list.data) : null} replay={list.status === "ready" && list.origin === "replay"} onOpen={open} onClose={closeAll} />
                 ) : (
                   <>
                     <BestFits view={view} onOpen={open} />
@@ -739,7 +741,7 @@ function Apartment({
           {row ? (
             <>
               <p className="text-base">
-                {row.summary} (estimated, from the overnight batch for a {row.chair_in[0]} × {row.chair_in[1]} in chair).
+                {row.summary} (estimated, {row.synthetic ? "replayed from the synthetic example units, not a real listing," : "from the overnight batch"} for a {row.chair_in[0]} × {row.chair_in[1]} in chair).
               </p>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <CountsRow counts={row.counts} />
@@ -748,7 +750,9 @@ function Apartment({
             </>
           ) : null}
           <p role="status" className="text-base text-ink-soft">
-            Its floor plan is not available on this machine, so the 3D model and the drive cannot be shown here.
+            {row
+              ? "Its floor plan is not available on this machine, so the 3D model and the drive cannot be shown here."
+              : `This apartment could not be loaded: ${pair.message}`}
           </p>
           <button type="button" onClick={onBack} className="self-start border border-rule-strong px-4 py-2 text-base font-semibold hover:border-ink">
             Back to all apartments

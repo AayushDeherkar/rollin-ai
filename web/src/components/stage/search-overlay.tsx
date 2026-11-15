@@ -232,7 +232,20 @@ export function CountsRow({ counts }: { counts: StatusCounts }) {
  * estimated, from the overnight batch for the batch's chair). Selecting one opens it, as a point in
  * the field does. The rail scrolls; nothing is cut to a top three.
  */
-export function AllUnits({ units, chair, onOpen, onClose }: { units: UnitRow[]; chair: [number, number] | null; onOpen: (sid: string) => void; onClose: () => void }) {
+export function AllUnits({
+  units,
+  chair,
+  replay,
+  onOpen,
+  onClose,
+}: {
+  units: UnitRow[];
+  chair: [number, number] | null;
+  /** the list is the replayed contract fixture (synthetic units), not the batch */
+  replay: boolean;
+  onOpen: (sid: string) => void;
+  onClose: () => void;
+}) {
   const close = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     close.current?.focus();
@@ -252,6 +265,7 @@ export function AllUnits({ units, chair, onOpen, onClose }: { units: UnitRow[]; 
           <p className="text-sm text-ink-soft">
             {units.length} ranked, best first. Room counts and distances are estimated{chair ? ` for a ${chair[0]} × ${chair[1]} in chair` : ""}.
           </p>
+          {replay && <p className="text-sm font-semibold">Replay: the synthetic example units, not real listings.</p>}
         </div>
         <button ref={close} type="button" onClick={onClose} aria-label="Close the list" className="shrink-0 p-1 text-ink-soft hover:text-ink">
           <X aria-hidden className="size-5" />
