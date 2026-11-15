@@ -1,43 +1,72 @@
 "use client";
 
-import { useId } from "react";
-import { CHAIR_LIMITS, PRESETS, TURNING_IN, sweptIn, type ChairIn } from "@/lib/stage";
+import { useId, useState } from "react";
+import { CHAIR_LIMITS, TURNING_IN, sweptIn, type ChairIn } from "@/lib/stage";
+import { shortName, useSourcedPresets, type SourcedPreset } from "@/lib/presets";
 import { cn } from "@/lib/utils";
 
 /**
- * Step 1's controls, bottom-left over the scene: presets, width and length, what the rings on
- * the floor mean, and the one primary action.
+ * Step 1's controls, bottom-left over the scene: sourced presets (the source of the one under the
+ * pointer, or the one chosen, shown beneath them), width and length, what the rings on the floor
+ * mean, and the one primary action.
  */
 export function ChairPlate({ chair, onChair, onFind }: { chair: ChairIn; onChair: (c: ChairIn) => void; onFind: () => void }) {
-  const preset = PRESETS.find((p) => p.chair[0] === chair[0] && p.chair[1] === chair[1])?.id ?? null;
+  const presets = useSourcedPresets();
+  const chosen = presets.find((p) => p.width_in === chair[0] && p.length_in === chair[1]) ?? null;
+  const [hover, setHover] = useState<SourcedPreset | null>(null);
+  const shown = hover ?? chosen;
   return (
-    <section aria-labelledby="chair-title" className="pointer-events-auto flex w-[480px] flex-col gap-5 border border-rule-strong bg-paper-lift p-6">
+    <section aria-labelledby="chair-title" className="pointer-events-auto flex w-[520px] flex-col gap-5 border border-rule-strong bg-paper-lift p-6">
       <div className="flex flex-col gap-1">
         <h1 id="chair-title" className="display text-2xl font-bold">
           Size your chair
         </h1>
         <p className="text-base text-ink-soft">Rollin’ drives this footprint through each apartment’s doorways.</p>
       </div>
-      <div role="group" aria-label="Start from" className="flex gap-2">
-        {PRESETS.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            aria-pressed={preset === p.id}
-            onClick={() => onChair(p.chair)}
-            className={cn(
-              "h-10 flex-1 border px-2 text-base font-semibold whitespace-nowrap transition-colors transition-draft",
-              preset === p.id ? "border-ink bg-paper-deep text-ink" : "border-rule-strong text-ink-soft hover:text-ink",
-            )}
-          >
-            {p.label}
-          </button>
-        ))}
+      <div className="flex flex-col gap-2">
+        <div role="group" aria-label="Measured sizes" className="grid grid-cols-2 gap-2" onMouseLeave={() => setHover(null)}>
+          {presets.map((p) => (
+            <button
+              key={p.name}
+              type="button"
+              aria-pressed={chosen?.name === p.name}
+              aria-describedby="preset-source"
+              onClick={() => onChair([p.width_in, p.length_in])}
+              onMouseEnter={() => setHover(p)}
+              onFocus={() => setHover(p)}
+              onBlur={() => setHover(null)}
+              className={cn(
+                "flex h-14 flex-col items-start justify-center border px-3 text-left transition-colors transition-draft",
+                chosen?.name === p.name ? "border-ink bg-paper-deep text-ink" : "border-rule-strong text-ink-soft hover:border-ink hover:text-ink",
+              )}
+            >
+              <span className="text-sm leading-tight font-semibold whitespace-nowrap">{shortName(p.name)}</span>
+              <span className="measure text-sm leading-tight">
+                {p.width_in.toFixed(1)} × {p.length_in.toFixed(1)} in
+              </span>
+            </button>
+          ))}
+        </div>
+        <p id="preset-source" aria-live="polite" className="min-h-[3lh] text-sm text-ink-soft">
+          {shown ? (
+            <>
+              <span className="text-ink">Source:</span> {shown.source.title}
+              {shown.source.checked ? ` (checked ${shown.source.checked})` : ""}.{" "}
+              {shown.source.url && (
+                <a href={shown.source.url} target="_blank" rel="noreferrer" className="font-semibold text-ink underline underline-offset-4">
+                  Open the source
+                </a>
+              )}
+            </>
+          ) : (
+            "Your own size. Point at a measured size to see where it comes from."
+          )}
+        </p>
       </div>
       <div className="flex flex-col gap-3">
         <Slider label="Width" value={chair[0]} range={CHAIR_LIMITS.width} onChange={(w) => onChair([w, chair[1]])} />
         <Slider label="Length" value={chair[1]} range={CHAIR_LIMITS.length} onChange={(l) => onChair([chair[0], l])} />
-        <p className="text-sm text-ink-soft">Preset sizes are starting points, not measurements. Set your own chair’s width and length.</p>
+        <p className="text-sm text-ink-soft">Width is the chair with its user (what has to pass a door). Set your own chair’s width and length.</p>
       </div>
       <ul className="flex flex-col gap-2 text-sm">
         <li className="flex items-start gap-3">

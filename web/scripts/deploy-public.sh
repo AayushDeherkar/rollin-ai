@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Deploy the fixture-only public replay to Vercel (see docs/public-deploy.md).
 # Uploads only files tracked at HEAD (git archive), so nothing gitignored (.env, data/, out/)
-# can reach the deployment. The build runs with NEXT_PUBLIC_ROLLIN_PUBLIC=1 and no ROLLIN_API_URL.
+# can reach the deployment; from data/ only the tracked, sourced chair presets go. The build runs with NEXT_PUBLIC_ROLLIN_PUBLIC=1 and no ROLLIN_API_URL.
 set -euo pipefail
 repo="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 out="$(mktemp -d)"
 trap 'rm -rf "$out"' EXIT
-git -C "$repo" archive HEAD web contracts | tar -x -C "$out"
+git -C "$repo" archive HEAD web contracts data/chair_presets.json | tar -x -C "$out"
 # the Vercel project link is kept outside the repo, so no checkout ever holds it
 link="${ROLLIN_VERCEL_LINK:-$HOME/.config/rollin-public/.vercel}"
 cd "$out"

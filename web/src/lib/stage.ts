@@ -32,14 +32,10 @@ export function fieldPoint([e, n]: [number, number]): [number, number, number] {
 export type ChairIn = [number, number];
 
 /**
- * Starting sizes for the presets, width × length in inches. They are starting points to adjust,
- * not measurements or statistics, and the plate says so. Power chair is the demo profile.
+ * The chair the stage starts with: the demo profile (the size the batch was ranked for and the
+ * recorded run remembers), shown as "your chair". The sourced presets are in lib/presets.ts.
  */
-export const PRESETS: { id: string; label: string; chair: ChairIn }[] = [
-  { id: "manual", label: "Manual chair", chair: [25, 40] },
-  { id: "power", label: "Power chair", chair: [27, 42] },
-  { id: "walker", label: "Walker", chair: [24, 30] },
-];
+export const START_CHAIR: ChairIn = [27, 42];
 
 export const CHAIR_LIMITS = { width: [18, 36], length: [20, 56] } as const;
 

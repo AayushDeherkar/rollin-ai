@@ -11,7 +11,7 @@ import { MotionConfig } from "motion/react";
 import * as THREE from "three";
 import { PatternDefs } from "@/components/sheet/status";
 import { readWebgl } from "@/components/plan/plan-stage";
-import { PRESETS, type ChairIn, type Step } from "@/lib/stage";
+import { START_CHAIR, type ChairIn, type Step } from "@/lib/stage";
 import { useAgentRun } from "@/lib/agent";
 import { useUnitPair, useUnitsList } from "@/lib/data";
 import { buildDrive, defaultTarget } from "@/lib/chair";
@@ -104,9 +104,9 @@ const ORIGIN: [number, number, number] = [0, 0, 0];
 function Stage() {
   const [entry] = useState(readEntry);
   const [step, setStep] = useState<Step>(entry.sid || entry.demo ? "apartment" : entry.search ? "search" : "chair");
-  const [chair, setChair] = useState<ChairIn>(PRESETS[1].chair);
+  const [chair, setChair] = useState<ChairIn>(START_CHAIR);
   /** the chair the search was started with: the profile sent to /api/chat */
-  const [profile, setProfile] = useState<ChairIn | null>(entry.search ? PRESETS[1].chair : null);
+  const [profile, setProfile] = useState<ChairIn | null>(entry.search ? START_CHAIR : null);
   /** the unit the apartment step shows */
   const [sid, setSid] = useState<string | null>(entry.sid);
   const available: Record<Step, boolean> = { chair: true, search: profile !== null, apartment: sid !== null };
@@ -138,7 +138,7 @@ function Stage() {
     search(chair);
   }, [chair, search]);
   useEffect(() => {
-    if (entry.search) search(PRESETS[1].chair);
+    if (entry.search) search(START_CHAIR);
     // once, on load
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
