@@ -209,9 +209,20 @@ uvicorn agent.server:app --port 8000
 | `POST /api/chat?replay=1&speed=4` | A recorded run, every event marked `replay: true`. |
 | `POST /api/approve` `{action_id, approved}` | The approval gate. Nothing outbound happens without it. |
 | `GET /api/aerial/{sid}[/findings]`, `GET /api/vision/{sid}[/{pano_id}]` | Cached aerial and panorama evidence. |
-| `GET /api/health` | Cached models, batch progress, and what the demo units are missing. |
+| `GET /api/health` | Cached models, batch progress, what the demo units are missing, and `demo.main_sid` (with `backup_sid`, `pass_sid` and `sparse_sid`) from the alias file. |
+| `GET /api/outbox`, `POST /api/outbox/{id}/delivered` | Approved messages waiting for the messaging bridge, and marking one as delivered. |
+| `POST /api/answers` | A leasing office's reply. The unknown rooms it answers become `asked`; see `contracts/README.md`. |
+| `GET /api/events` | An SSE stream of `delivered` and `answer` events, so the UI updates after a run has ended. |
+| `GET /api/insights` | The chair-size sweep (aggregates only) and the sourced chair presets. |
 
 To serve data from another folder, set `ROLLIN_DATA_DIR`.
+
+**Preflight on the demo machine.** This checks the data, starts the API on a free port, and runs a replay. If a model
+key is set, it also does a live run, which stops at the approval step, so nothing is sent. It prints one PASS, FAIL or
+SKIP line per check. Everything except the live run works with no internet.
+```bash
+python -m agent.preflight                 # add --no-live to skip the live run, --url to check a running API
+```
 
 **Web app** on http://localhost:3000:
 ```bash
