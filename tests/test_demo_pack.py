@@ -56,6 +56,14 @@ def test_health_reports_demo_status(data):
     from agent.server import app
     h = TestClient(app).get("/api/health").json()
     assert h["demo"]["main_unit"] == "demo-main" and "synthunit01" in h["demo"]["units"]
+    assert (h["demo"]["main_sid"], h["demo"]["backup_sid"]) == ("synthunit01", "synthunit02")
+    assert h["demo"]["pass_sid"] is None and h["demo"]["sparse_sid"] is None
+
+
+def test_health_demo_sids_null_without_alias_file(data):
+    (data / "demo_units.json").unlink()
+    s = D.demo_status()
+    assert [s[k] for k in ("main_sid", "backup_sid", "pass_sid", "sparse_sid")] == [None] * 4
 
 
 def test_bad_link_files_never_break_health_or_build(data, tmp_path):

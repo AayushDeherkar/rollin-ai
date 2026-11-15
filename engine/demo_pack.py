@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from engine.demo_units import demo_sids  # noqa: E402
+from engine.demo_units import ALIASES, demo_sids, load as load_aliases  # noqa: E402
 
 # demo units come from the gitignored data/demo_units.json (aliases demo-main, demo-backup, demo-pass, demo-sparse)
 TOP_N = 20
@@ -112,7 +112,9 @@ def demo_status() -> dict:
             missing.insert(0, name)
     if not demo_sids():
         missing.insert(0, "data/demo_units.json (gitignored alias file)")
-    return {"main_unit": "demo-main", "units": units,
+    aliases = load_aliases()
+    sids = {f"{a.split('-', 1)[1]}_sid": aliases.get(a) if isinstance(aliases.get(a), str) else None for a in ALIASES}
+    return {"main_unit": "demo-main", **sids, "units": units,
             "index": (d / "batch" / "index.json").exists(), "replay": (d / "replay" / "run.jsonl").exists(),
             "missing": missing}
 
