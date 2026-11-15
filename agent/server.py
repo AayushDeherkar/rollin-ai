@@ -10,6 +10,7 @@ GET /api/vision/{sid}[/{pano_id}]  cached panorama checks + the image each is ba
 POST /api/chat, POST /api/approve   agent event stream and approval gate (agent/chat.py)
 GET /api/outbox, POST /api/outbox/{id}/delivered, GET /api/events   delivery by the bridge (agent/outbox.py)
 POST /api/answers   a leasing-office reply; answered unknown rooms get basis "asked"
+GET /api/insights   chair-size sweep aggregates and sourced chair presets (tracked files in data/)
 
 ROLLIN_DATA_DIR overrides the data folder (default: <repo>/data).
 """
@@ -230,3 +231,22 @@ def answers(body: AnswerIn) -> dict:
     logged = outbox.log_answer(sid, rooms, body.text, body.answers, body.outbox_id, questions, body.sender,
                                rec.get("run_id"))
     return {"answer_id": logged["id"], "sid": sid, "rooms": logged["rooms"], "unmatched": logged["unmatched"]}
+
+
+def _tracked_json(name: str):
+    """A tracked file in <repo>/data (aggregates and sourced presets only; never real unit data)."""
+    p = ROOT / "data" / name
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+@app.get("/api/insights")
+def insights() -> dict:
+    """Aggregate chair-size sweep (data/insights.json, from `python -m engine.sweep`; no unit ids) and sourced chair
+    presets (data/chair_presets.json: name, width, length, source)."""
+    agg = _tracked_json("insights.json")
+    presets = _tracked_json("chair_presets.json")
+    return {"sweep": agg, "chair_presets": (presets or {}).get("presets", []),
+            "note": None if agg else "no sweep yet: run `python -m engine.sweep`"}
