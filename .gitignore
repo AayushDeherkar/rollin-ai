@@ -20,3 +20,4 @@ data/models/
 .pytest_cache/
 
 !data/cache/.gitkeep
+.venv/
