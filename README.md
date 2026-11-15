@@ -306,11 +306,6 @@ percentile manual and power chairs above, plus the 30x48 in ADA clear floor spac
 because that is what has to pass a door.
 
 **Not verified, so not used:**
-- **HUD, *Accessibility of America's Housing Stock* (2015): fewer than 1% of units accessible to wheelchair users and
-  fewer than 5% to people with moderate mobility difficulties.** huduser.gov refused our automated requests, so we
-  never saw the text. Search-engine excerpts of the report agree with these figures. Open the
-  [PDF](https://www.huduser.gov/portal/sites/default/files/pdf/accessibility-america-housingStock.pdf) and confirm them
-  before quoting.
 - **Overall width of a bariatric wheelchair.** Only retailer listings were reachable, and they disagree (30 to 32.5 in
   for a 24 in seat). We found no manufacturer spec sheet, so there is no bariatric preset.
 - **Manufacturer overall widths for particular manual and power models** (Invacare, Permobil). The product pages did
@@ -325,7 +320,8 @@ because that is what has to pass a door.
 - the deepagents orchestration, its tools and the code verifier, approval gating, profile memory, the SSE event
   contract and replay;
 - the FastAPI server and the offline demo pack;
-- the web app (plan view, 3D dollhouse, chair panel, agent trace, approval);
+- the web app (landing page, plan view, 3D dollhouse, procedural manual and power wheelchair models, chair panel,
+  agent trace, approval);
 - the iMessage bridge.
 
 **We used:**
@@ -335,7 +331,7 @@ because that is what has to pass a door.
 | Data | Matterport Model API and Showcase, the CoStar hackathon kit (models index), the Vexcel imagery API |
 | Models and agents | Google Gemini (`gemini-3.8-flash`) via langchain-google-genai, deepagents 0.7.38, LangChain 1.5, LangGraph 1.2, LangSmith |
 | Python | NumPy, SciPy, Shapely, Pillow, Matplotlib, FastAPI, Uvicorn, Requests, python-dotenv, pytest, HTTPX |
-| Web | Next.js, React, Tailwind CSS (with `@tailwindcss/turbopack`), tw-animate-css, shadcn/ui, Radix UI, class-variance-authority, cn, Motion, Lucide, three.js, React Three Fiber, drei, TypeScript, ESLint with eslint-config-next, DefinitelyTyped type packages (`@types/node`, `@types/react`, `@types/react-dom`, `@types/three`) |
+| Web | Next.js, React, Tailwind CSS (with `@tailwindcss/turbopack`), tw-animate-css, shadcn/ui, Radix UI, class-variance-authority, cn, Motion, Lucide, three.js, React Three Fiber, drei, GSAP with ScrollTrigger and `@gsap/react`, Lenis (smooth scrolling on the landing page), TypeScript, ESLint with eslint-config-next, DefinitelyTyped type packages (`@types/node`, `@types/react`, `@types/react-dom`, `@types/three`) |
 | Messaging | Photon 2.0 (`@photon-ai/api`), socket.io-client, tsx, TypeScript, `@types/node` |
 | Fonts | Big Shoulders, Public Sans, IBM Plex Mono |
 | Tools | git filter-repo (history scrub), GitHub CLI |
