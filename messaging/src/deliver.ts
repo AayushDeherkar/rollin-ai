@@ -23,6 +23,11 @@ import path from "node:path";
 export const OFFICE_ACK =
   "Hi, this is Rollin’, an AI assistant helping a renter who uses a wheelchair. Thanks: their approved questions about your units will come to this number.";
 
+/** texted to the client when its approved questions go out, and once while they wait for the office */
+export const SENT_TO_CLIENT = "Rollin’ (AI assistant): I sent your approved questions to the leasing office. I’ll text you what they say.";
+export const WAITING_TO_CLIENT =
+  "Rollin’ (AI assistant): your approved questions are queued. The leasing office has not texted this line yet, so I can’t send them until it does.";
+
 export interface OutboxItem {
   id: string;
   to: string;
@@ -249,6 +254,17 @@ export class Deliverer {
     }
   }
 
+  /** A status line to the client conversation, if one is known. Never throws. */
+  private async tellClient(text: string, key: string): Promise<void> {
+    const client = this.state.client;
+    if (!client || !this.notifyClient) return;
+    try {
+      await this.notifyClient(client, text, key);
+    } catch (err) {
+      this.log(`Could not text the client: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   /** One pass over the outbox. Never throws. */
   async tick(): Promise<void> {
     if (this.busy) return;
@@ -264,7 +280,10 @@ export class Deliverer {
       if (!fresh.length) return;
       const line = this.state.line;
       if (!line) {
-        if (!this.waitingLogged) this.log(`${fresh.length} approved message(s) waiting: the leasing office has to text this line first.`);
+        if (!this.waitingLogged) {
+          this.log(`${fresh.length} approved message(s) waiting: the leasing office has to text this line first.`);
+          await this.tellClient(WAITING_TO_CLIENT, `rollin:waiting:${fresh[0].id}`);
+        }
         this.waitingLogged = true;
         return;
       }
@@ -278,6 +297,7 @@ export class Deliverer {
           await this.store.save(this.state);
           await this.api.markDelivered(item.id);
           this.log(`Delivered ${item.id} to the leasing office.`);
+          await this.tellClient(SENT_TO_CLIENT, `rollin:sent:${item.id}`);
         } catch (err) {
           this.failed.set(item.id, (this.failed.get(item.id) ?? 0) + 1);
           this.log(`Could not deliver ${item.id}: ${err instanceof Error ? err.message : String(err)}`);
