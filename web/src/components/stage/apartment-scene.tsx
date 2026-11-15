@@ -52,7 +52,7 @@ export function ApartmentScene({
   return (
     <group position={at}>
       <group ref={raise} scale={[1, 0.001, 1]}>
-        <Model {...model} callout={false} />
+        <Model {...model} callout={false} labels={shown} />
       </group>
       {shown && ruler && <DoorRuler floor={model.floor} edge={ruler} chairIn={model.unit.chair_in} centre={centre} />}
     </group>
