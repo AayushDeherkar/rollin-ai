@@ -152,7 +152,9 @@ reached, so these counts are lower bounds.
   Room types are the scan's own labels with the numbers removed.
 
 - **Blocking doors** (385 distinct doors, estimated clear width): most are 20 to 22 in (136 doors) or 25 to 27 in (86 doors).
-  - 14 of them are 27 in or wider. Those openings are wide enough, so what stops the chair is the space around the door.
+  - 14 of them are listed at 27 in or wider.
+    - 3 of those 14 show as 27.0 in only because the estimate is rounded to 0.1 in; they are a fraction of an inch narrower than the chair.
+    - The other 11 are wide enough, so what stops the chair there is the space around the door.
   - The full 1 in histogram is in `data/insights.json`.
 
 `data/insights.json` holds these aggregates and nothing else: no unit ids, names or coordinates. `GET /api/insights`
