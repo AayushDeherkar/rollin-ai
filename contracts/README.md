@@ -58,5 +58,19 @@ Every field is optional. Numbers the person gives are reported back in events wi
 - Replayed runs (`POST /api/chat?replay=1`) add `replay: true` and `recorded_ts` (the original time) to every event, and suffix `action_id` with the replay's `run_id`. Live runs never set `replay`.
 - `approval_needed` carries an `action_id`; the stream then ends with `final` listing `awaiting_approval`. The web/iMessage side calls `POST /api/approve {action_id, approved}`.
 
+## Delivery and leasing-office answers (round 5, additive)
+For the messaging bridge, which delivers approved messages:
+| Request | Returns |
+|---|---|
+| `GET /api/outbox` | `{total, items:[{id, to, text, sid, questions, queued_at, status:"pending", delivered_at:null, via:null}]}`: approved messages not yet delivered, oldest first. `questions[n-1]` is the line numbered `n.` in the text as sent (null where the text skips a number). `sid` is the unit the orchestrator passed to `send_message`, or the only unit drafted for that recipient; it is null when neither is known, and the agent never guesses. |
+| `POST /api/outbox/{id}/delivered` `{via?: "imessage", detail?}` | The item with `status:"delivered"`, `delivered_at` and `via`. Returns 409 if it was already marked, 404 if the id is unknown and 400 if the id is malformed. |
+| `POST /api/answers` `{outbox_id? \| sid?, text?, answers?:[{room, clear_width_in?, answer?}], from?}` | `{answer_id, sid, rooms:[{room_id, label, clear_in, said}], unmatched:[...]}`. A reply is matched in one of three ways: by structured `answers` (`room` is a label or room id); by numbered lines (`2. ...` answers question 2 of the queued message); or by lines that name an unknown room's label. A width counts only when it is written in inches (feet and inches are converted, so 2'10" is 34 in). Heights, values outside 18-60 in, and a line that states two different widths all leave the width unknown. Lines and answers that match no unknown room are listed in `unmatched` and change nothing. |
+| `GET /api/events` (SSE) | `delivered` and `answer` events. These are not part of any chat run, so the UI should keep this stream open. Sends `Last-Event-ID` to receive missed events (up to the last 100). |
+
+- `delivered` event: `{id, ts, run_id: null, type: "delivered", outbox_id, sid, to, via, delivered_at, text}`.
+- `answer` event: `{id, ts, run_id: null, type: "answer", answer_id, sid, outbox_id, rooms:[{room_id, label, basis: "asked", source: "landlord", clear_in: Num}], unmatched, text}`.
+- `GET /api/units/{sid}`: once a room that was `unknown` has an answer, it gains `basis: "asked"` and `answer: {clear_in: Num, said, answer_id, answered_at}`. `clear_in` is `{value, unit: "in", basis: "asked", source: "landlord"}`, or `{value: null, basis: "unknown"}` when the reply gave no width. The room's `status` stays `unknown`, because one door's width does not prove the chair can get there. Rooms that already had a verdict are never changed by an answer.
+- The agent stops asking about rooms that have already been answered.
+
 ## Changing a contract
 Edit the generator, rerun it, run `pytest`, open a PR, and tell the other person what changed.

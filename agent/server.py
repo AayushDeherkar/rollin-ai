@@ -8,6 +8,8 @@ GET /api/health         what data is loaded
 GET /api/aerial/{sid}[/findings]   cached Vexcel clip + labelled findings (engine/vexcel.py)
 GET /api/vision/{sid}[/{pano_id}]  cached panorama checks + the image each is based on (engine/vision.py)
 POST /api/chat, POST /api/approve   agent event stream and approval gate (agent/chat.py)
+GET /api/outbox, POST /api/outbox/{id}/delivered, GET /api/events   delivery by the bridge (agent/outbox.py)
+POST /api/answers   a leasing-office reply; answered unknown rooms get basis "asked"
 
 ROLLIN_DATA_DIR overrides the data folder (default: <repo>/data).
 """
@@ -22,6 +24,7 @@ import sys
 from functools import lru_cache
 
 from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel, Field
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -29,6 +32,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from engine.fit import analyze_model  # noqa: E402
 from agent.chat import router as chat_router  # noqa: E402
+from agent import outbox  # noqa: E402
 
 SID = re.compile(r"^[A-Za-z0-9_]{3,40}$")
 BEDS = re.compile(r"(\d+)\s*(?:br\b|bed)", re.I)
@@ -37,6 +41,7 @@ app = FastAPI(title="Rollin' API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000"],
                    allow_methods=["GET", "POST"], allow_headers=["*"])
 app.include_router(chat_router)
+app.include_router(outbox.router)
 
 
 def _attach_live_agent() -> None:
@@ -184,4 +189,44 @@ def unit(sid: str, w: float = Query(27.0, gt=0, le=60), l: float = Query(42.0, g
     path = data_dir() / "cache" / f"{sid}.json"
     if not path.exists():
         raise HTTPException(404, f"{sid} is not cached; run `python -m engine.matterport {sid}`")
-    return _fit(sid, w, l, hinges, path.stat().st_mtime)
+    return outbox.apply_answers(_fit(sid, w, l, hinges, path.stat().st_mtime), sid)
+
+
+class AnswerIn(BaseModel):
+    text: str = ""
+    outbox_id: str | None = None
+    sid: str | None = None
+    answers: list[dict] = Field(default_factory=list)
+    sender: str | None = Field(None, alias="from")
+
+
+@app.post("/api/answers")
+def answers(body: AnswerIn) -> dict:
+    """Log a leasing-office reply. Name the queued message (`outbox_id`) or the unit (`sid`); give the reply `text`
+    and optionally structured `answers: [{room, clear_width_in?, answer?}]`. Answered unknown rooms become basis
+    "asked" (source landlord) in GET /api/units/{sid}; the engine's status is never changed by an answer."""
+    rec, questions = {}, []
+    if body.outbox_id:
+        if not outbox.OUTBOX_ID.match(body.outbox_id):
+            raise HTTPException(400, "bad outbox id")
+        p = data_dir() / "outbox" / f"{body.outbox_id}.json"
+        rec = outbox._read(p) if p.exists() else None
+        if rec is None:
+            raise HTTPException(404, f"no queued message {body.outbox_id}")
+        questions = rec.get("questions") or []
+    sid = body.sid or rec.get("sid")
+    if not sid:
+        raise HTTPException(422, "give sid, or an outbox_id whose message names its unit")
+    if not SID.match(sid):
+        raise HTTPException(400, "bad model id")
+    if not body.text.strip() and not body.answers:
+        raise HTTPException(422, "text or answers is required")
+    path = data_dir() / "cache" / f"{sid}.json"
+    if not path.exists():
+        raise HTTPException(404, f"{sid} is not cached")
+    chair = [27.0, 42.0]                            # unknown rooms (no measured door) do not depend on the chair
+    fit = _fit(sid, float(chair[0]), float(chair[1]), False, path.stat().st_mtime)
+    rooms = [r for f in fit.get("floors", []) for r in f.get("rooms", [])]
+    logged = outbox.log_answer(sid, rooms, body.text, body.answers, body.outbox_id, questions, body.sender,
+                               rec.get("run_id"))
+    return {"answer_id": logged["id"], "sid": sid, "rooms": logged["rooms"], "unmatched": logged["unmatched"]}

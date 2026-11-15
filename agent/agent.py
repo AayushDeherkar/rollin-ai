@@ -17,6 +17,7 @@ import contextvars
 import json
 import os
 import pathlib
+import re
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -299,10 +300,17 @@ def _aerial_unclear(sid: str) -> list[dict]:
 def unit_questions(sid: str, chair_width_in: float, chair_length_in: float) -> list[str]:
     """What the scan cannot answer for one unit, from engine output and cached checks: every unknown room's door,
     every unclear aerial item, and the entrance."""
+    from agent.outbox import answers_for
+    answered = {r["room_id"] for a in answers_for(sid) for r in a.get("rooms", [])}
     qs = [f"What is the clear width of the {r['label'].lower()} door?"
-          for r in run_fit(sid, chair_width_in, chair_length_in).get("rooms", []) if r["status"] == "unknown"]
+          for r in run_fit(sid, chair_width_in, chair_length_in).get("rooms", [])
+          if r["status"] == "unknown" and r.get("room_id") not in answered]
     qs += [f["question"] for f in _aerial_unclear(sid) if f.get("question")]
     return list(dict.fromkeys(qs + [ENTRANCE_Q]))
+
+
+_DRAFTED: dict[str, set[str]] = {}              # recipient label -> every unit drafted for it (names repeat)
+NUMBERED_Q = re.compile(r"^\s*(\d{1,2})\.\s+(.+?)\s*$")
 
 
 def draft_landlord_message(sid: str, questions: list[str] | None = None, chair_width_in: float | None = None) -> dict:
@@ -315,14 +323,30 @@ def draft_landlord_message(sid: str, questions: list[str] | None = None, chair_w
                                 f"in your {name} floor plan."), "Could you help with a few questions?"]
     lines += [f"{i}. {q}" for i, q in enumerate(qs, 1)]
     lines.append("Thank you!")
-    return {"sid": sid, "to": f"Leasing office ({name})", "text": "\n".join(lines)}
+    to = f"Leasing office ({name})"
+    _DRAFTED.setdefault(to, set()).add(sid)
+    return {"sid": sid, "to": to, "text": "\n".join(lines)}
 
 
-def send_message(to: str, text: str) -> dict:
-    """Send a message to a leasing office. A human must approve it first; the run pauses until they do."""
+def message_unit(to: str, sid: str | None) -> str | None:
+    """The unit a message is about: the sid passed with it, else the only unit ever drafted for that recipient."""
+    if sid and re.fullmatch(r"[A-Za-z0-9_]{3,40}", sid) and (data_dir() / "cache" / f"{sid}.json").exists():
+        return sid
+    drafted = _DRAFTED.get(to, set())
+    return next(iter(drafted)) if len(drafted) == 1 else None
+
+
+def send_message(to: str, text: str, sid: str | None = None) -> dict:
+    """Send a message to a leasing office. A human must approve it first; the run pauses until they do.
+    Pass the unit's `sid` from the draft so the office's reply can be matched to its rooms."""
     box = data_dir() / "outbox"
     box.mkdir(parents=True, exist_ok=True)
-    rec = {"to": to, "text": with_ai_disclosure(text), "queued_at": datetime.now(timezone.utc).isoformat()}
+    text = with_ai_disclosure(text)
+    numbered = {int(m.group(1)): m.group(2) for m in map(NUMBERED_Q.match, text.splitlines()) if m}
+    # questions[n-1] is the line the office reads as "n." (null where the text skips a number)
+    questions = [numbered.get(n) for n in range(1, max(numbered, default=0) + 1)]
+    rec = {"to": to, "text": text, "queued_at": datetime.now(timezone.utc).isoformat(), "status": "pending",
+           "sid": message_unit(to, sid), "questions": questions}
     path = box / f"{datetime.now(timezone.utc):%Y%m%dT%H%M%S}_{uuid.uuid4().hex[:6]}.json"
     path.write_text(json.dumps(rec, indent=1))
     return {"status": "queued in outbox for the messaging bridge (not delivered by the agent)", "to": to}
@@ -337,7 +361,7 @@ Work in exactly four turns, and make the calls listed for a turn in ONE message 
    for the best sid.
 3. task(outreach) for the best unit (the draft adds the unknown-door, unclear-aerial and entrance questions itself).
    Claims are checked and labelled by code; there is no verifier step.
-4. send_message with the outreach draft and recipient (a person must approve it; you cannot send without approval).
+4. send_message with the outreach draft, recipient and the unit's sid (a person must approve it; you cannot send without approval).
 Then answer in at most 80 words: best unit(s) with rooms reachable as scanned and with hinges, and what is unknown.
 Use the person's exact chair size. Never invent door widths, statistics or units; unknown stays unknown. Do not use file tools."""
 
@@ -362,7 +386,7 @@ def subagents(model: Any) -> list[dict]:
          "tools": [aerial_check], "model": model},
         {"name": "outreach", "description": "Drafts (never sends) a message to a leasing office.",
          "system_prompt": "Call draft_landlord_message once with the unit id (it adds the standard questions itself; pass "
-                          "`questions` only for something extra the person asked) and return the draft text and recipient "
+                          "`questions` only for something extra the person asked) and return the draft text, recipient and sid "
                           "verbatim. You cannot send messages.",
          "tools": [draft_landlord_message], "model": model},
     ]
