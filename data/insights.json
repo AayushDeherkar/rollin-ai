@@ -1,0 +1,370 @@
+{
+ "generated_at": "2026-11-15T01:16:18+00:00",
+ "question": "Do chair sizes vary enough to matter?",
+ "scope": {
+  "area": "Texas Medical Center, Houston",
+  "radius_km": 8.0,
+  "units": 324,
+  "units_means": "usable units in the batch index (at least one room with a measured boundary)",
+  "failed": 0
+ },
+ "definitions": {
+  "fully_reachable": "every room in the unit is reachable; unknown rooms count as not reached",
+  "no_blocked_room": "no room is blocked; rooms may still be unknown",
+  "unlocked_by_hinges": "fully reachable with offset hinges on every door but not as scanned"
+ },
+ "length_rule": {
+  "text": "chair length scales with width in the 27x42 in reference proportions (length = width x 42/27, rounded to 0.5 in)",
+  "basis": "assumed"
+ },
+ "basis": "estimated",
+ "sweep": [
+  {
+   "width_in": 22,
+   "length_in": 34.0,
+   "fully_reachable": 154,
+   "fully_reachable_with_hinges": 201,
+   "unlocked_by_hinges": 47,
+   "no_blocked_room": 176,
+   "no_blocked_room_with_hinges": 234
+  },
+  {
+   "width_in": 23,
+   "length_in": 36.0,
+   "fully_reachable": 140,
+   "fully_reachable_with_hinges": 175,
+   "unlocked_by_hinges": 35,
+   "no_blocked_room": 162,
+   "no_blocked_room_with_hinges": 200
+  },
+  {
+   "width_in": 24,
+   "length_in": 37.5,
+   "fully_reachable": 136,
+   "fully_reachable_with_hinges": 144,
+   "unlocked_by_hinges": 8,
+   "no_blocked_room": 156,
+   "no_blocked_room_with_hinges": 166
+  },
+  {
+   "width_in": 25,
+   "length_in": 39.0,
+   "fully_reachable": 134,
+   "fully_reachable_with_hinges": 138,
+   "unlocked_by_hinges": 4,
+   "no_blocked_room": 154,
+   "no_blocked_room_with_hinges": 159
+  },
+  {
+   "width_in": 26,
+   "length_in": 40.5,
+   "fully_reachable": 124,
+   "fully_reachable_with_hinges": 134,
+   "unlocked_by_hinges": 10,
+   "no_blocked_room": 142,
+   "no_blocked_room_with_hinges": 153
+  },
+  {
+   "width_in": 27,
+   "length_in": 42.0,
+   "fully_reachable": 112,
+   "fully_reachable_with_hinges": 130,
+   "unlocked_by_hinges": 18,
+   "no_blocked_room": 128,
+   "no_blocked_room_with_hinges": 149
+  },
+  {
+   "width_in": 28,
+   "length_in": 43.5,
+   "fully_reachable": 97,
+   "fully_reachable_with_hinges": 115,
+   "unlocked_by_hinges": 18,
+   "no_blocked_room": 111,
+   "no_blocked_room_with_hinges": 133
+  },
+  {
+   "width_in": 29,
+   "length_in": 45.0,
+   "fully_reachable": 89,
+   "fully_reachable_with_hinges": 104,
+   "unlocked_by_hinges": 15,
+   "no_blocked_room": 100,
+   "no_blocked_room_with_hinges": 119
+  },
+  {
+   "width_in": 30,
+   "length_in": 46.5,
+   "fully_reachable": 58,
+   "fully_reachable_with_hinges": 93,
+   "unlocked_by_hinges": 35,
+   "no_blocked_room": 65,
+   "no_blocked_room_with_hinges": 107
+  },
+  {
+   "width_in": 31,
+   "length_in": 48.0,
+   "fully_reachable": 19,
+   "fully_reachable_with_hinges": 80,
+   "unlocked_by_hinges": 61,
+   "no_blocked_room": 22,
+   "no_blocked_room_with_hinges": 89
+  },
+  {
+   "width_in": 32,
+   "length_in": 50.0,
+   "fully_reachable": 4,
+   "fully_reachable_with_hinges": 43,
+   "unlocked_by_hinges": 39,
+   "no_blocked_room": 7,
+   "no_blocked_room_with_hinges": 48
+  }
+ ],
+ "at_reference_chair": {
+  "chair_in": [
+   27.0,
+   42.0
+  ],
+  "fully_reachable": 112,
+  "unlocked_by_hinges": 18,
+  "blocking_room_types": [
+   {
+    "type": "closet",
+    "blocked": 229,
+    "rooms": 540,
+    "share_blocked": 0.424
+   },
+   {
+    "type": "bathroom",
+    "blocked": 162,
+    "rooms": 471,
+    "share_blocked": 0.344
+   },
+   {
+    "type": "bedroom",
+    "blocked": 46,
+    "rooms": 491,
+    "share_blocked": 0.094
+   },
+   {
+    "type": "pantry",
+    "blocked": 29,
+    "rooms": 38,
+    "share_blocked": 0.763
+   },
+   {
+    "type": "hallway",
+    "blocked": 15,
+    "rooms": 210,
+    "share_blocked": 0.071
+   },
+   {
+    "type": "other",
+    "blocked": 14,
+    "rooms": 47,
+    "share_blocked": 0.298
+   },
+   {
+    "type": "kitchen",
+    "blocked": 13,
+    "rooms": 311,
+    "share_blocked": 0.042
+   },
+   {
+    "type": "laundry",
+    "blocked": 10,
+    "rooms": 98,
+    "share_blocked": 0.102
+   }
+  ],
+  "blocking_doors": 385,
+  "blocking_door_clear_in_histogram": [
+   {
+    "from_in": 16,
+    "to_in": 17,
+    "doors": 10
+   },
+   {
+    "from_in": 17,
+    "to_in": 18,
+    "doors": 10
+   },
+   {
+    "from_in": 18,
+    "to_in": 19,
+    "doors": 21
+   },
+   {
+    "from_in": 19,
+    "to_in": 20,
+    "doors": 31
+   },
+   {
+    "from_in": 20,
+    "to_in": 21,
+    "doors": 58
+   },
+   {
+    "from_in": 21,
+    "to_in": 22,
+    "doors": 78
+   },
+   {
+    "from_in": 22,
+    "to_in": 23,
+    "doors": 39
+   },
+   {
+    "from_in": 23,
+    "to_in": 24,
+    "doors": 24
+   },
+   {
+    "from_in": 24,
+    "to_in": 25,
+    "doors": 14
+   },
+   {
+    "from_in": 25,
+    "to_in": 26,
+    "doors": 34
+   },
+   {
+    "from_in": 26,
+    "to_in": 27,
+    "doors": 52
+   },
+   {
+    "from_in": 27,
+    "to_in": 28,
+    "doors": 5
+   },
+   {
+    "from_in": 28,
+    "to_in": 29,
+    "doors": 1
+   },
+   {
+    "from_in": 29,
+    "to_in": 30,
+    "doors": 0
+   },
+   {
+    "from_in": 30,
+    "to_in": 31,
+    "doors": 3
+   },
+   {
+    "from_in": 31,
+    "to_in": 32,
+    "doors": 1
+   },
+   {
+    "from_in": 32,
+    "to_in": 33,
+    "doors": 1
+   },
+   {
+    "from_in": 33,
+    "to_in": 34,
+    "doors": 0
+   },
+   {
+    "from_in": 34,
+    "to_in": 35,
+    "doors": 1
+   },
+   {
+    "from_in": 35,
+    "to_in": 36,
+    "doors": 1
+   },
+   {
+    "from_in": 36,
+    "to_in": 37,
+    "doors": 0
+   },
+   {
+    "from_in": 37,
+    "to_in": 38,
+    "doors": 0
+   },
+   {
+    "from_in": 38,
+    "to_in": 39,
+    "doors": 0
+   },
+   {
+    "from_in": 39,
+    "to_in": 40,
+    "doors": 0
+   },
+   {
+    "from_in": 40,
+    "to_in": 41,
+    "doors": 0
+   },
+   {
+    "from_in": 41,
+    "to_in": 42,
+    "doors": 0
+   },
+   {
+    "from_in": 42,
+    "to_in": 43,
+    "doors": 0
+   },
+   {
+    "from_in": 43,
+    "to_in": 44,
+    "doors": 0
+   },
+   {
+    "from_in": 44,
+    "to_in": 45,
+    "doors": 0
+   },
+   {
+    "from_in": 45,
+    "to_in": 46,
+    "doors": 0
+   },
+   {
+    "from_in": 46,
+    "to_in": 47,
+    "doors": 0
+   },
+   {
+    "from_in": 47,
+    "to_in": 48,
+    "doors": 0
+   },
+   {
+    "from_in": 48,
+    "to_in": 49,
+    "doors": 0
+   },
+   {
+    "from_in": 49,
+    "to_in": 50,
+    "doors": 0
+   },
+   {
+    "from_in": 50,
+    "to_in": 51,
+    "doors": 0
+   },
+   {
+    "from_in": 51,
+    "to_in": 52,
+    "doors": 0
+   },
+   {
+    "from_in": 52,
+    "to_in": 53,
+    "doors": 1
+   }
+  ],
+  "clear_width_basis": "estimated (measured opening minus 5 cm for door leaf and stop)"
+ },
+ "elapsed_s": 1781
+}
