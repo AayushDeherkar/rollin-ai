@@ -112,6 +112,52 @@ pauses for approval. Every number the UI shows is `{value, unit, basis}` with ba
 7. **iMessage** (`messaging/`). A case manager can text the agent through Photon. The bridge replies with the top
    three units and asks before contacting anyone.
 
+## Do chair sizes vary enough to matter?
+Yes. `python -m engine.sweep` ran the fit engine on the 324 usable units within 8 km of the Texas Medical Center
+(usable means at least one room has a measured boundary). It tried every chair width from 22 to 32 in, as scanned
+and with offset hinges, and took 30 minutes on 10 processes with 0 failures.
+
+**Length assumption:** chair length scales with width in the 27x42 in proportions (length = width x 42/27, rounded
+to 0.5 in). "Fully reachable" means the chair reaches every room. A room behind an unmeasured door counts as not
+reached, so these counts are lower bounds.
+
+| Chair (in) | Fully reachable, as scanned | With offset hinges | Unlocked by hinges | No blocked room, as scanned |
+|---|---|---|---|---|
+| 22 x 34 | 154 | 201 | 47 | 176 |
+| 23 x 36 | 140 | 175 | 35 | 162 |
+| 24 x 37.5 | 136 | 144 | 8 | 156 |
+| 25 x 39 | 134 | 138 | 4 | 154 |
+| 26 x 40.5 | 124 | 134 | 10 | 142 |
+| **27 x 42** | **112** | **130** | **18** | **128** |
+| 28 x 43.5 | 97 | 115 | 18 | 111 |
+| 29 x 45 | 89 | 104 | 15 | 100 |
+| 30 x 46.5 | 58 | 93 | 35 | 65 |
+| 31 x 48 | 19 | 80 | 61 | 22 |
+| 32 x 50 | 4 | 43 | 39 | 7 |
+
+- **Four inches of chair width more than halves the choice.** A 26 in chair gets into every room of 124 units, and a 30 in chair into 58. At 31 in only 19 units are fully reachable, and at 32 in only 4.
+- **Hinges matter most at the two ends of the range.** At 31 in they take a chair from 19 fully reachable units to 80, and at 22 in from 154 to 201. Near 25 in they add only 4.
+- **Which rooms block the 27x42 in chair** (as scanned, 324 units):
+
+  | Room | Blocked | Share of rooms of that type |
+  |---|---|---|
+  | Closet | 229 of 540 | 42% |
+  | Bathroom | 162 of 471 | 34% |
+  | Bedroom | 46 of 491 | 9% |
+  | Pantry | 29 of 38 | 76% |
+  | Hallway | 15 of 210 | 7% |
+  | Other | 14 of 47 | 30% |
+  | Kitchen | 13 of 311 | 4% |
+
+  Room types are the scan's own labels with the numbers removed.
+
+- **Blocking doors** (385 distinct doors, estimated clear width): most are 20 to 22 in (136 doors) or 25 to 27 in (86 doors).
+  - 14 of them are 27 in or wider. Those openings are wide enough, so what stops the chair is the space around the door.
+  - The full 1 in histogram is in `data/insights.json`.
+
+`data/insights.json` holds these aggregates and nothing else: no unit ids, names or coordinates. `GET /api/insights`
+serves it together with the sourced chair presets (see Sources).
+
 ## Data layers used
 | Layer | Source | What we use it for |
 |---|---|---|

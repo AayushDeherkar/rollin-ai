@@ -72,5 +72,14 @@ For the messaging bridge, which delivers approved messages:
 - `GET /api/units/{sid}`: once a room that was `unknown` has an answer, it gains `basis: "asked"` and `answer: {clear_in: Num, said, answer_id, answered_at}`. `clear_in` is `{value, unit: "in", basis: "asked", source: "landlord"}`, or `{value: null, basis: "unknown"}` when the reply gave no width. The room's `status` stays `unknown`, because one door's width does not prove the chair can get there. Rooms that already had a verdict are never changed by an answer.
 - The agent stops asking about rooms that have already been answered.
 
+## Insights (round 5, additive)
+`GET /api/insights` returns `{sweep, chair_presets, note}`:
+- `sweep` is `data/insights.json` (tracked; aggregates only, no unit ids), written by `python -m engine.sweep`, or `null` if no sweep has run. It contains:
+  - `scope: {area, radius_km, units, failed}`, `definitions`, `length_rule: {text, basis: "assumed"}` and `basis: "estimated"`;
+  - `sweep: [{width_in, length_in, fully_reachable, fully_reachable_with_hinges, unlocked_by_hinges, no_blocked_room, no_blocked_room_with_hinges}]` for widths 22 to 32 in;
+  - `at_reference_chair: {chair_in, fully_reachable, unlocked_by_hinges, blocking_room_types: [{type, blocked, rooms, share_blocked}], blocking_doors, blocking_door_clear_in_histogram: [{from_in, to_in, doors}], clear_width_basis}`.
+- `chair_presets: [{name, width_in, length_in, source: {title, url, checked}}]` comes from `data/chair_presets.json`. The README's "Sources" section explains where each figure comes from.
+- `note` is a string only when no sweep exists yet.
+
 ## Changing a contract
 Edit the generator, rerun it, run `pytest`, open a PR, and tell the other person what changed.
