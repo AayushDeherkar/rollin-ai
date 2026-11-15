@@ -564,7 +564,7 @@ export function ChairBody({
   chairIn: [number, number];
   kind?: ChairKind;
   palette: Palette;
-  /** pass the materials to drive them (the glow); otherwise the chair makes its own */
+  /** pass materials to share one set (the driven chair keeps its own); otherwise the chair makes its own */
   materials?: ChairMaterials;
 }) {
   const own = useChairMaterials(palette);

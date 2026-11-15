@@ -16,7 +16,7 @@ The token names keep their jobs from the drafting sheet: `paper` is the ground a
 | `--rule` / `--rule-strong` | `#2b2f34` / `#4a5057` | Construction lines, panel rules |
 | `--ink` | `#ebe7dc` | Pale model card: walls, text |
 | `--ink-soft` | `#a9a59a` | Secondary text, dimension extension lines |
-| `--agent` | `#8ea2ff` | **The one accent: cobalt.** Used *only* while the agent is acting now (streaming, a decision in flight, the chair driving). |
+| `--agent` | `#8ea2ff` | **The one accent: cobalt.** Used *only* while the agent is acting now (streaming, a decision in flight). |
 | `--reach` | `#7cc98b` | Reachable: flat wash, check icon |
 | `--block` | `#ff7a6b` | Blocked / not passable: 45° hatch, ban icon |
 | `--unknown` | `#a39f94` | Not measured: stipple, question icon |
