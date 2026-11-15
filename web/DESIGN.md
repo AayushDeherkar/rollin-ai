@@ -10,12 +10,14 @@ The token names keep their jobs from the drafting sheet: `paper` is the ground a
 
 | Token | Hex | Job |
 |---|---|---|
-| `--paper` | `#16202f` | The night ground around the model |
+| `--paper` | `#16202f` | The ground around the interface (deep blue-slate, from the logo blue) |
 | `--paper-lift` | `#1d293b` | The base board under the model and the 2D plan |
 | `--paper-deep` | `#27364c` | A step lighter: hover, selected row, skeletons |
 | `--rule` / `--rule-strong` | `#34465f` / `#62789a` | Construction lines, panel rules |
 | `--ink` | `#f2f5f9` | Pale model card: walls, text |
 | `--ink-soft` | `#b8c4d4` | Secondary text, dimension extension lines |
+| `--floor` | `#2a3b54` | The 3D floor plane under every scene: a step lighter than the ground, so the model stands on something. |
+| `--chair-frame` / `--chair-fabric` / `--chair-tyre` | `#d9dfe7` / `#9eabbd` / `#222c3a` | The chair: a light neutral that separates from the floor in every scene. |
 | `--agent` | `#55b4f1` | **The one accent: the logo's blue.** Used *only* while the agent is acting now (streaming, a decision in flight). |
 | `--reach` | `#80d69a` | Reachable: flat wash, check icon |
 | `--block` | `#ff8f80` | Blocked / not passable: 45° hatch, ban icon |
@@ -87,12 +89,12 @@ The steps are a real sequence, so the step bar numbers them.
 - Plates, not cards: `paper-lift` ground, 2px `ink` border for the one focused plate (approval, room card), hairline `rule-strong` for the rest, the 2px radius. No shadows, no blur, no translucency over the scene (glassmorphism is banned): plates are opaque.
 - Left-aligned text everywhere. The narration line is 22px Public Sans; verdicts and step names use Big Shoulders.
 - Status is never colour alone: points carry a shape (post, cross-bar, hollow ring), rooms carry hatch, icon and word.
-- The accent cobalt appears only while the agent is acting: the pill while streaming, the narration bullet, the checking pulse on a point.
+- The accent the logo blue appears only while the agent is acting: the pill while streaming, the narration bullet, the checking pulse on a point.
 - Keyboard: steps, presets, sliders, cards, room strip and every evidence link are real buttons and inputs. Esc closes the pill, the evidence and the approval card's details.
 
 ### The chair
 
-One procedural model (`src/components/chair/wheelchair.tsx`) in every scene, drawn inside the width × length footprint the engine tests (the footprint stays outlined on the floor; the model is a drawing, not a measurement). Manual: tubular frame, spoked rear wheels with push rims, casters on forks, soft-edged seat and back, armrests, footplates. Power: base, mid drive wheels, casters front and back, captain seat with headrest, joystick. Picking a measured preset picks its kind; a Manual/Power toggle sits above the sliders. Materials are restrained (one brushed metal in `--ink-soft`, bright spokes and push rims in `--ink`, fabric and tyres in the rule greys); one rim light from behind and low separates it from the ground. The chair looks the same in every state (idle, driving, stopped, blocked, arrived): no state touches its materials. Resizing is transform-only for tubes and wheels; only the cushions rebuild, in 5 mm steps.
+One procedural model (`src/components/chair/wheelchair.tsx`) in every scene, drawn inside the width × length footprint the engine tests (the footprint stays outlined on the floor; the model is a drawing, not a measurement). Manual: tubular frame, spoked rear wheels with push rims, casters on forks, soft-edged seat and back, armrests, footplates. Power: base, mid drive wheels, casters front and back, captain seat with headrest, joystick. Picking a measured preset picks its kind; a Manual/Power toggle sits above the sliders. Materials are restrained and come from the chair tokens (a light neutral frame in `--chair-frame`, bright spokes and push rims in `--ink`, fabric in `--chair-fabric`, tyres in `--chair-tyre`); one rim light from behind and low separates it from the ground. The chair looks the same in every state (idle, driving, stopped, blocked, arrived): no state touches its materials. Resizing is transform-only for tubes and wheels; only the cushions rebuild, in 5 mm steps.
 
 ### Landing (/)
 
