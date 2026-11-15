@@ -524,15 +524,18 @@ function Chair({
 }) {
   const body = useRef<THREE.Group>(null);
   const mats = useRef<THREE.MeshStandardMaterial[]>([]);
+  // the body keeps one colour; driving shows as a cobalt glow that eases in and out. (It used to swap the
+  // body colour from cobalt to ink at every stop: under the key light the pale ink read as a white flash.)
   const colours = useMemo(
     () => ({
-      moving: new THREE.Color(palette.agent),
-      still: new THREE.Color(palette.ink),
+      agent: new THREE.Color(palette.agent),
+      body: new THREE.Color(palette.inkSoft),
     }),
     [palette],
   );
+  const glow = useRef(0);
   const track = useMemo(() => drive.route.map(([x, y]) => v3(x, y, 0.015)), [drive.route]);
-  useFrame(() => {
+  useFrame((_, dt) => {
     const g = body.current;
     if (!g) return;
     const p = progress.get();
@@ -540,8 +543,13 @@ function Chair({
     g.position.set(x, 0, -y);
     // theta turns the chair's length axis from +x (model, y up); in three that is a turn about Y
     g.rotation.y = theta;
-    const c = p < 1 ? colours.moving : colours.still;
-    for (const m of mats.current) m.color.copy(c);
+    glow.current += ((p < 1 ? 0.55 : 0) - glow.current) * (1 - Math.exp(-Math.min(dt, 0.1) * 5));
+    for (const m of mats.current) {
+      if (!m) continue;
+      m.color.copy(colours.body);
+      m.emissive.copy(colours.agent);
+      m.emissiveIntensity = glow.current;
+    }
   });
   return (
     <>

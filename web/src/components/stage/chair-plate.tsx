@@ -49,7 +49,8 @@ export function ChairPlate({ chair, onChair, onFind }: { chair: ChairIn; onChair
             </button>
           ))}
         </div>
-        <p id="preset-source" aria-live="polite" className="min-h-[3lh] text-sm text-ink-soft">
+        {/* one fixed height (it scrolls if a source is longer): a line that grew and shrank with the preset under the pointer moved the sliders mid-drag */}
+        <p id="preset-source" aria-live="polite" className="h-[6lh] shrink-0 overflow-y-auto text-sm text-ink-soft">
           {shown ? (
             <>
               <span className="text-ink">Source:</span> {shown.source.title}

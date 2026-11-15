@@ -506,6 +506,7 @@ function Stage() {
               available={available}
               onStep={(next) => {
                 leaveBeat();
+                setTraceOpen(false);
                 setStep(next);
               }}
             />
