@@ -57,9 +57,8 @@ export function FieldScene({ units, origin, status, ranked, chosen, mode, onPick
     }),
     [units, origin],
   );
-  /** the dot pointed at, and the group it was in when pointed at */
-  const [hover, setHover] = useState<{ sid: string; group: PointStatus } | null>(null);
-  const hovered = hover?.sid ?? null;
+  /** the dot pointed at, with the grouping it was pointed at in */
+  const [hover, setHover] = useState<{ sid: string; groups: object } | null>(null);
   const shade = useMemo(() => {
     const far = new Color(palette.ruleStrong);
     const close = new Color(palette.ink);
@@ -89,11 +88,11 @@ export function FieldScene({ units, origin, status, ranked, chosen, mode, onPick
     setHover(null);
     onPick(sid);
   };
-  const hoverOf = (sid: string, group: PointStatus) => ({
+  const hoverOf = (sid: string) => ({
     onPointerOver: (e: ThreeEvent<PointerEvent>) => {
       e.stopPropagation();
       document.body.style.cursor = "pointer";
-      setHover({ sid, group });
+      setHover({ sid, groups });
     },
     onPointerOut: () => {
       document.body.style.cursor = "";
@@ -102,8 +101,9 @@ export function FieldScene({ units, origin, status, ranked, chosen, mode, onPick
   });
   // R3F drops an unmounted object without a pointer-out: a dot that changed group (checked during the run)
   // or a mode change leaves `hovered` behind, so the card shows only while that dot is still hoverable as it was
-  const stillThere = hover !== null && groups[hover.group].some((x) => x.sid === hover.sid);
-  const tip = stillThere && mode === "full" ? (placed.find((x) => x.u.sid === hovered) ?? null) : null;
+  // so it counts only while the points are grouped exactly as they were (any status change or mode change ends it)
+  const hovered = hover !== null && hover.groups === groups ? hover.sid : null;
+  const tip = hovered && mode === "full" ? (placed.find((x) => x.u.sid === hovered) ?? null) : null;
   const full = mode === "full";
   // not drawn at all when hidden: an invisible mesh still catches the pointer
   if (mode === "hidden") return null;
@@ -150,7 +150,7 @@ export function FieldScene({ units, origin, status, ranked, chosen, mode, onPick
                 scale={[r, hovered === sid ? 3 : 1, r]}
                 color={hovered === sid ? palette.ink : shade(near)}
                 onClick={pick(sid)}
-                {...hoverOf(sid, "unchecked")}
+                {...hoverOf(sid)}
               />
             );
           })}
@@ -162,7 +162,7 @@ export function FieldScene({ units, origin, status, ranked, chosen, mode, onPick
           <cylinderGeometry args={[0.5, 0.5, 4, 14]} />
           <meshStandardMaterial color={palette.reach} emissive={palette.reach} emissiveIntensity={palette.glow} />
           {groups.reachable.map(({ sid, p }) => (
-            <Instance key={sid} position={[p[0], 2, p[2]]} onClick={pick(sid)} {...hoverOf(sid, "reachable")} />
+            <Instance key={sid} position={[p[0], 2, p[2]]} onClick={pick(sid)} {...hoverOf(sid)} />
           ))}
         </Instances>
       )}
@@ -172,7 +172,7 @@ export function FieldScene({ units, origin, status, ranked, chosen, mode, onPick
             <cylinderGeometry args={[0.5, 0.5, 1.4, 14]} />
             <meshStandardMaterial color={palette.block} emissive={palette.block} emissiveIntensity={palette.glow} />
             {groups.blocked.map(({ sid, p }) => (
-              <Instance key={sid} position={[p[0], 0.7, p[2]]} onClick={pick(sid)} {...hoverOf(sid, "blocked")} />
+              <Instance key={sid} position={[p[0], 0.7, p[2]]} onClick={pick(sid)} {...hoverOf(sid)} />
             ))}
           </Instances>
           <Instances limit={CAPACITY} range={groups.blocked.length}>
@@ -189,7 +189,7 @@ export function FieldScene({ units, origin, status, ranked, chosen, mode, onPick
           <torusGeometry args={[0.7, 0.16, 8, 24]} />
           <meshStandardMaterial color={palette.unknown} />
           {groups.unknown.map(({ sid, p }) => (
-            <Instance key={sid} position={[p[0], 1.6, p[2]]} onClick={pick(sid)} {...hoverOf(sid, "unknown")} />
+            <Instance key={sid} position={[p[0], 1.6, p[2]]} onClick={pick(sid)} {...hoverOf(sid)} />
           ))}
         </Instances>
       )}
