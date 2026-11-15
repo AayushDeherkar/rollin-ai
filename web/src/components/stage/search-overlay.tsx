@@ -190,7 +190,7 @@ export function FieldLegend({ acting }: { acting: boolean }) {
     { label: "Every room reached", draw: <rect x="7" y="2" width="6" height="16" fill="var(--reach)" /> },
     { label: "A room is blocked", draw: <><rect x="7" y="9" width="6" height="9" fill="var(--block)" /><rect x="2" y="7" width="16" height="3" fill="var(--block)" /></> },
     { label: "A room not measured", draw: <circle cx="10" cy="10" r="6" fill="none" stroke="var(--unknown)" strokeWidth="2.5" /> },
-    { label: "Not checked", draw: <ellipse cx="10" cy="15" rx="6" ry="2.5" fill="var(--unknown)" /> },
+    { label: "Not checked: larger and brighter nearer the medical center", draw: <><ellipse cx="6" cy="15" rx="5" ry="2" fill="var(--ink)" /><ellipse cx="15" cy="15" rx="3" ry="1.3" fill="var(--rule-strong)" /></> },
   ];
   // the accent shows only while the agent is acting
   if (acting) items.push({ label: "Checking now", draw: <rect x="7" y="6" width="6" height="12" fill="var(--agent)" /> });

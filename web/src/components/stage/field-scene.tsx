@@ -6,9 +6,12 @@
  * A point's shape and colour say what the agent found, so status is never colour alone:
  * reachable = tall post, blocked = short post with a cross-bar, unknown = hollow ring on a stem,
  * not checked = a flat graphite dot. Points being checked now pulse in the accent.
+ * Before a run the dots already mean something: nearer the medical center a dot is larger and
+ * brighter, and pointing at one names the unit, its distance, and the overnight batch's estimate.
  */
 import { useMemo, useRef, useState } from "react";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
+import { Color } from "three";
 import { Html, Instance, Instances, Line } from "@react-three/drei";
 import { useReducedMotionConfig } from "motion/react";
 import type * as THREE from "three";
@@ -18,6 +21,8 @@ import { FIELD_M_PER_KM, fieldPoint, kmFrom } from "@/lib/stage";
 import { readPalette } from "@/lib/tokens";
 
 const RINGS_KM = [2, 5, 10];
+/** past this distance a dot is at its smallest and dimmest */
+const FAR_KM = 10;
 /** instance buffers are sized once (drei does not rebuild them when the limit changes) */
 const CAPACITY = 2048;
 
@@ -44,15 +49,26 @@ export function FieldScene({ units, origin, status, ranked, chosen, mode, onPick
   const placed = useMemo(
     () => units.flatMap((u) => {
       const p = unitPosition(u, origin);
-      return p ? [{ u, p }] : [];
+      if (!p) return [];
+      const km = Math.hypot(...kmFrom(origin, { lat: u.lat!, lon: u.lon! }));
+      // 1 at the medical center, 0 at FAR_KM and beyond
+      const near = Math.max(0, 1 - km / FAR_KM);
+      return [{ u, p, km, near }];
     }),
     [units, origin],
   );
+  /** the dot pointed at, with the grouping it was pointed at in */
+  const [hover, setHover] = useState<{ sid: string; groups: object } | null>(null);
+  const shade = useMemo(() => {
+    const far = new Color(palette.ruleStrong);
+    const close = new Color(palette.ink);
+    return (near: number) => far.clone().lerp(close, 0.25 + 0.75 * near);
+  }, [palette]);
   const groups = useMemo(() => {
-    const g: Record<PointStatus, { sid: string; p: [number, number, number] }[]> = { unchecked: [], checking: [], reachable: [], blocked: [], unknown: [] };
-    for (const { u, p } of placed) {
+    const g: Record<PointStatus, { sid: string; p: [number, number, number]; near: number }[]> = { unchecked: [], checking: [], reachable: [], blocked: [], unknown: [] };
+    for (const { u, p, near } of placed) {
       if (mode === "chosen" && u.sid !== chosen) continue;
-      g[status.get(u.sid) ?? "unchecked"].push({ sid: u.sid, p });
+      g[status.get(u.sid) ?? "unchecked"].push({ sid: u.sid, p, near });
     }
     return g;
   }, [placed, status, mode, chosen]);
@@ -69,12 +85,25 @@ export function FieldScene({ units, origin, status, ranked, chosen, mode, onPick
   const pick = (sid: string) => (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     document.body.style.cursor = "";
+    setHover(null);
     onPick(sid);
   };
-  const hover = {
-    onPointerOver: () => (document.body.style.cursor = "pointer"),
-    onPointerOut: () => (document.body.style.cursor = ""),
-  };
+  const hoverOf = (sid: string) => ({
+    onPointerOver: (e: ThreeEvent<PointerEvent>) => {
+      e.stopPropagation();
+      document.body.style.cursor = "pointer";
+      setHover({ sid, groups });
+    },
+    onPointerOut: () => {
+      document.body.style.cursor = "";
+      setHover((h) => (h?.sid === sid ? null : h));
+    },
+  });
+  // R3F drops an unmounted object without a pointer-out: a dot that changed group (checked during the run)
+  // or a mode change leaves `hovered` behind, so the card shows only while that dot is still hoverable as it was
+  // so it counts only while the points are grouped exactly as they were (any status change or mode change ends it)
+  const hovered = hover !== null && hover.groups === groups ? hover.sid : null;
+  const tip = hovered && mode === "full" ? (placed.find((x) => x.u.sid === hovered) ?? null) : null;
   const full = mode === "full";
   // not drawn at all when hidden: an invisible mesh still catches the pointer
   if (mode === "hidden") return null;
@@ -107,14 +136,24 @@ export function FieldScene({ units, origin, status, ranked, chosen, mode, onPick
         </group>
       )}
 
-      {/* not checked: flat dots */}
+      {/* not checked: flat dots, larger and brighter nearer the medical center; the one pointed at grows */}
       {full && groups.unchecked.length > 0 && (
         <Instances limit={CAPACITY} range={groups.unchecked.length}>
-          <cylinderGeometry args={[0.32, 0.32, 0.06, 10]} />
-          <meshStandardMaterial color={palette.unknown} roughness={1} />
-          {groups.unchecked.map(({ sid, p }) => (
-            <Instance key={sid} position={[p[0], 0.03, p[2]]} />
-          ))}
+          <cylinderGeometry args={[0.32, 0.32, 0.06, 12]} />
+          <meshBasicMaterial toneMapped={false} />
+          {groups.unchecked.map(({ sid, p, near }) => {
+            const r = (0.7 + 0.9 * near) * (hovered === sid ? 1.7 : 1);
+            return (
+              <Instance
+                key={sid}
+                position={[p[0], 0.03, p[2]]}
+                scale={[r, hovered === sid ? 3 : 1, r]}
+                color={hovered === sid ? palette.ink : shade(near)}
+                onClick={pick(sid)}
+                {...hoverOf(sid)}
+              />
+            );
+          })}
         </Instances>
       )}
       {groups.checking.length > 0 && <Checking points={groups.checking} colour={palette.agent} />}
@@ -123,7 +162,7 @@ export function FieldScene({ units, origin, status, ranked, chosen, mode, onPick
           <cylinderGeometry args={[0.5, 0.5, 4, 14]} />
           <meshStandardMaterial color={palette.reach} emissive={palette.reach} emissiveIntensity={palette.glow} />
           {groups.reachable.map(({ sid, p }) => (
-            <Instance key={sid} position={[p[0], 2, p[2]]} onClick={pick(sid)} {...hover} />
+            <Instance key={sid} position={[p[0], 2, p[2]]} onClick={pick(sid)} {...hoverOf(sid)} />
           ))}
         </Instances>
       )}
@@ -133,7 +172,7 @@ export function FieldScene({ units, origin, status, ranked, chosen, mode, onPick
             <cylinderGeometry args={[0.5, 0.5, 1.4, 14]} />
             <meshStandardMaterial color={palette.block} emissive={palette.block} emissiveIntensity={palette.glow} />
             {groups.blocked.map(({ sid, p }) => (
-              <Instance key={sid} position={[p[0], 0.7, p[2]]} onClick={pick(sid)} {...hover} />
+              <Instance key={sid} position={[p[0], 0.7, p[2]]} onClick={pick(sid)} {...hoverOf(sid)} />
             ))}
           </Instances>
           <Instances limit={CAPACITY} range={groups.blocked.length}>
@@ -150,9 +189,24 @@ export function FieldScene({ units, origin, status, ranked, chosen, mode, onPick
           <torusGeometry args={[0.7, 0.16, 8, 24]} />
           <meshStandardMaterial color={palette.unknown} />
           {groups.unknown.map(({ sid, p }) => (
-            <Instance key={sid} position={[p[0], 1.6, p[2]]} onClick={pick(sid)} {...hover} />
+            <Instance key={sid} position={[p[0], 1.6, p[2]]} onClick={pick(sid)} {...hoverOf(sid)} />
           ))}
         </Instances>
+      )}
+      {tip && (
+        <Html position={[tip.p[0], 2.5, tip.p[2]]} zIndexRange={[8, 0]} style={{ pointerEvents: "none" }}>
+          <div className="ml-4 flex w-max max-w-[22rem] flex-col gap-0.5 border-2 border-ink bg-paper-lift px-3 py-2 text-sm text-ink">
+            <span className="font-semibold">{tip.u.name}</span>
+            <span className="measure text-ink-soft">{tip.km.toFixed(1)} km from the medical center</span>
+            {tip.u.counts && (
+              <span>
+                Overnight batch, estimated: {tip.u.counts.reachable} of {tip.u.counts.reachable + tip.u.counts.blocked + tip.u.counts.unknown} rooms reachable for a{" "}
+                {tip.u.chair_in[0]} × {tip.u.chair_in[1]} in chair{status.get(tip.u.sid) && status.get(tip.u.sid) !== "unchecked" ? "" : ". Not checked in this run yet"}.
+              </span>
+            )}
+            <span className="font-semibold underline underline-offset-4">Click to open the apartment</span>
+          </div>
+        </Html>
       )}
       {full &&
         ranked.map((sid, i) => {
