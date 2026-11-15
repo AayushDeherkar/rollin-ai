@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Deliverer, OFFICE_ACK, findingsText, roleOf, sameHandle, type DeliveryState, type LeasingLine, type OutboxApi, type OutboxItem } from "./deliver.ts";
+import { Deliverer, OFFICE_ACK, SENT_TO_CLIENT, WAITING_TO_CLIENT, findingsText, roleOf, sameHandle, type DeliveryState, type LeasingLine, type OutboxApi, type OutboxItem } from "./deliver.ts";
 
 const OFFICE = "+15550100000";
 const T0 = new Date("2026-11-15T01:00:00Z");
@@ -154,6 +154,10 @@ test("an office reply is logged and its findings go to the client's own conversa
   await r.d.tick();
   assert.equal(r.sent[0].line.spaceId, "office-space");
   assert.deepEqual(r.saved().lastDelivered?.client, clientLine);
+  // the client was told the questions went out
+  assert.equal(told.length, 1);
+  assert.equal(told[0].key, "rollin:sent:20261115T010500_aaaaaa");
+  told.length = 0;
   const out = await r.d.fromOffice(OFFICE, "office-space", "agent-o", "The closet door is 30 inches.", "msg-9");
   assert.equal(r.answers.length, 1);
   assert.equal(told.length, 1);
@@ -193,4 +197,20 @@ test("the office's existing conversation is adopted at start; another number's i
 test("findings say where a width came from", () => {
   assert.match(findingsText("ok", { rooms: [{ label: "Bath", clear_in: 31 }] }), /Bath: 31 in clear.*not measured/);
   assert.match(findingsText("ok", { rooms: [] }), /unchanged/);
+});
+
+test("the client is told once while questions wait, and when they go out", async () => {
+  const r = rig([item("20261115T010500_aaaaaa", "2026-11-15T01:05:00Z")]);
+  const told: { text: string; key: string }[] = [];
+  r.d.notifyClient = async (_c, text, key) => void told.push({ text, key });
+  await r.d.start();
+  await r.d.noteClient(clientLine);
+  await r.d.tick();
+  await r.d.tick();
+  assert.deepEqual(told.map((t) => t.text), [WAITING_TO_CLIENT]);
+  await r.d.fromOffice(OFFICE, "office-space", "agent-o", "Hi");
+  await r.d.tick();
+  assert.equal(told.at(-1)?.text, SENT_TO_CLIENT);
+  assert.equal(told.at(-1)?.key, "rollin:sent:20261115T010500_aaaaaa");
+  assert.equal(r.sent.length, 1);
 });
