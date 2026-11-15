@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { Bot, ChevronDown, X } from "lucide-react";
 import type { Decision, Run } from "@/lib/agent";
 import type { SearchView } from "@/lib/search";
+import type { StatusCounts, UnitRow } from "@/lib/contract";
 import { STATUS } from "@/components/sheet/status";
 import { ApprovalCard } from "@/components/trace/approval-card";
 import { Timeline, type Evidence } from "@/components/trace/timeline";
@@ -205,5 +206,93 @@ export function FieldLegend({ acting }: { acting: boolean }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Room counts as icon, number and word (the word for screen readers): reachable, blocked, unknown. */
+export function CountsRow({ counts }: { counts: StatusCounts }) {
+  return (
+    <span className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+      {(["reachable", "blocked", "unknown"] as const).map((k) => {
+        const S = STATUS[k];
+        return (
+          <span key={k} className="flex items-center gap-1.5" title={`${S.word} (estimated)`}>
+            <S.icon aria-hidden className={cn("size-4", S.text)} strokeWidth={2.5} />
+            <span className="measure">{counts[k]}</span>
+            <span className="sr-only">{S.word}</span>
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+/**
+ * Every ranked unit from /api/units, in the API's order, with its room counts and distance (both
+ * estimated, from the overnight batch for the batch's chair). Selecting one opens it, as a point in
+ * the field does. The rail scrolls; nothing is cut to a top three.
+ */
+export function AllUnits({
+  units,
+  chair,
+  replay,
+  onOpen,
+  onClose,
+}: {
+  units: UnitRow[];
+  chair: [number, number] | null;
+  /** the list is the replayed contract fixture (synthetic units), not the batch */
+  replay: boolean;
+  onOpen: (sid: string) => void;
+  onClose: () => void;
+}) {
+  const close = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    close.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <section aria-labelledby="all-title" className="pointer-events-auto flex min-h-0 w-full flex-col border border-rule-strong bg-paper-lift">
+      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-rule px-4 py-3">
+        <div className="flex flex-col gap-1">
+          <h2 id="all-title" className="display text-xl font-bold">
+            All apartments
+          </h2>
+          <p className="text-sm text-ink-soft">
+            {units.length} ranked, best first. Room counts and distances are estimated{chair ? ` for a ${chair[0]} × ${chair[1]} in chair` : ""}.
+          </p>
+          {replay && <p className="text-sm font-semibold">Replay: the synthetic example units, not real listings.</p>}
+        </div>
+        <button ref={close} type="button" onClick={onClose} aria-label="Close the list" className="shrink-0 p-1 text-ink-soft hover:text-ink">
+          <X aria-hidden className="size-5" />
+        </button>
+      </div>
+      <ol className="stage-panel flex min-h-0 flex-col">
+        {units.map((u, i) => (
+          <li key={u.sid} className="border-b border-rule last:border-b-0">
+            <button
+              type="button"
+              onClick={() => onOpen(u.sid)}
+              className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors transition-draft hover:bg-paper-deep"
+            >
+              <span aria-hidden className="measure w-10 shrink-0 pt-0.5 text-sm text-ink-soft">
+                {i + 1}
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="truncate text-base font-semibold">{u.name}</span>
+                <span className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                  <CountsRow counts={u.counts} />
+                  {typeof u.distance_km === "number" && <span className="measure text-sm text-ink-soft">{u.distance_km.toFixed(1)} km est.</span>}
+                </span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }

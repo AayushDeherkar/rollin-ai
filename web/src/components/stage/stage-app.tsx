@@ -22,7 +22,7 @@ import type { Floor, Room } from "@/lib/contract";
 import { readSearch } from "@/lib/search";
 import type { UnitRow } from "@/lib/contract";
 import { readAgentReplay, webSenderId } from "@/components/workbench";
-import { AgentPill, AgentTrace, ApprovalFocus, BestFits, FieldLegend, Narration } from "./search-overlay";
+import { AgentPill, AgentTrace, AllUnits, ApprovalFocus, BestFits, CountsRow, FieldLegend, Narration } from "./search-overlay";
 import { FieldScene, unitPosition } from "./field-scene";
 import { ApartmentScene, modelCentre, modelToWorld } from "./apartment-scene";
 import { ApartmentLegend, EvidencePanel, RoomCard, RoomStrip, VerdictLine, type EvidenceKind } from "./apartment-overlay";
@@ -102,6 +102,12 @@ type Beat = 1 | 2 | 3 | 4 | 5;
 /** a tour opened from More: the door the ruler measures once the cut has settled */
 const RULER_DOOR = "ruler";
 
+/** the chair the units list was ranked for (its query), when it says */
+function listChair(d: { query?: { w?: number | null; l?: number | null } | null }): [number, number] | null {
+  const q = d.query;
+  return q && typeof q.w === "number" && typeof q.l === "number" ? [q.w, q.l] : null;
+}
+
 /** `?sid=` units the list does not carry stand at the medical center */
 const ORIGIN: [number, number, number] = [0, 0, 0];
 
@@ -136,9 +142,12 @@ function Stage() {
     },
     [startAgent, entry.pace],
   );
+  const [allOpen, setAllOpen] = useState(false);
+  const closeAll = useCallback(() => setAllOpen(false), []);
   const find = useCallback(() => {
     // a new run asks afresh, even if a replay reuses the last run's action id
     setDismissed(null);
+    setAllOpen(false);
     setProfile(chair);
     setStep("search");
     search(chair);
@@ -292,6 +301,7 @@ function Stage() {
       if (b <= 3 && !demoSid && !sid) return;
       cut.current = 3;
       setBeat(b);
+      setAllOpen(false);
       setEvidence(null);
       if (b <= 3) {
         if (demoSid) setSid(demoSid);
@@ -331,6 +341,7 @@ function Stage() {
   }, [entry.demo]);
   /** the agent's trace, opened from the pill: it takes the right rail while open */
   const [traceOpen, setTraceOpen] = useState(false);
+  /** the "All apartments" list in the search step's right rail */
   /** "More" (M): everything the pitch leaves out, one keypress away */
   const [more, setMore] = useState(false);
   useEffect(() => {
@@ -545,12 +556,26 @@ function Stage() {
                 <Narration text={view.narration} acting={agent.acting} />
               </div>
             </div>
-            {(traceOpen && agent.run.status !== "idle") || view.shortlist.length > 0 || notice ? (
+            {(traceOpen && agent.run.status !== "idle") || view.shortlist.length > 0 || notice || units.length > 0 ? (
               <div className="stage-right">
                 {traceOpen && agent.run.status !== "idle" ? (
                   <AgentTrace run={agent.run} decisions={agent.decisions} onDecide={agent.decide} onEvidence={(e) => open(e.sid)} onClose={() => setTraceOpen(false)} />
+                ) : allOpen ? (
+                  <AllUnits units={units} chair={list.status === "ready" ? listChair(list.data) : null} replay={list.status === "ready" && list.origin === "replay"} onOpen={open} onClose={closeAll} />
                 ) : (
-                  <BestFits view={view} onOpen={open} />
+                  <>
+                    <BestFits view={view} onOpen={open} />
+                    {units.length > 0 && (
+                      <button
+                        type="button"
+                        data-fixed
+                        onClick={() => setAllOpen(true)}
+                        className="pointer-events-auto w-full border border-rule-strong bg-paper-lift px-4 py-3 text-left text-base font-semibold transition-colors transition-draft hover:border-ink"
+                      >
+                        All apartments <span className="measure font-normal text-ink-soft">({units.length})</span>
+                      </button>
+                    )}
+                  </>
                 )}
                 {notice}
               </div>
@@ -560,6 +585,11 @@ function Stage() {
         {step === "apartment" && (
           <Apartment
             sid={sid}
+            row={sid ? (units.find((u) => u.sid === sid) ?? null) : null}
+            onBack={() => {
+              setStep("search");
+              setAllOpen(true);
+            }}
             pair={pair}
             unit={unit}
             scannedFloor={scannedFloor}
@@ -651,6 +681,8 @@ function AnswerNotice({ answer, onOpen, onDismiss }: { answer: AnswerEvent; onOp
 
 function Apartment({
   sid,
+  row,
+  onBack,
   pair,
   unit,
   scannedFloor,
@@ -672,6 +704,9 @@ function Apartment({
   onEvidence,
 }: {
   sid: string | null;
+  /** the unit’s row from /api/units, for its summary when the plan is not on this machine */
+  row: UnitRow | null;
+  onBack: () => void;
   pair: ReturnType<typeof useUnitPair>;
   unit: import("@/lib/contract").UnitResult | null;
   scannedFloor: Floor | null;
@@ -695,12 +730,34 @@ function Apartment({
   onEvidence: (k: EvidenceKind | null) => void;
 }) {
   if (pair.status === "error") {
+    // the plan is not on this machine (or could not be read): the batch's summary instead, never an error page
     return (
       <>
       <div className="stage-left">
-        <p role="alert" className="pointer-events-auto border border-rule-strong bg-paper-lift px-5 py-3 text-base">
-          This apartment’s plan could not be loaded: {pair.message}. Go back to Search and open another.
-        </p>
+        <section aria-labelledby="nofloor-title" className="pointer-events-auto flex w-full max-w-[32rem] flex-col gap-3 border border-rule-strong bg-paper-lift px-5 py-4">
+          <h2 id="nofloor-title" className="display text-2xl font-bold">
+            {row?.name ?? "This apartment"}
+          </h2>
+          {row ? (
+            <>
+              <p className="text-base">
+                {row.summary} (estimated, {row.synthetic ? "replayed from the synthetic example units, not a real listing," : "from the overnight batch"} for a {row.chair_in[0]} × {row.chair_in[1]} in chair).
+              </p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <CountsRow counts={row.counts} />
+                {typeof row.distance_km === "number" && <span className="measure text-sm text-ink-soft">{row.distance_km.toFixed(1)} km est.</span>}
+              </div>
+            </>
+          ) : null}
+          <p role="status" className="text-base text-ink-soft">
+            {row
+              ? "Its floor plan is not available on this machine, so the 3D model and the drive cannot be shown here."
+              : `This apartment could not be loaded: ${pair.message}`}
+          </p>
+          <button type="button" onClick={onBack} className="self-start border border-rule-strong px-4 py-2 text-base font-semibold hover:border-ink">
+            Back to all apartments
+          </button>
+        </section>
       </div>
       {notice && <div className="stage-right justify-end">{notice}</div>}
     </>
