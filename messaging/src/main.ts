@@ -7,7 +7,7 @@ import { ApiError } from "@photon-ai/api";
 import { Conversations } from "./conversation.ts";
 import { photonClient } from "./photon.ts";
 import { webRollin } from "./rollin.ts";
-import { Deliverer, fileState, sameHandle, webOutbox } from "./deliver.ts";
+import { Deliverer, fileState, roleOf, webOutbox } from "./deliver.ts";
 
 const env = (name: string) => process.env[name]?.trim() ?? "";
 const missing = ["PHOTON_API_KEY", "PHOTON_PROJECT_ID"].filter((n) => !env(n));
@@ -26,15 +26,22 @@ const publicUrl = env("ROLLIN_PUBLIC_WEB_URL") || webUrl;
 /** where approved messages go (E.164 or an iMessage email); delivery is off without it */
 const leasing = env("LEASING_OFFICE_NUMBER");
 const stateDir = path.join(import.meta.dirname, "..", ".state");
+/** two roles, kept apart: clients (PHOTON_ALLOWED_SENDERS) talk to Rollin’; the leasing office only answers */
+const clients = env("PHOTON_ALLOWED_SENDERS")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+let role: ReturnType<typeof roleOf>;
+try {
+  role = roleOf(clients, leasing);
+} catch (err) {
+  console.error(err instanceof Error ? err.message : String(err));
+  process.exit(1);
+}
 const photon = photonClient({
   apiKey: env("PHOTON_API_KEY"),
   projectId: env("PHOTON_PROJECT_ID"),
-  allowedSenders: env("PHOTON_ALLOWED_SENDERS")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    // the leasing office is answered too, when senders are restricted
-    .concat(leasing && env("PHOTON_ALLOWED_SENDERS") ? [leasing] : []),
+  roleOf: role,
   stateDir,
 });
 const conversations = new Conversations(webRollin(webUrl), publicUrl, "imsg");
@@ -47,8 +54,21 @@ const deliverer = new Deliverer(
   fileState(stateDir),
   log,
 );
+// the office's findings go back into the client's own conversation, never the office's
+deliverer.notifyClient = (client, text, key) => photon.send(client.spaceId, client.agentId, text, key);
 if (leasing) {
   await deliverer.start();
+  if (!deliverer.line) {
+    // the office's existing conversation on the project, if it has texted before
+    try {
+      const found = await photon.findSpace(leasing);
+      if (found && (await deliverer.adopt({ handle: leasing, spaceId: found.spaceId, agentId: found.agentId, openedAt: found.createdAt || new Date().toISOString() }))) {
+        log("Found the leasing office's existing conversation on this project.");
+      }
+    } catch (err) {
+      log(`Could not look up the leasing office's conversation: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
   log(deliverer.line ? "Delivering approved messages to the leasing office." : "Delivery is on; waiting for the leasing office to text this line first.");
   setInterval(() => void deliverer.tick(), 4000);
 } else {
@@ -57,11 +77,11 @@ if (leasing) {
 
 await photon.listen(async (m) => {
   log(`Message ${m.messageId} received.`);
-  if (leasing && sameHandle(m.from, leasing)) {
+  if (role(m.from) === "office") {
     // the leasing office: never a renter’s request. Its first text is acknowledged in one line; later ones
     // answer the last message delivered
     try {
-      const { log: said, reply } = await deliverer.fromOffice(m.from, m.spaceId, m.agentId, m.text);
+      const { log: said, reply } = await deliverer.fromOffice(m.from, m.spaceId, m.agentId, m.text, m.messageId);
       log(said);
       if (reply) await photon.reply(m, reply, 1);
     } catch (err) {
@@ -69,6 +89,8 @@ await photon.listen(async (m) => {
     }
     return;
   }
+  // a client: remember its conversation, for the office's findings
+  if (leasing) await deliverer.noteClient({ handle: m.from, spaceId: m.spaceId, agentId: m.agentId }).catch(() => undefined);
   let n = 0;
   await conversations.handle(
     m.spaceId,

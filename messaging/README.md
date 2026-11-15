@@ -54,11 +54,17 @@ If nothing arrives, check Event Deliveries under API Activities in the dashboard
 
 ## Deliver approved messages to the leasing office
 
-Set `LEASING_OFFICE_NUMBER` in `.env` to the phone playing the leasing office.
+The bridge has two roles, kept apart:
 
-1. That phone texts the Rollin' line first. Its first text opens the conversation and gets one line back, saying it is Rollin', an AI assistant, and that approved questions will come to this number. The bridge never texts a number that has not texted it.
-2. When a message is approved (on the web or by "yes" in iMessage), the bridge reads `GET /api/outbox` every few seconds, texts the message to that phone, and marks it delivered. Messages queued before the bridge started are never sent; the log lists them once.
-3. A text from that number is never treated as a renter's request. The office's next texts are forwarded to `POST /api/answers` as the answer to the last message delivered. The web page shows "Sent", then "The leasing office replied", and the answered room is marked "asked".
+- **Client**: the numbers in `PHOTON_ALLOWED_SENDERS`. They talk to Rollin' and approve messages.
+- **Leasing office**: `LEASING_OFFICE_NUMBER`, one number. It only answers questions; nothing it texts is taken as a request or an approval. Do not add it to `PHOTON_ALLOWED_SENDERS`: the bridge refuses to start if one number is both.
+
+Set `LEASING_OFFICE_NUMBER` in `.env` (gitignored) to the phone playing the leasing office.
+
+1. The bridge uses the office's existing conversation on the Photon project (it looks it up at start). If the office has never texted, it waits for a first text. That text gets one line back, saying it is Rollin', an AI assistant, and that approved questions will come to this number. The bridge never texts a number that has not texted it.
+2. When a message is approved (on the web or by "yes" in iMessage), the bridge reads `GET /api/outbox` every few seconds, texts the message into the office's conversation, and marks it delivered. Messages queued before the bridge started are never sent; the log lists them once.
+3. The office's next texts are forwarded to `POST /api/answers` as the answer to the last message delivered. The web page shows "Sent", then "The leasing office replied", and the answered room is marked "asked".
+4. The findings are texted back into the client's own conversation (the one that texted last before the message went out): the office's words, and what was logged on the plan, marked "as told by the leasing office, not measured". Nothing is sent back to the office, and the bridge ignores its own texts, so there are no loops.
 
 Without `LEASING_OFFICE_NUMBER`, approved messages stay in the outbox.
 
@@ -68,7 +74,7 @@ Without `LEASING_OFFICE_NUMBER`, approved messages stay in the outbox.
 - `src/rollin.ts`: calls to the web app, including SSE parsing.
 - `src/photon.ts`: the Photon transport (event stream in, messaging API out).
 - `src/main.ts`: the bridge (`npm start`).
-- `src/deliver.ts`: delivery of approved messages to the leasing office, and its replies back as answers.
+- `src/deliver.ts`: the two roles, delivery of approved messages to the leasing office, and its replies back as answers and as findings to the client.
 - `src/console.ts`: the terminal stand-in (`npm run console`).
 - `npm test`: tests the conversation rules against `contracts/chat_events.example.jsonl`.
 - `npm run check`: typechecks.

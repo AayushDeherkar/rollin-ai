@@ -13,8 +13,8 @@ import { io } from "socket.io-client";
 export interface PhotonConfig {
   apiKey: string;
   projectId: string;
-  /** only these senders (E.164 numbers or iMessage emails) are answered; empty = everyone */
-  allowedSenders: string[];
+  /** who a sender is (a client or the leasing office); null = ignored. See roleOf in deliver.ts */
+  roleOf: (from: string) => "client" | "office" | null;
   /** where the stream cursor is kept between restarts (gitignored) */
   stateDir: string;
 }
@@ -81,6 +81,26 @@ export function photonClient(cfg: PhotonConfig) {
     });
   }
 
+  /**
+   * The project's most recent iMessage conversation with `handle`, and the agent line in it, if that
+   * person has texted the project before. Read-only.
+   */
+  async function findSpace(handle: string): Promise<{ spaceId: string; agentId: string; createdAt: string } | null> {
+    const spaces = await photon.projects.listSpaces({
+      path: { id: cfg.projectId },
+      query: { platform: "imessage", participantHandle: handle, orderBy: "last_message_created_at", order: "desc", pageSize: 5 },
+    });
+    const users = await photon.projects.listUsers({ path: { id: cfg.projectId }, query: { platform: "imessage", pageSize: 100 } });
+    const kind = new Map(users.items.map((u) => [String((u as { id?: unknown }).id), u as { kind?: unknown; handle?: unknown }]));
+    for (const sp of spaces.items as { id?: unknown; participantIds?: unknown; createdAt?: unknown }[]) {
+      const ids = Array.isArray(sp.participantIds) ? sp.participantIds.map(String) : [];
+      const agent = ids.find((i) => kind.get(i)?.kind === "agent");
+      const person = ids.find((i) => kind.get(i)?.kind === "human");
+      if (typeof sp.id === "string" && agent && person) return { spaceId: sp.id, agentId: agent, createdAt: String(sp.createdAt ?? "") };
+    }
+    return null;
+  }
+
   async function loadCursor(): Promise<number> {
     try {
       const { seq } = JSON.parse(await readFile(cursorFile, "utf8")) as { seq?: unknown };
@@ -131,9 +151,9 @@ export function photonClient(cfg: PhotonConfig) {
       queue = queue.then(async () => {
         // already handled (a redelivery after reconnecting), or stopped
         if (stopped || (cursor > 0 && meta.seq <= cursor)) return;
-        const allowed = m && (cfg.allowedSenders.length === 0 || cfg.allowedSenders.includes(m.from));
+        const allowed = m && cfg.roleOf(m.from) !== null;
         const age = m ? Date.now() - Date.parse(m.createdAt) : 0;
-        if (m && !allowed) log("Ignored a message from a sender not in PHOTON_ALLOWED_SENDERS.");
+        if (m && !allowed) log("Ignored a message from a sender that is neither a client (PHOTON_ALLOWED_SENDERS) nor the leasing office.");
         else if (m && !(age <= MAX_AGE_MS)) log(`Ignored message ${m.messageId}: older than ${MAX_AGE_MS / 60_000} minutes.`);
         else if (m && !seen.has(m.messageId)) {
           seen.add(m.messageId);
@@ -154,5 +174,5 @@ export function photonClient(cfg: PhotonConfig) {
     socket.connect();
   }
 
-  return { reply, send, listen };
+  return { reply, send, listen, findSpace };
 }
