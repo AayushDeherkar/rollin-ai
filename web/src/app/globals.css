@@ -84,6 +84,8 @@
   --text-2xl--line-height: var(--leading-tight);
   --text-3xl: var(--text-3xl);
   --text-3xl--line-height: 1;
+  --text-4xl: var(--text-4xl);
+  --text-4xl--line-height: 0.98;
 
   --radius-sm: var(--radius);
   --radius-md: var(--radius);

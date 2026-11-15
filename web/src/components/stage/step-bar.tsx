@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { STEPS, type Step } from "@/lib/stage";
 import { cn } from "@/lib/utils";
 
@@ -10,7 +11,9 @@ import { cn } from "@/lib/utils";
 export function StepBar({ step, available, onStep }: { step: Step; available: Record<Step, boolean>; onStep: (s: Step) => void }) {
   return (
     <nav aria-label="Steps" className="pointer-events-auto flex items-center gap-6 border border-rule-strong bg-paper-lift py-2 pr-3 pl-5">
-      <span className="display text-xl font-bold text-ink">Rollin’</span>
+      <Link href="/" className="display text-xl font-bold text-ink hover:text-ink-soft">
+        Rollin’
+      </Link>
       <ol className="flex items-center">
         {STEPS.map((s, i) => {
           const current = s.id === step;

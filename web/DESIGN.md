@@ -94,6 +94,18 @@ The steps are a real sequence, so the step bar numbers them.
 
 One procedural model (`src/components/chair/wheelchair.tsx`) in every scene, drawn inside the width × length footprint the engine tests (the footprint stays outlined on the floor; the model is a drawing, not a measurement). Manual: tubular frame, spoked rear wheels with push rims, casters on forks, soft-edged seat and back, armrests, footplates. Power: base, mid drive wheels, casters front and back, captain seat with headrest, joystick. Picking a measured preset picks its kind; a Manual/Power toggle sits above the sliders. Materials are restrained (one brushed metal in `--ink-soft`, bright spokes and push rims in `--ink`, fabric and tyres in the rule greys); one rim light from behind and low separates it from the ground. Driving shows only as the `--agent` emissive on frame and fabric, easing in and out. Resizing is transform-only for tubes and wheels; only the cushions rebuild, in 5 mm steps.
 
+### Landing (/)
+
+The stage moved to `/app`; `/` is the landing (`src/components/landing/`). `/?demo=1` redirects to `/app?demo=1` in next.config.ts, query intact, so presenter mode still opens the pitch directly.
+
+- Hero: one 3D scene fixed behind the page. The sourced average manual chair (27.0 × 39.8 in) rolls to an example 26 in doorway and stops; the clear width and the shortfall are dimensioned and the doorway is labelled as an illustration. Headline in Big Shoulders at `--text-4xl` (landing only), one line for who it is for, one button, "Size your chair".
+- Scrolling moves the camera through the same scene, one pose per beat: the problem (the listing's one checkbox), then measure, test-drive, ask. GSAP ScrollTrigger maps each beat's scroll to the camera; Lenis smooths scrolling. Both run on the landing only.
+- The numbers are read from `/api/insights` and nothing else, with basis, scope and definitions printed beside them; with no batch (the public build) the section says so and shows no figure.
+- Then the way into the app, and About: measured, estimated, unknown, data, limitations, team.
+- Text sits on the left; from `lg` up the scene is centred in the space right of the text column (a view offset measured from the page). Below `lg` the hero text is on an opaque plate.
+- Reduced motion: the chair is already stopped, no Lenis, no scroll animation; the camera stays on the hero pose. The canvas is lazy-loaded and stops drawing once the story scrolls away.
+- No React Bits effects are used.
+
 ### Stage layout
 
 - The interface is one CSS grid over the scene (`.stage-grid` in globals.css), never absolutely placed boxes. Four regions: **top** (step bar, agent pill), **left** panel, **right** rail, **bottom** strip, around an open middle where the scene shows. Rail widths and the gutter are `clamp()`ed tokens (`--rail-left`, `--rail-left-wide` for step 1, `--rail-right`, `--gutter`).
