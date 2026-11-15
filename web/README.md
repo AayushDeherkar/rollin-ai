@@ -29,9 +29,9 @@ ROLLIN_DATA_DIR=/path/to/data ../.venv-rollin/bin/uvicorn agent.server:app --por
 
 If the API is unset, down, or has no answer for a fixture unit, the routes replay the synthetic
 contract fixtures (`../contracts/*.example.json`) and the sheet says **Replay** on every panel that
-shows them. `/?sid=<model id>` opens one unit by id even when it is not in the ranked list.
+shows them. `/app?sid=<model id>` opens one unit by id even when it is not in the ranked list.
 
 ## Previews
 
-- Preview panel states: `/?state=empty`, `/?state=loading`.
-- Reduced motion without changing the OS setting: `/?motion=reduce` (Motion and the CSS duration tokens both follow it).
+- Preview panel states: `/app?state=empty`, `/app?state=loading`.
+- Reduced motion without changing the OS setting: `/app?motion=reduce` (Motion and the CSS duration tokens both follow it).

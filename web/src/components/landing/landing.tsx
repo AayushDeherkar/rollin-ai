@@ -98,7 +98,7 @@ export function Landing() {
     <div ref={root} className="bg-paper text-ink">
       <div ref={storyEl} className="relative">
         <div aria-hidden className="pointer-events-none fixed inset-0 z-0" style={{ visibility: live ? "visible" : "hidden" }}>
-          {live && <DoorScene story={story} reduce={reduce} />}
+          <DoorScene story={story} reduce={reduce} live={live} />
         </div>
 
         <header className="relative z-10 mx-auto flex max-w-[90rem] flex-wrap items-center justify-between gap-4 px-[var(--gutter)] pt-[var(--gutter)]">
@@ -240,7 +240,7 @@ function Numbers({ sweep, state, lineRef }: { sweep: Sweep | null; state: "loadi
         <p className="max-w-[44rem] text-lg text-ink-soft" role="status">
           {state === "loading"
             ? "Loading the batch’s numbers."
-            : "The numbers come from our overnight batch, which is not connected to this deployment. Open the app on the demo laptop to see them; nothing is shown here rather than a figure we cannot back."}
+            : "The numbers come from our batch, which is not connected to this deployment. Open the app on the demo laptop to see them; nothing is shown here rather than a figure we cannot back."}
         </p>
       </>
     );
@@ -261,20 +261,22 @@ function Numbers({ sweep, state, lineRef }: { sweep: Sweep | null; state: "loadi
               <svg aria-hidden viewBox="0 0 28 8" className="h-2 w-7">
                 <line x1="0" x2="28" y1="4" y2="4" stroke="var(--ink)" strokeWidth="3" />
               </svg>
-              Fully reachable, as scanned
+              Fully reachable, as scanned (est.)
             </span>
             <span className="flex items-center gap-2">
               <svg aria-hidden viewBox="0 0 28 8" className="h-2 w-7">
                 <line x1="0" x2="28" y1="4" y2="4" stroke="var(--ink-soft)" strokeWidth="2" strokeDasharray="7 5" />
               </svg>
-              With offset hinges on every door
+              With offset hinges on every door (est., hinge gain assumed)
             </span>
           </figcaption>
         </figure>
         <div className="flex flex-col gap-6 lg:w-[22rem]">
           {ref && (
             <div className="flex flex-col gap-1 border-l-2 border-ink pl-4">
-              <p className="measure text-3xl">{ref.unlocked}</p>
+              <p className="measure text-3xl">
+                {ref.unlocked} <span className="text-lg text-ink-soft">est.</span>
+              </p>
               <p className="text-base text-ink-soft">
                 units that offset hinges unlock for a {ref.chair[0]} × {ref.chair[1]} in chair ({ref.reachable} fully reachable as scanned).
               </p>
@@ -282,7 +284,7 @@ function Numbers({ sweep, state, lineRef }: { sweep: Sweep | null; state: "loadi
           )}
           <div className="flex flex-col gap-2 text-sm text-ink-soft">
             <p>
-              <span className="text-ink">Basis:</span> {sweep.basis}. Our overnight batch over {sweep.units} units in {sweep.area}
+              <span className="text-ink">Basis:</span> {sweep.basis}. Our batch over {sweep.units} units in {sweep.area}
               {sweep.radiusKm !== null ? ` (within ${sweep.radiusKm} km)` : ""}
               {sweep.generated ? `, run ${sweep.generated}` : ""}.
             </p>

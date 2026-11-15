@@ -4,9 +4,15 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   cacheComponents: true,
   devIndicators: false,
-  // the stage moved to /app; presenter mode (`/?demo=1`) still opens the pitch directly (the query passes through)
+  // the stage moved to /app. Any stage link to the root (presenter mode `/?demo=1`, a unit texted by the bridge
+  // `/?sid=`, and the other stage parameters) still opens the stage directly; the query passes through.
   async redirects() {
-    return [{ source: "/", has: [{ type: "query", key: "demo", value: "1" }], destination: "/app", permanent: false }];
+    return ["demo", "sid", "search", "pace", "agent", "state", "view", "motion"].map((key) => ({
+      source: "/",
+      has: [{ type: "query" as const, key }],
+      destination: "/app",
+      permanent: false,
+    }));
   },
   partialPrefetching: true,
   // the chat route replays the synthetic contract run from disk when there is no API (the public build)

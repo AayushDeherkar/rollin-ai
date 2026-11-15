@@ -110,17 +110,17 @@ export function SweepChart({ sweep, lineRef }: { sweep: Sweep; lineRef?: React.R
         {ticksY.map((v) => (
           <g key={v}>
             <line x1={pad.l} x2={w - pad.r} y1={Y(v)} y2={Y(v)} stroke="var(--rule)" />
-            <text x={pad.l - 10} y={Y(v)} dy="0.35em" textAnchor="end" className="measure fill-ink-soft" fontSize="16">
+            <text x={pad.l - 10} y={Y(v)} dy="0.35em" textAnchor="end" className="measure fill-ink-soft" style={{ fontSize: "var(--text-sm)" }}>
               {v}
             </text>
           </g>
         ))}
         {sweep.rows.map((r) => (
-          <text key={r.width_in} x={X(r.width_in)} y={h - pad.b + 24} textAnchor="middle" className="measure fill-ink-soft" fontSize="16">
+          <text key={r.width_in} x={X(r.width_in)} y={h - pad.b + 24} textAnchor="middle" className="measure fill-ink-soft" style={{ fontSize: "var(--text-sm)" }}>
             {r.width_in % 2 === 0 || sweep.rows.length <= 6 ? r.width_in : ""}
           </text>
         ))}
-        <text x={w - pad.r} y={h - 4} textAnchor="end" className="fill-ink-soft" fontSize="16">
+        <text x={w - pad.r} y={h - 4} textAnchor="end" className="fill-ink-soft" style={{ fontSize: "var(--text-sm)" }}>
           chair width, in
         </text>
         {ref && (

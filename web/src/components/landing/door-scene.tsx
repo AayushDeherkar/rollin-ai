@@ -16,10 +16,12 @@ import * as THREE from "three";
 import { Boundary, ChairBody } from "@/components/dollhouse/dollhouse";
 import { useChairMaterials } from "@/components/chair/wheelchair";
 import { readPalette, type Palette } from "@/lib/tokens";
+import presetsJson from "../../../../data/chair_presets.json";
 
 export const M = 0.0254;
-/** the sourced preset: manual wheelchair, average user (data/chair_presets.json) */
-export const CHAIR: [number, number] = [27.0, 39.8];
+/** the sourced preset: manual wheelchair, average user (data/chair_presets.json), read from the file so it cannot drift */
+const PRESET = presetsJson.presets.find((p) => p.name === "Manual wheelchair (average user)");
+export const CHAIR: [number, number] = PRESET ? [PRESET.width_in, PRESET.length_in] : [27.0, 39.8];
 /** the example doorway's clear width, in inches: an illustration, not a measurement */
 export const DOOR_IN = 26;
 
@@ -42,12 +44,13 @@ type Pose = { pos: [number, number, number]; look: [number, number, number] };
 const POSES: Pose[] = [
   { pos: [-4.6, 2.1, 3.3], look: [-0.5, 0.75, 0] }, // hero: behind and to the side, the gap in view
   { pos: [-2.6, 1.2, 0.45], look: [0.1, 0.75, 0] }, // the problem: low behind the chair, at the opening
-  { pos: [STOP_X + 0.02, 3.6, 0.001], look: [STOP_X, 0, 0] }, // measure: straight down on the footprint
+  { pos: [STOP_X - 0.02, 3.6, 0.001], look: [STOP_X, 0, 0] }, // measure: straight down (a hair behind, on the same side as the poses around it, so the heading never flips)
   { pos: [STOP_X - 0.4, 1.4, 3.1], look: [STOP_X + 0.4, 0.55, 0] }, // test-drive: from the side
   { pos: [-5.4, 3.2, 4.2], look: [-0.3, 0.7, 0] }, // ask: wide
 ];
 
-export function DoorScene({ story, reduce }: { story: React.RefObject<Story>; reduce: boolean }) {
+/** `live` false pauses drawing (the story is scrolled away) without losing the scene */
+export function DoorScene({ story, reduce, live }: { story: React.RefObject<Story>; reduce: boolean; live: boolean }) {
   const [palette] = useState(readPalette);
   const [failed, setFailed] = useState(false);
   if (failed) return null;
@@ -55,7 +58,7 @@ export function DoorScene({ story, reduce }: { story: React.RefObject<Story>; re
     <Boundary onError={() => setFailed(true)}>
       <Canvas
         dpr={[1, 1.5]}
-        frameloop="always"
+        frameloop={live ? "always" : "never"}
         camera={{ fov: 36, position: POSES[0].pos, near: 0.05, far: 200 }}
         gl={{ antialias: true, powerPreference: "high-performance" }}
         aria-hidden
@@ -230,7 +233,7 @@ function RollingChair({ palette, story, reduce }: { palette: Palette; story: Rea
         </Html>
         <Html position={[STOP_X + L / 2, dimY - 0.34, 0]} center zIndexRange={[5, 0]} style={{ pointerEvents: "none" }}>
           <div ref={(el) => void (el && (labels.current[1] = el))} className="measure border border-block bg-paper-lift px-2 py-0.5 text-sm whitespace-nowrap text-ink opacity-0 transition-opacity duration-[var(--dur-4)]">
-            chair {CHAIR[0].toFixed(1)} in: {shortIn.toFixed(1)} in too wide
+            chair {CHAIR[0].toFixed(1)} in: {shortIn.toFixed(1)} in too wide for the example
           </div>
         </Html>
       </group>
