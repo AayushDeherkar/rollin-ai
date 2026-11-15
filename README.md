@@ -64,7 +64,8 @@ flowchart LR
   VIS --> LLM
   AER --> LLM
   AG -. traces .-> LS
-  SRV -- "approved message (queued, not delivered)" --> OUT["data/outbox"]
+  SRV -- "approved message (queued)" --> OUT["data/outbox"]
+  OUT -- "texted to the leasing office" --> BR
 ```
 
 One live request: the orchestrator searches the ranked batch for the person's chair (re-checking the top candidates
@@ -110,7 +111,8 @@ pauses for approval. Every number the UI shows is `{value, unit, basis}` with ba
    panel with presets, the agent's live trace, and the approval card. It also opens the Matterport tour at the
    blocking door.
 7. **iMessage** (`messaging/`). A case manager can text the agent through Photon. The bridge replies with the top
-   three units and asks before contacting anyone.
+   three units and asks before contacting anyone. After approval it texts the message to the leasing-office phone,
+   and that phone's replies come back as answers (`POST /api/answers`).
 
 ## Do chair sizes vary enough to matter?
 Yes. `python -m engine.sweep` ran the fit engine on the 324 usable units within 8 km of the Texas Medical Center
@@ -176,6 +178,7 @@ You need Python 3.11, Node 20.12 or newer, and keys for Matterport, Vexcel, the 
 Put the keys in `.env`; the names are in `.env.example`. Never commit `.env`.
 
 ```bash
+python -m venv .venv && source .venv/bin/activate    # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env                 # fill in the keys
 pytest -q                            # synthetic data only; the one real-data test skips without data/demo_units.json
@@ -254,7 +257,8 @@ python -m agent.agent "27x42 in power chair, 1-2 bedrooms near the Texas Medical
 - **Approval.** `send_message` is held by the orchestrator only and listed in deepagents' `interrupt_on`. The run
   pauses with an `approval_needed` event and continues only after `POST /api/approve`.
   - Every outbound text opens by saying it comes from an AI assistant.
-  - An approved message is queued in `data/outbox/`. Nothing in this repo delivers it to a leasing office.
+  - An approved message is queued in `data/outbox/`. The iMessage bridge (`messaging/`) texts it to the
+    leasing-office phone and marks it delivered. The agent itself never sends anything.
 - **Memory.** The chair size is remembered per sender (a hashed id, never a phone number), so a later request
   without a size reuses it. The UI shows a `memory` event whenever this happens.
 - **Speed.** One live request takes about 25 s and about 31k tokens. These are wall time and LangSmith token
