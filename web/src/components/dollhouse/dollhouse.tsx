@@ -530,24 +530,16 @@ function Chair({
 }) {
   const body = useRef<THREE.Group>(null);
   const materials = useChairMaterials(palette);
-  // the chair keeps its own colours; driving shows as a cobalt glow that eases in and out. (It used to swap the
-  // body colour from cobalt to ink at every stop: under the key light the pale ink read as a white flash.)
-  const agent = useMemo(() => new THREE.Color(palette.agent), [palette]);
-  const glow = useRef(0);
+  // one look in every state (idle, driving, stopped, blocked, arrived): nothing here touches the materials.
+  // (A cobalt glow while driving, and before it a colour swap at each stop, both read as the chair changing colour.)
   const track = useMemo(() => drive.route.map(([x, y]) => v3(x, y, 0.015)), [drive.route]);
-  useFrame((_, dt) => {
+  useFrame(() => {
     const g = body.current;
     if (!g) return;
-    const p = progress.get();
-    const [x, y, theta] = s.at(p);
+    const [x, y, theta] = s.at(progress.get());
     g.position.set(x, 0, -y);
     // theta turns the chair's length axis from +x (model, y up); in three that is a turn about Y
     g.rotation.y = theta;
-    glow.current += ((p < 1 ? 0.35 : 0) - glow.current) * (1 - Math.exp(-Math.min(dt, 0.1) * 5));
-    for (const m of [materials.frame, materials.fabric]) {
-      m.emissive.copy(agent);
-      m.emissiveIntensity = glow.current;
-    }
   });
   return (
     <>
@@ -572,7 +564,7 @@ export function ChairBody({
   chairIn: [number, number];
   kind?: ChairKind;
   palette: Palette;
-  /** pass the materials to drive them (the glow); otherwise the chair makes its own */
+  /** pass materials to share one set (the driven chair keeps its own); otherwise the chair makes its own */
   materials?: ChairMaterials;
 }) {
   const own = useChairMaterials(palette);

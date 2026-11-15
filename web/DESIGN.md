@@ -16,7 +16,7 @@ The token names keep their jobs from the drafting sheet: `paper` is the ground a
 | `--rule` / `--rule-strong` | `#2b2f34` / `#4a5057` | Construction lines, panel rules |
 | `--ink` | `#ebe7dc` | Pale model card: walls, text |
 | `--ink-soft` | `#a9a59a` | Secondary text, dimension extension lines |
-| `--agent` | `#8ea2ff` | **The one accent: cobalt.** Used *only* while the agent is acting now (streaming, a decision in flight, the chair driving). |
+| `--agent` | `#8ea2ff` | **The one accent: cobalt.** Used *only* while the agent is acting now (streaming, a decision in flight). |
 | `--reach` | `#7cc98b` | Reachable: flat wash, check icon |
 | `--block` | `#ff7a6b` | Blocked / not passable: 45° hatch, ban icon |
 | `--unknown` | `#a39f94` | Not measured: stipple, question icon |
@@ -87,12 +87,12 @@ The steps are a real sequence, so the step bar numbers them.
 - Plates, not cards: `paper-lift` ground, 2px `ink` border for the one focused plate (approval, room card), hairline `rule-strong` for the rest, the 2px radius. No shadows, no blur, no translucency over the scene (glassmorphism is banned): plates are opaque.
 - Left-aligned text everywhere. The narration line is 22px Public Sans; verdicts and step names use Big Shoulders.
 - Status is never colour alone: points carry a shape (post, cross-bar, hollow ring), rooms carry hatch, icon and word.
-- The accent cobalt appears only while the agent is acting: the pill while streaming, the narration bullet, the checking pulse on a point, the chair while it drives.
+- The accent cobalt appears only while the agent is acting: the pill while streaming, the narration bullet, the checking pulse on a point.
 - Keyboard: steps, presets, sliders, cards, room strip and every evidence link are real buttons and inputs. Esc closes the pill, the evidence and the approval card's details.
 
 ### The chair
 
-One procedural model (`src/components/chair/wheelchair.tsx`) in every scene, drawn inside the width × length footprint the engine tests (the footprint stays outlined on the floor; the model is a drawing, not a measurement). Manual: tubular frame, spoked rear wheels with push rims, casters on forks, soft-edged seat and back, armrests, footplates. Power: base, mid drive wheels, casters front and back, captain seat with headrest, joystick. Picking a measured preset picks its kind; a Manual/Power toggle sits above the sliders. Materials are restrained (one brushed metal in `--ink-soft`, bright spokes and push rims in `--ink`, fabric and tyres in the rule greys); one rim light from behind and low separates it from the ground. Driving shows only as the `--agent` emissive on frame and fabric, easing in and out. Resizing is transform-only for tubes and wheels; only the cushions rebuild, in 5 mm steps.
+One procedural model (`src/components/chair/wheelchair.tsx`) in every scene, drawn inside the width × length footprint the engine tests (the footprint stays outlined on the floor; the model is a drawing, not a measurement). Manual: tubular frame, spoked rear wheels with push rims, casters on forks, soft-edged seat and back, armrests, footplates. Power: base, mid drive wheels, casters front and back, captain seat with headrest, joystick. Picking a measured preset picks its kind; a Manual/Power toggle sits above the sliders. Materials are restrained (one brushed metal in `--ink-soft`, bright spokes and push rims in `--ink`, fabric and tyres in the rule greys); one rim light from behind and low separates it from the ground. The chair looks the same in every state (idle, driving, stopped, blocked, arrived): no state touches its materials. Resizing is transform-only for tubes and wheels; only the cushions rebuild, in 5 mm steps.
 
 ### Landing (/)
 
