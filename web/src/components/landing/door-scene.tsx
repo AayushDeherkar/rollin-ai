@@ -63,8 +63,8 @@ export function DoorScene({ story, reduce, live }: { story: React.RefObject<Stor
         gl={{ antialias: true, powerPreference: "high-performance" }}
         aria-hidden
       >
-        <color attach="background" args={[palette.paper]} />
-        <hemisphereLight args={[palette.ink, palette.paper, 0.7]} />
+        <color attach="background" args={[palette.floor]} />
+        <hemisphereLight args={[palette.ink, palette.floor, 1.0]} />
         <directionalLight position={[-6, 10, 5]} intensity={1.1} color={palette.ink} />
         {/* the one rim light, from beyond the wall and low */}
         <directionalLight position={[6, 3, -6]} intensity={0.9} color={palette.ink} />

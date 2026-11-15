@@ -10,16 +10,16 @@ The token names keep their jobs from the drafting sheet: `paper` is the ground a
 
 | Token | Hex | Job |
 |---|---|---|
-| `--paper` | `#0f1113` | The night ground around the model |
-| `--paper-lift` | `#15181b` | The base board under the model and the 2D plan |
-| `--paper-deep` | `#1d2024` | A step lighter: hover, selected row, skeletons |
-| `--rule` / `--rule-strong` | `#2b2f34` / `#4a5057` | Construction lines, panel rules |
-| `--ink` | `#ebe7dc` | Pale model card: walls, text |
-| `--ink-soft` | `#a9a59a` | Secondary text, dimension extension lines |
-| `--agent` | `#8ea2ff` | **The one accent: cobalt.** Used *only* while the agent is acting now (streaming, a decision in flight). |
-| `--reach` | `#7cc98b` | Reachable: flat wash, check icon |
-| `--block` | `#ff7a6b` | Blocked / not passable: 45° hatch, ban icon |
-| `--unknown` | `#a39f94` | Not measured: stipple, question icon |
+| `--paper` | `#16202f` | The night ground around the model |
+| `--paper-lift` | `#1d293b` | The base board under the model and the 2D plan |
+| `--paper-deep` | `#27364c` | A step lighter: hover, selected row, skeletons |
+| `--rule` / `--rule-strong` | `#34465f` / `#62789a` | Construction lines, panel rules |
+| `--ink` | `#f2f5f9` | Pale model card: walls, text |
+| `--ink-soft` | `#b8c4d4` | Secondary text, dimension extension lines |
+| `--agent` | `#55b4f1` | **The one accent: the logo's blue.** Used *only* while the agent is acting now (streaming, a decision in flight). |
+| `--reach` | `#80d69a` | Reachable: flat wash, check icon |
+| `--block` | `#ff8f80` | Blocked / not passable: 45° hatch, ban icon |
+| `--unknown` | `#c2b8a6` | Not measured: stipple, question icon |
 | `--glow` | `0.22` | How much a status floor glows in the model. Restrained: a status is a lit floor, not a neon sign. |
 
 Status is never colour alone. Every status has a colour, a fill pattern (`PatternDefs` in `src/components/sheet/status.tsx`; the same hatch and stipple are painted on the model's floors), an icon and a word.

@@ -52,15 +52,15 @@ const GEO = (() => {
   return { unitCylinder, tyre, rim, pushRim, spokes, hub, disc, standoff, knob };
 })();
 
-/** the chair's materials: restrained, one metal, one fabric, dark tyres */
+/** the chair's materials, from the chair tokens: a light neutral frame and fabric, dark tyres */
 export function useChairMaterials(palette: Palette) {
   return useMemo(
     () => ({
-      frame: new THREE.MeshStandardMaterial({ color: palette.inkSoft, metalness: 0.55, roughness: 0.38 }),
-      bright: new THREE.MeshStandardMaterial({ color: palette.ink, metalness: 0.7, roughness: 0.28 }),
-      tyre: new THREE.MeshStandardMaterial({ color: palette.rule, roughness: 0.92 }),
-      fabric: new THREE.MeshStandardMaterial({ color: palette.ruleStrong, roughness: 0.95 }),
-      base: new THREE.MeshStandardMaterial({ color: palette.rule, metalness: 0.25, roughness: 0.55 }),
+      frame: new THREE.MeshStandardMaterial({ color: palette.chairFrame, metalness: 0.45, roughness: 0.4 }),
+      bright: new THREE.MeshStandardMaterial({ color: palette.ink, metalness: 0.6, roughness: 0.3 }),
+      tyre: new THREE.MeshStandardMaterial({ color: palette.chairTyre, roughness: 0.92 }),
+      fabric: new THREE.MeshStandardMaterial({ color: palette.chairFabric, roughness: 0.95 }),
+      base: new THREE.MeshStandardMaterial({ color: palette.chairFabric, metalness: 0.25, roughness: 0.55 }),
     }),
     [palette],
   );
