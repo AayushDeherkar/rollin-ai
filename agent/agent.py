@@ -299,10 +299,16 @@ def _aerial_unclear(sid: str) -> list[dict]:
 def unit_questions(sid: str, chair_width_in: float, chair_length_in: float) -> list[str]:
     """What the scan cannot answer for one unit, from engine output and cached checks: every unknown room's door,
     every unclear aerial item, and the entrance."""
+    from agent.outbox import answers_for
+    answered = {r["room_id"] for a in answers_for(sid) for r in a.get("rooms", [])}
     qs = [f"What is the clear width of the {r['label'].lower()} door?"
-          for r in run_fit(sid, chair_width_in, chair_length_in).get("rooms", []) if r["status"] == "unknown"]
+          for r in run_fit(sid, chair_width_in, chair_length_in).get("rooms", [])
+          if r["status"] == "unknown" and r.get("room_id") not in answered]
     qs += [f["question"] for f in _aerial_unclear(sid) if f.get("question")]
     return list(dict.fromkeys(qs + [ENTRANCE_Q]))
+
+
+_DRAFTS: dict[str, dict] = {}                   # leasing office -> the unit and questions of its latest draft
 
 
 def draft_landlord_message(sid: str, questions: list[str] | None = None, chair_width_in: float | None = None) -> dict:
@@ -315,14 +321,17 @@ def draft_landlord_message(sid: str, questions: list[str] | None = None, chair_w
                                 f"in your {name} floor plan."), "Could you help with a few questions?"]
     lines += [f"{i}. {q}" for i, q in enumerate(qs, 1)]
     lines.append("Thank you!")
-    return {"sid": sid, "to": f"Leasing office ({name})", "text": "\n".join(lines)}
+    to = f"Leasing office ({name})"
+    _DRAFTS[to] = {"sid": sid, "questions": qs, "chair_in": [w, l]}
+    return {"sid": sid, "to": to, "text": "\n".join(lines)}
 
 
 def send_message(to: str, text: str) -> dict:
     """Send a message to a leasing office. A human must approve it first; the run pauses until they do."""
     box = data_dir() / "outbox"
     box.mkdir(parents=True, exist_ok=True)
-    rec = {"to": to, "text": with_ai_disclosure(text), "queued_at": datetime.now(timezone.utc).isoformat()}
+    rec = {"to": to, "text": with_ai_disclosure(text), "queued_at": datetime.now(timezone.utc).isoformat(),
+           "status": "pending", **_DRAFTS.get(to, {})}       # sid + questions let POST /api/answers match rooms
     path = box / f"{datetime.now(timezone.utc):%Y%m%dT%H%M%S}_{uuid.uuid4().hex[:6]}.json"
     path.write_text(json.dumps(rec, indent=1))
     return {"status": "queued in outbox for the messaging bridge (not delivered by the agent)", "to": to}
