@@ -2,7 +2,7 @@
 
 /**
  * "More" (M): everything the two-minute pitch leaves out, one keypress away. The chair-width
- * sweep from /api/insights, the owner number (units offset hinges open up, counted from the
+ * sweep from /api/insights, the owner number (units offset hinges open up: from the sweep, else counted from the
  * ranked list), and a compact grid where each tile opens the real feature. Same plates and type
  * as the stage; nothing here is a slide. Every count is computed from API data and labelled.
  */
@@ -11,31 +11,52 @@ import { X } from "lucide-react";
 import type { UnitRow } from "@/lib/contract";
 import { cn } from "@/lib/utils";
 
-/** One point of the chair-width sweep: how many units every room is reachable in, at a chair width. */
+/** One width of the chair-size sweep: units with every room reachable, as scanned and with offset hinges. */
 interface SweepPoint {
   width: number;
-  units: number;
+  scanned: number;
+  hinges: number;
 }
 
-/** The sweep, from whatever keys /api/insights uses for it; anything malformed is dropped, never filled in. */
-function readSweep(x: unknown): { points: SweepPoint[]; of: number | null; length: number | null } | null {
-  const b = x as Record<string, unknown> | null;
-  const raw = (b?.sweep ?? b?.chair_sweep ?? b?.width_sweep) as unknown;
-  const list = Array.isArray(raw) ? raw : Array.isArray((raw as { points?: unknown })?.points) ? (raw as { points: unknown[] }).points : null;
-  if (!list) return null;
-  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : typeof (v as { value?: unknown })?.value === "number" ? (v as { value: number }).value : null);
-  const points = list
-    .map((p) => {
-      const o = p as Record<string, unknown>;
-      const width = num(o.width_in ?? o.chair_width_in ?? o.w ?? o.width);
-      const units = num(o.units ?? o.units_reachable ?? o.fully_reachable ?? o.count ?? o.fits);
-      return width !== null && units !== null ? { width, units } : null;
+interface Sweep {
+  points: SweepPoint[];
+  /** usable units in the batch the sweep ran over */
+  of: number | null;
+  /** how chair length follows width (an assumption, said as such) */
+  lengthRule: string | null;
+  /** at the 27 x 42 in reference chair */
+  reference: { chair: [number, number]; unlocked: number } | null;
+}
+
+const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+/**
+ * The sweep in /api/insights (`{sweep: {scope, sweep: [...], at_reference_chair, length_rule}}`,
+ * contracts/README.md "Insights"). Anything malformed is dropped, never filled in.
+ */
+function readSweep(body: unknown): Sweep | null {
+  const agg = (body as { sweep?: unknown } | null)?.sweep as Record<string, unknown> | null | undefined;
+  if (!agg || !Array.isArray(agg.sweep)) return null;
+  const points = (agg.sweep as Record<string, unknown>[])
+    .map((o) => {
+      const width = num(o?.width_in);
+      const scanned = num(o?.fully_reachable);
+      const hinges = num(o?.fully_reachable_with_hinges);
+      return width !== null && scanned !== null && hinges !== null ? { width, scanned, hinges } : null;
     })
     .filter((p): p is SweepPoint => p !== null)
-    .sort((a, b) => a.width - b.width);
+    .sort((x, y) => x.width - y.width);
   if (points.length < 2) return null;
-  const meta = (Array.isArray(raw) ? b : raw) as Record<string, unknown>;
-  return { points, of: num(meta?.total ?? meta?.units_total ?? meta?.of), length: num(meta?.length_in ?? meta?.chair_length_in) };
+  const ref = agg.at_reference_chair as { chair_in?: unknown; unlocked_by_hinges?: unknown } | undefined;
+  const chair = Array.isArray(ref?.chair_in) ? ref.chair_in.map(num) : [];
+  const unlocked = num(ref?.unlocked_by_hinges);
+  const rule = (agg.length_rule as { text?: unknown } | undefined)?.text;
+  return {
+    points,
+    of: num((agg.scope as { units?: unknown } | undefined)?.units),
+    lengthRule: typeof rule === "string" ? rule : null,
+    reference: chair.length === 2 && chair[0] !== null && chair[1] !== null && unlocked !== null ? { chair: [chair[0], chair[1]], unlocked } : null,
+  };
 }
 
 export interface MoreActions {
@@ -110,7 +131,7 @@ export function MoreScreen({ units, onClose, actions }: { units: UnitRow[]; onCl
               <p className="max-w-[60ch] text-base text-ink-soft">
                 {insights === null
                   ? "Loading the chair-width sweep…"
-                  : "The chair-width sweep comes from the API’s /api/insights, which this server does not serve yet. Nothing is drawn until it does."}
+                  : "This server has no chair-width sweep (it comes from the API’s /api/insights), so nothing is drawn."}
               </p>
             )}
           </section>
@@ -119,7 +140,16 @@ export function MoreScreen({ units, onClose, actions }: { units: UnitRow[]; onCl
             <h2 id="owner-title" className="text-base font-semibold text-ink-soft">
               For an owner
             </h2>
-            {owner.total > 0 ? (
+            {sweep?.reference ? (
+              <>
+                <p className="display measure text-[88px] leading-none font-bold">{sweep.reference.unlocked}</p>
+                <p className="text-lg font-semibold">units where offset hinges open every room, and the doors as scanned do not.</p>
+                <p className="text-sm text-ink-soft">
+                  {sweep.of ? `Of ${sweep.of} units in the sweep, ` : "From the sweep, "}for a {sweep.reference.chair[0]} × {sweep.reference.chair[1]} in chair; estimated from floor
+                  plans, hinges add about 1.75 in (assumed).
+                </p>
+              </>
+            ) : owner.total > 0 ? (
               <>
                 <p className="display measure text-[88px] leading-none font-bold">{owner.unlocked}</p>
                 <p className="text-lg font-semibold">units where offset hinges open every room, and the doors as scanned do not.</p>
@@ -212,36 +242,48 @@ function Limits() {
   );
 }
 
-/** Units with every room reachable against chair width: one line in ink, the demo chair and the ADA door marked. */
-function SweepChart({ sweep }: { sweep: { points: SweepPoint[]; of: number | null; length: number | null } }) {
+/** Units with every room reachable against chair width: as scanned (solid) and with offset hinges (dashed), each labelled at its end. */
+function SweepChart({ sweep }: { sweep: Sweep }) {
   const W = 760;
   const H = 300;
-  const pad = { l: 56, r: 16, t: 16, b: 44 };
-  const xs = sweep.points.map((p) => p.width);
-  const x0 = Math.min(...xs);
-  const x1 = Math.max(...xs);
-  const yMax = Math.max(...sweep.points.map((p) => p.units), 1);
+  const pad = { l: 56, r: 120, t: 16, b: 44 };
+  const pts = sweep.points;
+  const x0 = pts[0].width;
+  const x1 = pts[pts.length - 1].width;
+  const top = Math.max(...pts.map((p) => Math.max(p.scanned, p.hinges)), 1);
+  const step = top > 200 ? 100 : top > 40 ? 50 : 10;
+  const yMax = Math.ceil(top / step) * step;
   const sx = (v: number) => pad.l + ((v - x0) / (x1 - x0 || 1)) * (W - pad.l - pad.r);
   const sy = (v: number) => H - pad.b - (v / yMax) * (H - pad.t - pad.b);
-  const d = sweep.points.map((p, i) => `${i ? "L" : "M"}${sx(p.width).toFixed(1)},${sy(p.units).toFixed(1)}`).join(" ");
-  const ticks = [0, Math.round(yMax / 2), yMax];
+  const line = (k: "scanned" | "hinges") => pts.map((p, i) => `${i ? "L" : "M"}${sx(p.width).toFixed(1)},${sy(p[k]).toFixed(1)}`).join(" ");
+  const ticks = Array.from({ length: yMax / step + 1 }, (_, i) => i * step);
   const marks = [
-    { at: 27, label: "demo chair 27 in" },
-    { at: 32, label: "ADA door 32 in" },
+    { at: 27, label: "27 in, the demo chair" },
+    { at: 32, label: "32 in, an ADA door" },
   ].filter((m) => m.at >= x0 && m.at <= x1);
-  const first = sweep.points[0];
-  const last = sweep.points[sweep.points.length - 1];
+  const first = pts[0];
+  const last = pts[pts.length - 1];
+  const end = sx(x1);
+  // keep the two end labels apart when the lines finish close together
+  let yScanned = sy(last.scanned);
+  let yHinges = sy(last.hinges);
+  if (Math.abs(yScanned - yHinges) < 20) [yHinges, yScanned] = [Math.min(yScanned, yHinges) - 10, Math.max(yScanned, yHinges) + 10];
   return (
     <figure className="flex flex-col gap-2">
       <p className="text-base">
-        At <span className="measure font-semibold">{first.width} in</span> every room is reachable in{" "}
-        <span className="measure font-semibold">{first.units}</span> units; at <span className="measure font-semibold">{last.width} in</span>, in{" "}
-        <span className="measure font-semibold">{last.units}</span>.
+        As scanned, every room is reachable in <span className="measure font-semibold">{first.scanned}</span> units for a{" "}
+        <span className="measure font-semibold">{first.width} in</span> chair and in <span className="measure font-semibold">{last.scanned}</span> for a{" "}
+        <span className="measure font-semibold">{last.width} in</span> chair.
       </p>
-      <svg role="img" aria-label={`Units with every room reachable, by chair width: ${sweep.points.map((p) => `${p.width} in, ${p.units}`).join("; ")}`} viewBox={`0 0 ${W} ${H}`} className="w-full">
+      <svg
+        role="img"
+        aria-label={`Units with every room reachable, by chair width, as scanned and with offset hinges: ${pts.map((p) => `${p.width} in, ${p.scanned} and ${p.hinges}`).join("; ")}`}
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full"
+      >
         {ticks.map((t) => (
           <g key={t}>
-            <line x1={pad.l} x2={W - pad.r} y1={sy(t)} y2={sy(t)} stroke="var(--rule)" strokeWidth={1} />
+            <line x1={pad.l} x2={end} y1={sy(t)} y2={sy(t)} stroke="var(--rule)" strokeWidth={1} />
             <text x={pad.l - 8} y={sy(t)} textAnchor="end" dominantBaseline="middle" className="measure fill-[var(--ink-soft)] text-[16px]">
               {t}
             </text>
@@ -249,18 +291,25 @@ function SweepChart({ sweep }: { sweep: { points: SweepPoint[]; of: number | nul
         ))}
         {marks.map((m) => (
           <g key={m.at}>
-            <line x1={sx(m.at)} x2={sx(m.at)} y1={pad.t} y2={H - pad.b} stroke="var(--rule-strong)" strokeDasharray="4 4" />
-            <text x={sx(m.at) + 6} y={pad.t + 14} className="fill-[var(--ink-soft)] text-[16px]">
+            <line x1={sx(m.at)} x2={sx(m.at)} y1={pad.t} y2={H - pad.b} stroke="var(--rule-strong)" strokeDasharray="2 4" />
+            <text x={sx(m.at) - 6} y={pad.t + 14} textAnchor="end" className="fill-[var(--ink-soft)] text-[16px]">
               {m.label}
             </text>
           </g>
         ))}
-        <path d={d} fill="none" stroke="var(--ink)" strokeWidth={3} />
-        {sweep.points.map((p) => (
-          <circle key={p.width} cx={sx(p.width)} cy={sy(p.units)} r={4} fill="var(--ink)" />
+        <path d={line("hinges")} fill="none" stroke="var(--ink-soft)" strokeWidth={3} strokeDasharray="8 6" />
+        <path d={line("scanned")} fill="none" stroke="var(--ink)" strokeWidth={3} />
+        {pts.map((p) => (
+          <circle key={p.width} cx={sx(p.width)} cy={sy(p.scanned)} r={4} fill="var(--ink)" />
         ))}
-        {sweep.points.map((p, i) =>
-          i % Math.ceil(sweep.points.length / 8) === 0 || i === sweep.points.length - 1 ? (
+        <text x={end + 10} y={yHinges} dominantBaseline="middle" className="fill-[var(--ink-soft)] text-[16px]">
+          with hinges
+        </text>
+        <text x={end + 10} y={yScanned} dominantBaseline="middle" className="fill-[var(--ink)] text-[16px] font-semibold">
+          as scanned
+        </text>
+        {pts.map((p, i) =>
+          i % Math.ceil(pts.length / 8) === 0 || i === pts.length - 1 ? (
             <text key={`x${p.width}`} x={sx(p.width)} y={H - pad.b + 24} textAnchor="middle" className={cn("measure fill-[var(--ink-soft)] text-[16px]")}>
               {p.width}
             </text>
@@ -268,8 +317,8 @@ function SweepChart({ sweep }: { sweep: { points: SweepPoint[]; of: number | nul
         )}
       </svg>
       <figcaption className="text-sm text-ink-soft">
-        Chair width (in) against units with every room reachable{sweep.of ? `, of ${sweep.of}` : ""}
-        {sweep.length ? `, chair length ${sweep.length} in` : ""}. Estimated from floor plans, as scanned. From /api/insights.
+        Chair width (in) against units with every room reachable{sweep.of ? `, of ${sweep.of}` : ""}; a room the scan left unknown counts as not reached.
+        Estimated from floor plans{sweep.lengthRule ? `; chair length follows width (assumed)` : ""}. From /api/insights.
       </figcaption>
     </figure>
   );
