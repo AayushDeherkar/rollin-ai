@@ -18,7 +18,7 @@ import { buildDrive, defaultTarget } from "@/lib/chair";
 import { useDriveProgress } from "@/lib/drive-progress";
 import { floorBounds } from "@/lib/plan-geometry";
 import { isSynthetic, roomFrame, verdict, type VisionResult } from "@/lib/apartment";
-import type { Floor } from "@/lib/contract";
+import type { Floor, Room } from "@/lib/contract";
 import { readSearch } from "@/lib/search";
 import type { UnitRow } from "@/lib/contract";
 import { readAgentReplay, webSenderId } from "@/components/workbench";
@@ -86,6 +86,16 @@ function firstRoom(floor: Floor): string | null {
   return bed?.room_id ?? defaultTarget(floor);
 }
 
+/** Beat 3's room: a bathroom still blocked with offset hinges (as scanned when there is no hinges result), one with a photo first. */
+function stuckBathroom(scanned: Floor, hinges: Floor | null, hasPhoto: (roomId: string) => boolean): string | null {
+  const after = (r: Room) => hinges?.rooms.find((h) => h.room_id === r.room_id)?.status ?? r.status;
+  const baths = scanned.rooms.filter((r) => /bath/i.test(r.label) && after(r) !== "reachable");
+  return (baths.find((r) => hasPhoto(r.room_id)) ?? baths[0])?.room_id ?? null;
+}
+
+/** The pitch, on number keys in presenter mode; each beat is a clean cut to a prepared state. */
+type Beat = 1 | 2 | 3 | 4 | 5;
+
 /** `?sid=` units the list does not carry stand at the medical center */
 const ORIGIN: [number, number, number] = [0, 0, 0];
 
@@ -108,11 +118,12 @@ function Stage() {
   const [dismissed, setDismissed] = useState<string | null>(null);
 
   const search = useCallback(
-    (c: ChairIn) => {
+    (c: ChairIn, opts?: { replay: boolean; pace: number }) => {
       startAgent(
-        `Find units near the Medical Center my ${c[0]} × ${c[1]} in chair can live in. Check bedroom and bathroom access.`,
+        `Find units near the Medical Center my ${c[0]} × ${c[1]} in chair can live in. Check bedroom and bathroom access. ` +
+          "If a bedroom or bathroom is still blocked with offset hinges, ask the leasing office whether that doorway can be widened.",
         { sender_id: webSenderId(), chair_in: [c[0], c[1]] },
-        { replay: readAgentReplay(), pace: entry.pace },
+        opts ?? { replay: readAgentReplay(), pace: entry.pace },
       );
     },
     [startAgent, entry.pace],
@@ -143,10 +154,17 @@ function Stage() {
   const floor = unit?.floors[0] ?? null;
   const scannedFloor = both?.asScanned.floors[0] ?? null;
   const hingesFloor = both?.hinges?.floors[0] ?? null;
+  const [vision, setVision] = useState<VisionResult | null>(null);
+  const hasPhoto = useCallback((roomId: string) => vision?.sid === sid && vision.items.some((i) => i.room_id === roomId), [vision, sid]);
+  /** presenter mode's beat (null once the presenter clicks anything) */
+  const [beat, setBeat] = useState<Beat | null>(entry.demo ? 1 : null);
+  /** frames left to cut (no flight) after a beat key */
+  const cut = useRef(0);
   /** the room the user picked (camera flies there); before that, the chair heads for the first room */
   const [pick, setPick] = useState<{ sid: string; room: string } | null>(null);
   const picked = pick && pick.sid === sid ? pick.room : null;
-  const target = picked ?? (scannedFloor ? firstRoom(scannedFloor) : null);
+  const beatRoom = beat === 3 && scannedFloor ? stuckBathroom(scannedFloor, hingesFloor, hasPhoto) : null;
+  const target = picked ?? beatRoom ?? (scannedFloor ? firstRoom(scannedFloor) : null);
   const [runId, setRunId] = useState(0);
   const [glide, setGlide] = useState(true);
   const [ride, setRide] = useState(false);
@@ -173,16 +191,21 @@ function Stage() {
   }, [both, scannedFloor, target]);
   const live = pair.status === "ready" && pair.origin === "live" && unit !== null && !isSynthetic(unit);
   const [evidence, setEvidence] = useState<EvidenceKind | null>(null);
+  /** leaving the pitch for free play keeps what beat 3 shows (its room) */
+  const leaveBeat = useCallback(() => {
+    if (beat === 3 && sid && beatRoom) setPick({ sid, room: beatRoom });
+    setBeat(null);
+  }, [beat, sid, beatRoom]);
   /** the door the tour is about: the one clicked in the model, or the ruler's door when opened from the card */
   const [tourEdge, setTourEdge] = useState<string | null>(null);
   const showEvidence = useCallback(
     (kind: EvidenceKind | null) => {
+      leaveBeat();
       if (kind === "tour") setTourEdge(rulerEdge);
       setEvidence(kind);
     },
-    [rulerEdge],
+    [rulerEdge, leaveBeat],
   );
-  const [vision, setVision] = useState<VisionResult | null>(null);
   useEffect(() => {
     if (!sid || !live) return;
     const ac = new AbortController();
@@ -193,8 +216,11 @@ function Stage() {
     return () => ac.abort();
   }, [sid, live]);
   const photoFor = (roomId: string | null) => (vision && vision.sid === sid && roomId ? (vision.items.find((i) => i.room_id === roomId) ?? null) : null);
+  // beat 3 opens the bathroom's photo as soon as there is one
+  const shownEvidence = evidence ?? (beat === 3 && photoFor(target) ? "photo" : null);
 
   const open = useCallback((next: string) => {
+    setBeat(null);
     setSid(next);
     setStep("apartment");
     setStill(false);
@@ -207,6 +233,7 @@ function Stage() {
   const selectRoom = useCallback(
     (roomId: string) => {
       if (!sid) return;
+      setBeat(null);
       setPick({ sid, room: roomId });
       setStill(false);
       setEvidence(null);
@@ -217,32 +244,61 @@ function Stage() {
     [sid],
   );
   const toggleRide = useCallback(() => {
+    leaveBeat();
     setStill(false);
     setRide((r) => !r);
     setGlide(true);
     setRunId((n) => n + 1);
-  }, []);
+  }, [leaveBeat]);
 
-  const toggleHinges = useCallback((on: boolean) => {
-    setStill(false);
-    setHinges(on);
-  }, []);
+  const toggleHinges = useCallback(
+    (on: boolean) => {
+      leaveBeat();
+      setStill(false);
+      setHinges(on);
+    },
+    [leaveBeat],
+  );
 
   // ── presenter mode ──
   /** the unit presenter mode opens on (from /api/demo) */
   const [demoSid, setDemoSid] = useState<string | null>(null);
-  /** back to the opening view: demo unit, bedroom, as scanned, chair stopped at the door */
-  const reset = useCallback(() => {
-    if (demoSid) setSid(demoSid);
-    setStep("apartment");
-    setPick(null);
-    setHinges(false);
-    setRide(false);
-    setEvidence(null);
-    setGlide(true);
-    setStill(true);
-    setRunId((n) => n + 1);
-  }, [demoSid]);
+  const approvalWaiting = view.approval !== null;
+  const runStatus = agent.run.status;
+  /**
+   * The pitch: 1 the chair stopped at the bedroom door with the ruler; 2 offset hinges on, riding
+   * along as the chair rolls in; 3 the bathroom still blocked, its photo open; 4 the search with a
+   * run streaming (live when the API is up, else the labelled replay); 5 the approval card (a run
+   * already waiting keeps its card; with no run, the recorded one plays at once, labelled replay).
+   */
+  const goBeat = useCallback(
+    (b: Beat) => {
+      cut.current = 3;
+      setBeat(b);
+      setEvidence(null);
+      if (b <= 3) {
+        if (demoSid) setSid(demoSid);
+        setStep("apartment");
+        setPick(null);
+        setHinges(b > 1);
+        setRide(b === 2);
+        setStill(b !== 2);
+        setGlide(true);
+        setRunId((n) => n + 1);
+        return;
+      }
+      setStep("search");
+      setDismissed(null);
+      if (b === 4) {
+        setProfile(chair);
+        search(chair);
+      } else if (!approvalWaiting && runStatus !== "running") {
+        setProfile(chair);
+        search(chair, { replay: true, pace: 0 });
+      }
+    },
+    [demoSid, chair, search, approvalWaiting, runStatus],
+  );
   useEffect(() => {
     if (!entry.demo) return;
     const ac = new AbortController();
@@ -259,20 +315,26 @@ function Stage() {
   useEffect(() => {
     if (!entry.demo) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "r" && e.key !== "R") return;
+      const b = e.key === "r" || e.key === "R" ? 1 : /^[1-5]$/.test(e.key) ? (Number(e.key) as Beat) : null;
+      if (b === null) return;
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
       const el = e.target as HTMLElement | null;
       if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
       e.preventDefault();
-      reset();
+      goBeat(b);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [entry.demo, reset]);
+  }, [entry.demo, goBeat]);
 
   const scratch = useRef({ a: new THREE.Vector3(), b: new THREE.Vector3() });
   const pose = useCallback(
     (out: PoseGoal) => {
+      // a beat key cuts: a few frames on the goal, so the drive's reset frame is cut to as well
+      if (cut.current > 0) {
+        cut.current -= 1;
+        out.snap = true;
+      }
       if (step === "chair") {
         out.pos.set(2.2, 1.5, 2.6);
         out.target.set(-0.35, 0.45, 0);
@@ -441,7 +503,7 @@ function Stage() {
           drive={drive}
           ride={ride}
           live={live}
-          evidence={evidence}
+          evidence={shownEvidence}
           photoFor={photoFor}
           rulerEdge={rulerEdge}
           tourEdge={tourEdge}

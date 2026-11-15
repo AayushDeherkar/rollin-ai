@@ -75,10 +75,12 @@ export function Dollhouse(props: DollhouseProps) {
 export interface ModelProps extends Omit<DollhouseProps, "onFallback"> {
   /** the pinned callout where the drive ends (the stage draws its own ruler instead) */
   callout?: boolean;
+  /** room names over the floors (HTML, so they do not follow the walls lying flat; the stage hides them off its step) */
+  labels?: boolean;
 }
 
 /** The model itself, in model coordinates centred on the base board: shared by the classic view and the stage. */
-export function Model({ callout = true, ...props }: ModelProps) {
+export function Model({ callout = true, labels = true, ...props }: ModelProps) {
   const [palette] = useState(readPalette);
   const b = useMemo(() => floorBounds(props.floor), [props.floor]);
   const centre: Point = [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2];
@@ -90,7 +92,7 @@ export function Model({ callout = true, ...props }: ModelProps) {
       <Walls floor={props.floor} palette={palette} />
       <Doors floor={props.floor} palette={palette} hinges={hinges} drive={props.drive} driving={props.driving} onOpen={props.onDoorOpen} />
       <TurningCircles floor={props.floor} palette={palette} />
-      <RoomLabels floor={props.floor} />
+      {labels && <RoomLabels floor={props.floor} />}
       {props.drive && <Chair chairIn={props.unit.chair_in} drive={props.drive} progress={props.progress} s={props.s} palette={palette} />}
       {callout && props.drive && !props.driving && <Callout drive={props.drive} chairIn={props.unit.chair_in} hinges={hinges} />}
     </group>
