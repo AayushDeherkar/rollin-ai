@@ -29,7 +29,7 @@ Status is never colour alone. Every status has a colour, a fill pattern (`Patter
 
 ## Type
 
-- **Display:** Big Shoulders (a condensed sans in the spirit of drafting lettering) for panel titles, the wordmark and empty-state titles.
+- **Display:** Big Shoulders (a condensed sans in the spirit of drafting lettering) for panel titles, the landing headline and empty-state titles. The top bar and landing header show the logo (`public/logo.png`), not a text wordmark.
 - **Text:** Public Sans (US Web Design System, built for legibility) for everything you read.
 - **Measure:** IBM Plex Mono with tabular, slashed-zero figures for every number that is a measurement (`.measure`).
 - Scale, in rem so it follows the reader's font size and browser zoom: 1 / 1.125 rem, then 22 / 28 / 36 / 52 px at 1440x900 for the four larger steps, which `clamp()` down a little on smaller screens. **Nothing is below 1 rem (16 px).** Body text is 1.125 rem (18 px). The root is the reader's own size (`html { font-size: 100% }`); spacing is rem too (`--space: 0.25rem`).
