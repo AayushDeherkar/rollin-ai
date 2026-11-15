@@ -19,6 +19,10 @@ export interface Palette {
   blockWash: string;
   unknown: string;
   unknownWash: string;
+  floor: string;
+  chairFrame: string;
+  chairFabric: string;
+  chairTyre: string;
   glow: number;
 }
 
@@ -40,6 +44,10 @@ export function readPalette(): Palette {
     blockWash: v("--block-wash"),
     unknown: v("--unknown"),
     unknownWash: v("--unknown-wash"),
+    floor: v("--floor"),
+    chairFrame: v("--chair-frame"),
+    chairFabric: v("--chair-fabric"),
+    chairTyre: v("--chair-tyre"),
     glow: Number(v("--glow")) || 0,
   };
 }

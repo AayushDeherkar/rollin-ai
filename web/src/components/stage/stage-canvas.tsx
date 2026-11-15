@@ -53,9 +53,9 @@ export function StageCanvas({ pose, onFallback, children }: { pose: Pose; onFall
         camera={{ fov: FOV, position: [2.2, 1.5, 2.6], near: 0.05, far: 2000 }}
         gl={{ antialias: true, powerPreference: "high-performance" }}
       >
-        <color attach="background" args={[palette.paper]} />
-        <hemisphereLight args={[palette.ink, palette.paper, 0.75]} />
-        <directionalLight position={[-6, 12, 6]} intensity={1.1} color={palette.ink} />
+        <color attach="background" args={[palette.floor]} />
+        <hemisphereLight args={[palette.ink, palette.floor, 0.8]} />
+        <directionalLight position={[-6, 12, 6]} intensity={1.15} color={palette.ink} />
         {/* one rim light from behind and low, so the chair's tubes and wheels read against the dark ground */}
         <directionalLight position={[5, 3.5, -8]} intensity={0.9} color={palette.ink} />
         <Guards onFallback={onFallback} />

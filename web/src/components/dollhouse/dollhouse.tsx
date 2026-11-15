@@ -61,9 +61,9 @@ export function Dollhouse(props: DollhouseProps) {
     <div className="absolute inset-0" role="img" aria-label={label}>
       <Boundary onError={(m) => props.onFallback(`The 3D model failed: ${m}`)}>
         <Canvas dpr={[1, 1.5]} camera={{ fov: 38, position: camPos, near: 0.1, far: 300 }} gl={{ antialias: true, powerPreference: "high-performance" }}>
-          <color attach="background" args={[palette.paper]} />
-          <hemisphereLight args={[palette.ink, palette.paper, 0.75]} />
-          <directionalLight position={[-span, span * 1.6, span * 0.8]} intensity={1.1} color={palette.ink} />
+          <color attach="background" args={[palette.floor]} />
+          <hemisphereLight args={[palette.ink, palette.floor, 0.8]} />
+          <directionalLight position={[-span, span * 1.6, span * 0.8]} intensity={1.15} color={palette.ink} />
           <directionalLight position={[span * 0.6, span * 0.45, -span]} intensity={0.9} color={palette.ink} />
           <Guards onFallback={props.onFallback} />
           <Rig {...props} centre={centre} span={span} />

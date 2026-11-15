@@ -1,7 +1,7 @@
 /*
  * Rollin' design tokens — the only source of colour, type, size, radius and motion.
- * Direction: a site model at night: near-black ground, pale card walls, status that glows
- * only a little. See web/DESIGN.md. Token names keep their jobs from the drafting sheet:
+ * Direction: a site model at dusk: a deep blue-slate ground (the logo's blue, darkened), a lighter
+ * floor plane, pale card walls, a light neutral chair, the logo's blue as the one accent. See web/DESIGN.md. Token names keep their jobs from the drafting sheet:
  * "paper" is the ground, "ink" is linework and text.
  * Nothing in web/src may use a colour, font, font size or easing that is not defined here.
  * Mirror of the motion values for JS lives in src/lib/motion.ts (keep the two in sync).
@@ -10,25 +10,30 @@
 :root {
   color-scheme: dark; /* native scrollbars and form controls match the night ground */
   /* ── Ground and linework ─────────────────────────────── */
-  --paper: #0f1113; /* the night ground around the model */
-  --paper-deep: #1d2024; /* a step lighter: hover, selected row, skeletons */
-  --paper-lift: #15181b; /* the base board under the model and the plan */
-  --rule: #2b2f34; /* faint construction line */
-  --rule-strong: #4a5057; /* panel borders, sheet frame inner line */
-  --ink: #ebe7dc; /* pale model card: walls, text */
-  --ink-soft: #a9a59a; /* secondary text, dimension extension lines */
+  --paper: #16202f; /* deep blue-slate ground around the model (from the logo's blue, darkened) */
+  --paper-deep: #27364c; /* a step lighter: hover, selected row, skeletons */
+  --paper-lift: #1d293b; /* the base board under the model and the plan */
+  --rule: #34465f; /* faint construction line */
+  --rule-strong: #62789a; /* panel borders, sheet frame inner line */
+  --ink: #f2f5f9; /* pale model card: walls, text */
+  --ink-soft: #b8c4d4; /* secondary text, dimension extension lines */
 
   /* ── The one accent: the agent is acting now ─────────── */
-  --agent: #8ea2ff; /* cobalt, lifted for the dark ground */
-  --agent-wash: #232a45; /* agent highlight behind text */
+  --agent: #55b4f1; /* the logo's blue */
+  --agent-wash: #173554; /* agent highlight behind text */
 
   /* ── Room / door status (always paired with a pattern or icon) ── */
-  --reach: #7cc98b; /* green: reachable */
-  --reach-wash: #1b3122;
-  --block: #ff7a6b; /* red: blocked / not passable */
-  --block-wash: #3b1c18;
-  --unknown: #a39f94; /* graphite: not measured */
-  --unknown-wash: #26251f;
+  --reach: #80d69a; /* green: reachable */
+  --reach-wash: #1c3a2c;
+  --block: #ff8f80; /* red: blocked / not passable */
+  --block-wash: #432630;
+  --unknown: #c2b8a6; /* graphite: not measured */
+  --unknown-wash: #302f30;
+  /* ── The 3D scene ── */
+  --floor: #2a3b54; /* the floor plane under the scene: a step lighter than the ground */
+  --chair-frame: #d9dfe7; /* the chair: a light neutral that stands off the floor */
+  --chair-fabric: #9eabbd;
+  --chair-tyre: #222c3a;
   /* how much a status floor glows in the 3D model (emissive intensity, 0..1) */
   --glow: 0.22;
 
