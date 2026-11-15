@@ -8,6 +8,7 @@
 import { useMemo, useState } from "react";
 import { Line } from "@react-three/drei";
 import { ChairBody } from "@/components/dollhouse/dollhouse";
+import type { ChairKind } from "@/components/chair/wheelchair";
 import { M_PER_IN } from "@/lib/plan-geometry";
 import { TURNING_IN, sweptIn, type ChairIn } from "@/lib/stage";
 import { readPalette } from "@/lib/tokens";
@@ -19,7 +20,7 @@ function ring(radius: number, y: number): [number, number, number][] {
   });
 }
 
-export function ChairScene({ chair, visible }: { chair: ChairIn; visible: boolean }) {
+export function ChairScene({ chair, kind, visible }: { chair: ChairIn; kind: ChairKind; visible: boolean }) {
   const [palette] = useState(readPalette);
   const swept = useMemo(() => ring((sweptIn(chair) * M_PER_IN) / 2, 0.012), [chair]);
   const turning = useMemo(() => ring((TURNING_IN * M_PER_IN) / 2, 0.01), []);
@@ -27,7 +28,7 @@ export function ChairScene({ chair, visible }: { chair: ChairIn; visible: boolea
     <group visible={visible}>
       {/* turned a little so the camera sees it three-quarter on */}
       <group rotation={[0, -0.45, 0]}>
-        <ChairBody chairIn={chair} palette={palette} />
+        <ChairBody chairIn={chair} kind={kind} palette={palette} />
       </group>
       <Line points={swept} color={palette.ink} lineWidth={2} />
       <Line points={turning} color={palette.inkSoft} lineWidth={1.5} dashed dashSize={0.08} gapSize={0.06} />

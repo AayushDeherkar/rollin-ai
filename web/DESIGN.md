@@ -90,6 +90,10 @@ The steps are a real sequence, so the step bar numbers them.
 - The accent cobalt appears only while the agent is acting: the pill while streaming, the narration bullet, the checking pulse on a point, the chair while it drives.
 - Keyboard: steps, presets, sliders, cards, room strip and every evidence link are real buttons and inputs. Esc closes the pill, the evidence and the approval card's details.
 
+### The chair
+
+One procedural model (`src/components/chair/wheelchair.tsx`) in every scene, drawn inside the width × length footprint the engine tests (the footprint stays outlined on the floor; the model is a drawing, not a measurement). Manual: tubular frame, spoked rear wheels with push rims, casters on forks, soft-edged seat and back, armrests, footplates. Power: base, mid drive wheels, casters front and back, captain seat with headrest, joystick. Picking a measured preset picks its kind; a Manual/Power toggle sits above the sliders. Materials are restrained (one brushed metal in `--ink-soft`, bright spokes and push rims in `--ink`, fabric and tyres in the rule greys); one rim light from behind and low separates it from the ground. Driving shows only as the `--agent` emissive on frame and fabric, easing in and out. Resizing is transform-only for tubes and wheels; only the cushions rebuild, in 5 mm steps.
+
 ### Stage layout
 
 - The interface is one CSS grid over the scene (`.stage-grid` in globals.css), never absolutely placed boxes. Four regions: **top** (step bar, agent pill), **left** panel, **right** rail, **bottom** strip, around an open middle where the scene shows. Rail widths and the gutter are `clamp()`ed tokens (`--rail-left`, `--rail-left-wide` for step 1, `--rail-right`, `--gutter`).
