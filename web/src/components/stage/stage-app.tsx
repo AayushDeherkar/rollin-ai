@@ -29,6 +29,8 @@ import { ApartmentLegend, EvidencePanel, RoomCard, RoomStrip, VerdictLine, type 
 import type { PoseGoal } from "./stage-canvas";
 import { StepBar } from "./step-bar";
 import { PublicBadge } from "@/components/public-badge";
+import { PUBLIC_REPLAY } from "@/lib/public";
+import { useOutboxEvents, type AnswerEvent } from "@/lib/outbox-events";
 import { ChairPlate } from "./chair-plate";
 import { ChairScene } from "./chair-scene";
 
@@ -146,8 +148,14 @@ function Stage() {
   }, [sid, units, origin]);
   const at = chosenPoint ?? ORIGIN;
 
+  // after a run: deliveries by the iMessage bridge, and the leasing office's answers
+  const outbox = useOutboxEvents(!PUBLIC_REPLAY);
+  const [seenAnswer, setSeenAnswer] = useState<string | null>(null);
+  const latestAnswer = outbox.answers.at(-1) ?? null;
+
   // ── step 3: the apartment ──
-  const pair = useUnitPair(sid);
+  // an answer about this unit refetches it: an answered room shows "asked"
+  const pair = useUnitPair(sid, outbox.answers.filter((a) => a.sid === sid).length);
   const both = pair.status === "ready" ? pair.data : null;
   const [hinges, setHinges] = useState(false);
   const unit = both ? (hinges && both.hinges ? both.hinges : both.asScanned) : null;
@@ -454,7 +462,14 @@ function Stage() {
       </div>
       <header className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-6 p-6">
         <div className="flex items-center gap-3">
-          <StepBar step={step} available={available} onStep={setStep} />
+          <StepBar
+            step={step}
+            available={available}
+            onStep={(next) => {
+              leaveBeat();
+              setStep(next);
+            }}
+          />
           <PublicBadge />
         </div>
         {step === "search" && (
@@ -485,7 +500,13 @@ function Stage() {
           {view.approval && dismissed !== view.approval.action_id && (
             // left, under the step bar: the middle of the field stays visible
             <div className="pointer-events-none absolute top-28 left-6">
-              <ApprovalFocus view={view} decisions={agent.decisions} onDecide={agent.decide} onDismiss={() => setDismissed(view.approval?.action_id ?? null)} />
+              <ApprovalFocus
+                view={view}
+                decisions={agent.decisions}
+                onDecide={agent.decide}
+                onDismiss={() => setDismissed(view.approval?.action_id ?? null)}
+                delivered={outbox.delivered}
+              />
             </div>
           )}
         </>
@@ -513,7 +534,44 @@ function Stage() {
           onEvidence={showEvidence}
         />
       )}
+      {latestAnswer && seenAnswer !== latestAnswer.id && (
+        <div className="pointer-events-none absolute right-6 bottom-28">
+          <AnswerNotice
+            answer={latestAnswer}
+            onOpen={() => {
+              setSeenAnswer(latestAnswer.id);
+              const room = latestAnswer.rooms[0]?.room_id;
+              open(latestAnswer.sid);
+              if (room) setPick({ sid: latestAnswer.sid, room });
+            }}
+            onDismiss={() => setSeenAnswer(latestAnswer.id)}
+          />
+        </div>
+      )}
     </div>
+  );
+}
+
+/** The leasing office replied (after the run ended): what it answered, and the way to the room. */
+function AnswerNotice({ answer, onOpen, onDismiss }: { answer: AnswerEvent; onOpen: () => void; onDismiss: () => void }) {
+  const rooms = answer.rooms.map((r) => `${r.label}${r.clear_in.value != null ? `: ${r.clear_in.value.toFixed(1)} in clear` : ""}`);
+  return (
+    <section role="status" aria-live="polite" className="pointer-events-auto flex w-[400px] flex-col gap-2 border-2 border-ink bg-paper-lift p-4">
+      <h2 className="text-base font-semibold">The leasing office replied</h2>
+      <p className="text-base">
+        {rooms.length ? `${rooms.join("; ")} (asked, not measured).` : "Its reply answered no room the scan left unknown, so nothing changed."}
+      </p>
+      <div className="flex gap-2">
+        {rooms.length > 0 && (
+          <button type="button" onClick={onOpen} className="h-10 bg-ink px-4 text-base font-semibold text-paper hover:bg-ink-soft">
+            Open the room
+          </button>
+        )}
+        <button type="button" onClick={onDismiss} className="h-10 border border-ink px-4 text-base font-semibold hover:bg-paper-deep">
+          Dismiss
+        </button>
+      </div>
+    </section>
   );
 }
 

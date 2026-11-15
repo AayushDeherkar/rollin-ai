@@ -80,6 +80,8 @@ async function getJson<T>(url: string, signal: AbortSignal): Promise<Got<T>> {
 function useKeyedLoad<T>(
   key: string | null,
   load: (signal: AbortSignal) => Promise<Got<T>>,
+  /** keep showing the last result while a key this says is the same thing refetches (no flash of loading) */
+  keep?: (prev: string, next: string) => boolean,
 ): Load<T> {
   const [state, setState] = useState<{ key: string; load: Load<T> } | null>(
     null,
@@ -108,7 +110,9 @@ function useKeyedLoad<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   if (key === null) return { status: "loading" };
-  return state?.key === key ? state.load : { status: "loading" };
+  if (state?.key === key) return state.load;
+  if (state && state.load.status === "ready" && keep?.(state.key, key)) return state.load;
+  return { status: "loading" };
 }
 
 export function useUnitsList(): Load<UnitsList> {
@@ -123,8 +127,10 @@ export interface UnitPair {
 }
 
 /** Both scenarios of one unit. Replay if either half was replayed. */
-export function useUnitPair(sid: string | null): Load<UnitPair> {
-  return useKeyedLoad(sid, async (signal) => {
+/** `version` refetches the same unit (a leasing-office answer came in) without showing it as loading. */
+export function useUnitPair(sid: string | null, version = 0): Load<UnitPair> {
+  const key = sid === null ? null : `${sid}#${version}`;
+  return useKeyedLoad(key, async (signal) => {
     const base = `/api/units/${encodeURIComponent(sid ?? "")}`;
     const [a, h] = await Promise.all([
       getJson<UnitResult>(base, signal).catch((err: unknown) => {
@@ -142,5 +148,5 @@ export function useUnitPair(sid: string | null): Load<UnitPair> {
       origin: replay ? "replay" : "live",
       reason: a.reason ?? h?.reason ?? null,
     };
-  });
+  }, (prev, next) => prev.split("#")[0] === next.split("#")[0]);
 }

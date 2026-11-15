@@ -72,6 +72,15 @@ export function photonClient(cfg: PhotonConfig) {
     });
   }
 
+  /** Start a text (not a reply) in a conversation the other side opened: delivery to the leasing office. */
+  async function send(spaceId: string, senderId: string, text: string, key: string): Promise<void> {
+    await photon.projects.sendMessage({
+      path: { id: cfg.projectId },
+      headers: { "idempotency-key": key },
+      body: { spaceId, senderId, content: { type: "text", format: "plain", text } },
+    });
+  }
+
   async function loadCursor(): Promise<number> {
     try {
       const { seq } = JSON.parse(await readFile(cursorFile, "utf8")) as { seq?: unknown };
@@ -145,5 +154,5 @@ export function photonClient(cfg: PhotonConfig) {
     socket.connect();
   }
 
-  return { reply, listen };
+  return { reply, send, listen };
 }

@@ -44,7 +44,8 @@ export function RoomStrip({ rooms, selected, onSelect }: { rooms: Room[]; select
             >
               <StatusIcon status={r.status} />
               {r.label}
-              <span className="sr-only">: {STATUS[r.status].word}</span>
+              {r.answer && <span className="border border-ink-soft px-1.5 text-sm font-normal text-ink">asked</span>}
+              <span className="sr-only">: {STATUS[r.status].word}{r.answer ? ", the leasing office answered" : ""}</span>
             </button>
           </li>
         ))}
@@ -98,6 +99,12 @@ export function RoomCard({
       if (drive.kind === "blocked" && drive.door && drive.shortfallIn != null)
         return `The ${drive.via ? `${drive.via.label.toLowerCase()} ` : ""}door on the way is about ${drive.door.clear_in_est.toFixed(1)} in clear (est.), ${drive.shortfallIn.toFixed(1)} in short for a ${chairIn[0].toFixed(1)} in chair.`;
     }
+    if (shown.status === "unknown" && room.answer) {
+      const w = room.answer.clear_in.value;
+      return w != null
+        ? `The leasing office says the door is ${w.toFixed(1)} in clear (asked, not measured).`
+        : `The leasing office answered${room.answer.said ? `: “${room.answer.said}”` : ""}. No width was given, so it stays unknown.`;
+    }
     if (shown.status === "unknown") return "No door into this room was measured.";
     if (shown.status === "reachable") return "The chair reaches this room.";
     return shown.reason ?? "The chair cannot reach this room.";
@@ -132,7 +139,12 @@ export function RoomCard({
           </>
         )}
         {fix.kind === "landlord-door" && <p className="text-base">Hinges are not enough here. The agent will ask the landlord whether this doorway can be widened, and sends nothing until you approve.</p>}
-        {fix.kind === "landlord-measure" && <p className="text-base">The agent will ask the landlord for this door’s clear width, and sends nothing until you approve.</p>}
+        {fix.kind === "landlord-measure" &&
+          (room.answer ? (
+            <p className="text-base">Asked: the leasing office answered. The engine has not driven the chair with this width, so the room stays unknown.</p>
+          ) : (
+            <p className="text-base">The agent will ask the landlord for this door’s clear width, and sends nothing until you approve.</p>
+          ))}
         {fix.kind === "unchecked" && <p className="text-base">Offset hinges were not checked for this unit, so the fix is unknown.</p>}
       </div>
       <div className="flex flex-col gap-2">

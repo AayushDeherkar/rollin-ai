@@ -1,5 +1,6 @@
 "use client";
 
+import { deliveryOf, type DeliveredEvent } from "@/lib/outbox-events";
 import { useEffect, useRef, useState } from "react";
 import { Bot, ChevronDown, X } from "lucide-react";
 import type { Decision, Run } from "@/lib/agent";
@@ -148,11 +149,13 @@ export function ApprovalFocus({
   decisions,
   onDecide,
   onDismiss,
+  delivered = [],
 }: {
   view: SearchView;
   decisions: Record<string, Decision>;
   onDecide: (actionId: string, approved: boolean) => void;
   onDismiss: () => void;
+  delivered?: DeliveredEvent[];
 }) {
   const a = view.approval;
   const ref = useRef<HTMLDivElement>(null);
@@ -163,7 +166,7 @@ export function ApprovalFocus({
   const decision = decisions[a.action_id] ?? null;
   return (
     <div ref={ref} tabIndex={-1} className="pointer-events-auto flex w-[520px] flex-col gap-2 outline-none">
-      <ApprovalCard event={a} decision={decision} onDecide={onDecide} />
+      <ApprovalCard event={a} decision={decision} onDecide={onDecide} delivery={decision?.state === "done" && decision.result.approved && !decision.result.replay ? deliveryOf(a.to?.label, decision.at ?? null, delivered) : null} />
       {decision?.state === "done" && (
         <button type="button" onClick={onDismiss} className="h-10 self-start border border-rule-strong bg-paper-lift px-4 text-base font-semibold hover:bg-paper-deep">
           Close
