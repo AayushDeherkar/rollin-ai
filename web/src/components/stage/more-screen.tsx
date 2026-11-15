@@ -67,7 +67,18 @@ export interface MoreActions {
   tour: (() => void) | null;
 }
 
-export function MoreScreen({ units, onClose, actions }: { units: UnitRow[]; onClose: () => void; actions: MoreActions }) {
+export function MoreScreen({
+  units,
+  unitsReplay,
+  onClose,
+  actions,
+}: {
+  units: UnitRow[];
+  /** the ranked list is the replayed contract fixture (synthetic units), not the batch */
+  unitsReplay: boolean;
+  onClose: () => void;
+  actions: MoreActions;
+}) {
   const [insights, setInsights] = useState<{ body: unknown; live: boolean } | null>(null);
   const [limits, setLimits] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -101,7 +112,10 @@ export function MoreScreen({ units, onClose, actions }: { units: UnitRow[]; onCl
       aria-modal="true"
       aria-labelledby="more-title"
       onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
+        if (e.key !== "Escape") return;
+        // only More closes: a panel open underneath listens for Esc on the window too
+        e.stopPropagation();
+        onClose();
       }}
       className="pointer-events-auto absolute inset-0 z-50 overflow-y-auto bg-paper outline-none"
     >
@@ -142,7 +156,7 @@ export function MoreScreen({ units, onClose, actions }: { units: UnitRow[]; onCl
             </h2>
             {sweep?.reference ? (
               <>
-                <p className="display measure text-[88px] leading-none font-bold">{sweep.reference.unlocked}</p>
+                <p className="display measure text-3xl leading-none font-bold">{sweep.reference.unlocked}</p>
                 <p className="text-lg font-semibold">units where offset hinges open every room, and the doors as scanned do not.</p>
                 <p className="text-sm text-ink-soft">
                   {sweep.of ? `Of ${sweep.of} units in the sweep, ` : "From the sweep, "}for a {sweep.reference.chair[0]} × {sweep.reference.chair[1]} in chair; estimated from floor
@@ -151,7 +165,7 @@ export function MoreScreen({ units, onClose, actions }: { units: UnitRow[]; onCl
               </>
             ) : owner.total > 0 ? (
               <>
-                <p className="display measure text-[88px] leading-none font-bold">{owner.unlocked}</p>
+                <p className="display measure text-3xl leading-none font-bold">{owner.unlocked}</p>
                 <p className="text-lg font-semibold">units where offset hinges open every room, and the doors as scanned do not.</p>
                 <p className="text-base">
                   <span className="measure font-semibold">{owner.gained}</span> gain at least one room with hinges.
@@ -160,6 +174,7 @@ export function MoreScreen({ units, onClose, actions }: { units: UnitRow[]; onCl
                   Of {owner.total} ranked units, estimated from floor plans{owner.chair ? ` for a ${owner.chair[0]} × ${owner.chair[1]} in chair` : ""}; hinges add about
                   1.75 in (assumed).
                 </p>
+                {unitsReplay && <p className="text-sm font-semibold">Replay: counted from the synthetic example units, not real listings.</p>}
               </>
             ) : (
               <p className="text-base text-ink-soft">The ranked list is not loaded, so there is nothing to count yet.</p>
@@ -259,7 +274,7 @@ function SweepChart({ sweep }: { sweep: Sweep }) {
   const ticks = Array.from({ length: yMax / step + 1 }, (_, i) => i * step);
   const marks = [
     { at: 27, label: "27 in, the demo chair" },
-    { at: 32, label: "32 in, an ADA door" },
+    { at: 32, label: "32 in, ADA minimum door" },
   ].filter((m) => m.at >= x0 && m.at <= x1);
   const first = pts[0];
   const last = pts[pts.length - 1];
@@ -318,7 +333,7 @@ function SweepChart({ sweep }: { sweep: Sweep }) {
       </svg>
       <figcaption className="text-sm text-ink-soft">
         Chair width (in) against units with every room reachable{sweep.of ? `, of ${sweep.of}` : ""}; a room the scan left unknown counts as not reached.
-        Estimated from floor plans{sweep.lengthRule ? `; chair length follows width (assumed)` : ""}. From /api/insights.
+        Estimated from floor plans{sweep.lengthRule ? `; chair length follows width (assumed)` : ""}. From /api/insights. The 32 in door minimum is the 2010 ADA Standards, 404.2.3.
       </figcaption>
     </figure>
   );
