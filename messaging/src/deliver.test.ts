@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Deliverer, sameHandle, type DeliveryState, type LeasingLine, type OutboxApi, type OutboxItem } from "./deliver.ts";
+import { Deliverer, OFFICE_ACK, sameHandle, type DeliveryState, type LeasingLine, type OutboxApi, type OutboxItem } from "./deliver.ts";
 
 const OFFICE = "+15550100000";
 const T0 = new Date("2026-11-15T01:00:00Z");
@@ -50,7 +50,8 @@ test("nothing is sent until the leasing office has texted the line", async () =>
   await r.d.tick();
   assert.equal(r.sent.length, 0);
   assert.match(r.logs.join("\n"), /has to text this line first/);
-  await r.d.fromOffice(OFFICE, "space1", "agent1", "Hi, this is the leasing office");
+  const first = await r.d.fromOffice(OFFICE, "space1", "agent1", "Hi, this is the leasing office");
+  assert.equal(first.reply, OFFICE_ACK);
   await r.d.tick();
   assert.equal(r.sent.length, 1);
   assert.equal(r.sent[0].line.spaceId, "space1");
@@ -75,7 +76,39 @@ test("a reply after a delivery is forwarded as the answer to that message", asyn
   await r.d.tick();
   const said = await r.d.fromOffice(OFFICE, "s", "a", "1. The closet door is 30 inches");
   assert.deepEqual(r.answers[0], { outbox_id: "20261115T010500_cccccc", sid: "synthetic_demo", text: "1. The closet door is 30 inches", from: "leasing office" });
-  assert.match(said, /Closet/);
+  assert.match(said.log, /Closet/);
+  assert.equal(said.reply, null);
+});
+
+test("the office's first text gets one acknowledgement; later ones go to /api/answers, never back as replies", async () => {
+  const r = rig([item("20261115T010500_ffffff", "2026-11-15T01:05:00Z")]);
+  await r.d.start();
+  const first = await r.d.fromOffice(OFFICE, "s", "a", "Hello, can you see this?");
+  assert.equal(first.reply, OFFICE_ACK);
+  assert.match(OFFICE_ACK, /AI assistant/);
+  assert.ok(!OFFICE_ACK.includes("\n"));
+  assert.equal(r.answers.length, 0);
+  // a second text before anything was delivered: nothing to answer, and no second acknowledgement
+  const early = await r.d.fromOffice(OFFICE, "s", "a", "Hello?");
+  assert.equal(early.reply, null);
+  assert.equal(r.answers.length, 0);
+  await r.d.tick();
+  const later = await r.d.fromOffice(OFFICE, "s", "a", "2. The bathroom door is 32 inches");
+  assert.equal(later.reply, null);
+  assert.deepEqual(r.answers[0], { outbox_id: "20261115T010500_ffffff", sid: "synthetic_demo", text: "2. The bathroom door is 32 inches", from: "leasing office" });
+  // after a restart the line is kept: the office is not acknowledged again
+  const again = rig([], r.saved());
+  await again.d.start();
+  assert.equal((await again.d.fromOffice(OFFICE, "s", "a", "3. Closet is 28 in")).reply, null);
+  assert.equal(again.answers.length, 1);
+});
+
+test("a number that is not the office gets nothing from the office path", async () => {
+  const r = rig([]);
+  await r.d.start();
+  const got = await r.d.fromOffice("+15550100001", "s", "a", "find me a place");
+  assert.equal(got.reply, null);
+  assert.equal(r.answers.length, 0);
 });
 
 test("handles compare loosely", () => {

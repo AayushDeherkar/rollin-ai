@@ -56,9 +56,9 @@ If nothing arrives, check Event Deliveries under API Activities in the dashboard
 
 Set `LEASING_OFFICE_NUMBER` in `.env` to the phone playing the leasing office.
 
-1. That phone texts the Rollin' line first. Its first text opens the conversation. The bridge never texts a number that has not texted it.
+1. That phone texts the Rollin' line first. Its first text opens the conversation and gets one line back, saying it is Rollin', an AI assistant, and that approved questions will come to this number. The bridge never texts a number that has not texted it.
 2. When a message is approved (on the web or by "yes" in iMessage), the bridge reads `GET /api/outbox` every few seconds, texts the message to that phone, and marks it delivered. Messages queued before the bridge started are never sent; the log lists them once.
-3. The office's next texts are forwarded to `POST /api/answers` as the answer to the last message delivered. The web page shows "Sent", then "The leasing office replied", and the answered room is marked "asked".
+3. A text from that number is never treated as a renter's request. The office's next texts are forwarded to `POST /api/answers` as the answer to the last message delivered. The web page shows "Sent", then "The leasing office replied", and the answered room is marked "asked".
 
 Without `LEASING_OFFICE_NUMBER`, approved messages stay in the outbox.
 

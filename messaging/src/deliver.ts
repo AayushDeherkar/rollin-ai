@@ -7,12 +7,17 @@
  * - Every few seconds it reads GET /api/outbox (approved messages not yet delivered), sends each one
  *   queued since the bridge started, and marks it delivered (POST /api/outbox/{id}/delivered).
  *   Older items (from earlier runs) are never sent by surprise; they are listed in the log once.
- * - A text from the office is forwarded to POST /api/answers against the last message delivered.
+ * - A text from the office is never a renter’s request. Its first text gets a one-line acknowledgement;
+ *   each later one is forwarded to POST /api/answers against the last message delivered.
  *
  * All calls go through the web app's routes, like the rest of the bridge.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+
+/** the one line the office gets back for its first text: who is texting, and that it is an AI */
+export const OFFICE_ACK =
+  "Hi, this is Rollin’, an AI assistant helping a renter who uses a wheelchair. Thanks: their approved questions about your units will come to this number.";
 
 export interface OutboxItem {
   id: string;
@@ -138,22 +143,31 @@ export class Deliverer {
   }
 
   /**
-   * A text from the leasing office. The first one opens the line. After a delivery, each one is
-   * forwarded as the answer to the last message sent. Returns what happened, for the log.
+   * A text from the leasing office. It is never a renter’s request. The very first one opens the line
+   * and gets a one-line acknowledgement (returned as `reply`; the caller sends it). Every later one is
+   * forwarded to /api/answers as the answer to the last message delivered. `log` says what happened.
    */
-  async fromOffice(handle: string, spaceId: string, agentId: string, text: string): Promise<string> {
-    if (!sameHandle(handle, this.office)) return "Ignored: not the configured leasing office.";
-    if (!this.state.line || this.state.line.spaceId !== spaceId) {
+  async fromOffice(handle: string, spaceId: string, agentId: string, text: string): Promise<{ log: string; reply: string | null }> {
+    if (!sameHandle(handle, this.office)) return { log: "Ignored: not the configured leasing office.", reply: null };
+    if (!this.state.line) {
       this.state.line = { handle, spaceId, agentId, openedAt: new Date().toISOString() };
       await this.store.save(this.state);
-      if (!this.state.lastDelivered) return "The leasing office texted: approved messages can now be delivered to it.";
+      return { log: "The leasing office texted first: line open, acknowledged; approved messages can now be delivered to it.", reply: OFFICE_ACK };
+    }
+    if (this.state.line.spaceId !== spaceId) {
+      // the same office in a new conversation: deliver there from now on
+      this.state.line = { ...this.state.line, spaceId, agentId };
+      await this.store.save(this.state);
     }
     const last = this.state.lastDelivered;
-    if (!last) return "The leasing office texted again; nothing has been delivered to it yet, so there is nothing to answer.";
+    if (!last) return { log: "The leasing office texted again; nothing has been delivered to it yet, so there is nothing to answer.", reply: null };
     const got = await this.api.answer({ outbox_id: last.id, ...(last.sid ? { sid: last.sid } : {}), text, from: "leasing office" });
-    return got.rooms.length
-      ? `Leasing office answered about ${got.rooms.map((r) => r.label).join(", ")}.`
-      : "Leasing office replied; it answered no room the scan left unknown (logged).";
+    return {
+      log: got.rooms.length
+        ? `Leasing office answered about ${got.rooms.map((r) => r.label).join(", ")}.`
+        : "Leasing office replied; it answered no room the scan left unknown (logged).",
+      reply: null,
+    };
   }
 
   /** One pass over the outbox. Never throws. */
