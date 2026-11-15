@@ -146,7 +146,7 @@ function ManualChair({ W, L, m }: { W: number; L: number; m: ChairMaterials }) {
   const seatBackX = axleX - 0.04;
   const seatDepth = THREE.MathUtils.clamp(L * 0.42, 0.28, 0.46);
   const seatFrontX = seatBackX + seatDepth;
-  const footX = Math.min(L / 2 - 0.06, seatFrontX + 0.24);
+  const footX = Math.min(L / 2 - 0.08, seatFrontX + 0.24); // the plate (0.15 long) stays inside the footprint
   const footY = 0.1;
   const casterR = 0.065;
   const casterX = Math.min(seatFrontX - 0.02, L / 2 - casterR * 2);
@@ -198,7 +198,7 @@ function PowerChair({ W, L, m }: { W: number; L: number; m: ChairMaterials }) {
   const seatBackX = seatX - seatDepth / 2;
   const sh = 0.52;
   const armZ = seatW / 2 + 0.03;
-  const footX = L / 2 - 0.08;
+  const footX = L / 2 - 0.09; // the plate (0.17 long) stays inside the footprint
   const q = (v: number) => Math.round(v * 200) / 200;
   return (
     <group>
