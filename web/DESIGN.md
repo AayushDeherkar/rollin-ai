@@ -43,7 +43,7 @@ Status is never colour alone. Every status has a colour, a fill pattern (`Patter
 - Doors the chair cannot pass have a block-coloured frame and a dashed sill across the opening (dashed means "does not fit", as for turning circles).
 - "With offset hinges": door leaves swing clear and rooms take the engine's hinges result.
 - Drawing proportions, not data: wall height 2.4 m, door head 2.03 m, leaf thickness and swing angles, and the chair's seat, back and wheels. Only the walls' plan positions and thickness, door widths and centres, room shapes and statuses, the route and the chair's width × length footprint come from the contract. Nothing on screen reads the drawn proportions as measurements.
-- Lazy-loaded. The pixel ratio is capped at 1.5. In `/classic` the 2D plan is the inset, and it becomes the main view when WebGL is missing, the model fails, or it runs under 24 fps. `?view=2d` and `?view=3d` force a view.
+- Lazy-loaded. The pixel ratio is capped at 1.5. In `/classic` the 2D plan is the inset, and it becomes the main view when WebGL is missing or the model fails. A low frame rate never switches views or pages. `?view=2d` and `?view=3d` force a view.
 - Reduced motion: a fixed camera, no drive animation (the chair is shown where it ends), and door leaves set without swinging.
 
 ## Plan drawing conventions (2D plan)
@@ -127,7 +127,7 @@ The stage moved to `/app`; `/` is the landing (`src/components/landing/`). `/?de
 - `?demo=1` opens step 3 on `demo-main` with the chair already stopped at the bedroom door, the camera set on the door and its ruler, no flight. `/api/demo` resolves the unit from the API's health (`demo.main_sid`, never a hard-coded id), or the synthetic contract unit when there is no API.
 - The pitch is on number keys, each a cut to a prepared state, no flight: `1` the chair stopped at the bedroom door with the ruler; `2` offset hinges on, riding along as the chair rolls in; `3` the bathroom still blocked with hinges, its panorama open, and "the agent will ask"; `4` the search with a run streaming (live when the API is up, otherwise the replay, labelled); `5` the approval card (a run already waiting keeps its card; with no run the recorded one plays at once, labelled replay, and approving it sends nothing). `R` is `1`. Any click leaves the pitch for free play where it stands.
 - `M` opens one More screen over the stage, in the same panels and type: the chair-width chart from `/api/insights` (nothing drawn until the API serves it), the owner number (ranked units that offset hinges open completely, computed from `/api/units` and labelled estimated), and a grid of the rest (aerial, panorama, memory across texts, measured vs estimated, 3D tour, limitations). Each tile opens the real feature; `M` or `Esc` closes it.
-- No WebGL, a lost context, or a frame rate under 24 fps: the page sends you to `/classic` and says why there.
+- No WebGL or a lost context: the page sends you to `/classic` and says why there. A low frame rate never navigates away (a slow demo laptop is not a broken one).
 - The public build is fixture-only: synthetic apartment, no API URL, no keys, and a visible "Replay with a synthetic apartment" label.
 
 ## Banned

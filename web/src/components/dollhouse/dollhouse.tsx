@@ -7,8 +7,8 @@
  * Walls are extruded from a to b at their thickness to WALL_H with gaps at doors; floors are
  * lit by status with the plan's patterns; the chair is sized from chair_in and driven along the
  * engine's path by the shared drive progress. The camera orbits slowly at rest and follows the
- * chair while it drives; with reduced motion it stays fixed. If WebGL fails, the context is
- * lost, or the frame rate stays low, `onFallback` hands the plan back to the 2D view.
+ * chair while it drives; with reduced motion it stays fixed. If WebGL fails or the context is
+ * lost, `onFallback` hands the plan back to the 2D view. A low frame rate never does.
  */
 import { Component, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
@@ -26,8 +26,6 @@ import { Wheelchair, useChairMaterials, type ChairKind, type ChairMaterials } fr
 export const WALL_H = 2.4;
 const DOOR_H = 2.03;
 const LEAF_T = 0.035;
-/** below this, sustained over two windows, the model hands over to the 2D plan */
-const MIN_FPS = 24;
 /** leaf angle from the closed position: open as scanned, swung clear with offset hinges */
 const LEAF_OPEN = Math.PI / 2;
 const LEAF_CLEAR = (165 * Math.PI) / 180;
@@ -116,10 +114,12 @@ export class Boundary extends Component<{ onError: (message: string) => void; ch
   }
 }
 
-/** Hands over to the 2D plan when the context is lost or the frame rate stays under MIN_FPS. */
+/**
+ * Hands over to the 2D plan only when the 3D context is lost. A low frame rate never navigates away:
+ * a busy laptop or a projector mid-demo is slow, not broken, and the page must stay where it is.
+ */
 export function Guards({ onFallback }: { onFallback: (reason: string) => void }) {
   const gl = useThree((st) => st.gl);
-  const acc = useRef({ t: 0, frames: 0, warm: 0, low: 0, done: false });
   useEffect(() => {
     const el = gl.domElement;
     const lost = (e: Event) => {
@@ -129,30 +129,6 @@ export function Guards({ onFallback }: { onFallback: (reason: string) => void })
     el.addEventListener("webglcontextlost", lost);
     return () => el.removeEventListener("webglcontextlost", lost);
   }, [gl, onFallback]);
-  useFrame((_, dt) => {
-    const a = acc.current;
-    if (a.done) return;
-    // a hidden tab throttles frames; that says nothing about the machine
-    // and a frame this long is a pause (a throttled pane, a debugger), not a slow GPU
-    if (document.visibilityState !== "visible" || dt > 0.5) {
-      a.t = a.frames = 0;
-      return;
-    }
-    if (a.warm < 1.5) {
-      a.warm += dt;
-      return;
-    }
-    a.t += dt;
-    a.frames += 1;
-    if (a.t < 2) return;
-    const fps = a.frames / a.t;
-    a.t = a.frames = 0;
-    a.low = fps < MIN_FPS ? a.low + 1 : 0;
-    if (a.low >= 2) {
-      a.done = true;
-      onFallback(`The 3D model ran at ${Math.round(fps)} fps`);
-    }
-  });
   return null;
 }
 
