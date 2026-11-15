@@ -33,6 +33,7 @@ import { PUBLIC_REPLAY } from "@/lib/public";
 import { useOutboxEvents, type AnswerEvent } from "@/lib/outbox-events";
 import { ChairPlate } from "./chair-plate";
 import { ChairScene } from "./chair-scene";
+import { MoreScreen } from "./more-screen";
 
 const StageCanvas = dynamic(() => import("./stage-canvas").then((m) => m.StageCanvas), { ssr: false });
 
@@ -97,6 +98,8 @@ function stuckBathroom(scanned: Floor, hinges: Floor | null, hasPhoto: (roomId: 
 
 /** The pitch, on number keys in presenter mode; each beat is a clean cut to a prepared state. */
 type Beat = 1 | 2 | 3 | 4 | 5;
+/** a tour opened from More: the door the ruler measures once the cut has settled */
+const RULER_DOOR = "ruler";
 
 /** `?sid=` units the list does not carry stand at the medical center */
 const ORIGIN: [number, number, number] = [0, 0, 0];
@@ -205,6 +208,7 @@ function Stage() {
     setBeat(null);
   }, [beat, sid, beatRoom]);
   /** the door the tour is about: the one clicked in the model, or the ruler's door when opened from the card */
+  // (RULER_DOOR: whichever door the ruler measures once the view has settled)
   const [tourEdge, setTourEdge] = useState<string | null>(null);
   const showEvidence = useCallback(
     (kind: EvidenceKind | null) => {
@@ -281,6 +285,8 @@ function Stage() {
    */
   const goBeat = useCallback(
     (b: Beat) => {
+      // the apartment beats need a unit: the demo unit, or failing that the one open
+      if (b <= 3 && !demoSid && !sid) return;
       cut.current = 3;
       setBeat(b);
       setEvidence(null);
@@ -305,21 +311,35 @@ function Stage() {
         search(chair, { replay: true, pace: 0 });
       }
     },
-    [demoSid, chair, search, approvalWaiting, runStatus],
+    [demoSid, sid, chair, search, approvalWaiting, runStatus],
   );
+  // the demo unit is also where More's tiles open, so it is resolved outside ?demo=1 too (opened only in it)
   useEffect(() => {
-    if (!entry.demo) return;
     const ac = new AbortController();
     fetch("/api/demo", { signal: ac.signal })
       .then((r) => (r.ok ? (r.json() as Promise<{ sid?: unknown }>) : null))
       .then((d) => {
         if (ac.signal.aborted || typeof d?.sid !== "string") return;
         setDemoSid(d.sid);
-        setSid(d.sid);
+        if (entry.demo) setSid(d.sid);
       })
       .catch(() => {});
     return () => ac.abort();
   }, [entry.demo]);
+  /** "More" (M): everything the pitch leaves out, one keypress away */
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "m" && e.key !== "M") return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      e.preventDefault();
+      setMore((m) => !m);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   useEffect(() => {
     if (!entry.demo) return;
     const onKey = (e: KeyboardEvent) => {
@@ -329,6 +349,7 @@ function Stage() {
       const el = e.target as HTMLElement | null;
       if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
       e.preventDefault();
+      setMore(false);
       goBeat(b);
     };
     window.addEventListener("keydown", onKey);
@@ -527,11 +548,51 @@ function Stage() {
           evidence={shownEvidence}
           photoFor={photoFor}
           rulerEdge={rulerEdge}
-          tourEdge={tourEdge}
+          tourEdge={tourEdge === RULER_DOOR ? rulerEdge : tourEdge}
           onRoom={selectRoom}
           onHinges={toggleHinges}
           onRide={toggleRide}
           onEvidence={showEvidence}
+        />
+      )}
+      {more && (
+        <MoreScreen
+          units={units}
+          unitsReplay={list.status === "ready" && list.origin === "replay"}
+          onClose={() => setMore(false)}
+          actions={{
+            // each opens the real feature on the demo unit (the pitch's prepared states), then leaves the pitch
+            aerial: live
+              ? () => {
+                  setMore(false);
+                  goBeat(1);
+                  setBeat(null);
+                  setEvidence("aerial");
+                }
+              : null,
+            panorama: () => {
+              setMore(false);
+              goBeat(3);
+            },
+            memory: () => {
+              setMore(false);
+              goBeat(4);
+            },
+            labels: () => {
+              setMore(false);
+              goBeat(1);
+            },
+            // the ruler's door is resolved after the cut (beat 1's unit and room), not from the view More was opened over
+            tour: live
+              ? () => {
+                  setMore(false);
+                  goBeat(1);
+                  setBeat(null);
+                  setTourEdge(RULER_DOOR);
+                  setEvidence("tour");
+                }
+              : null,
+          }}
         />
       )}
       {latestAnswer && seenAnswer !== latestAnswer.id && (
