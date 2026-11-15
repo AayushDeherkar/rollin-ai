@@ -58,6 +58,18 @@ const deliverer = new Deliverer(
 deliverer.notifyClient = (client, text, key) => photon.send(client.spaceId, client.agentId, text, key);
 if (leasing) {
   await deliverer.start();
+  if (!deliverer.client && clients.length === 1) {
+    // the client's existing conversation, so a web approval reaches it before the client has texted the bridge
+    try {
+      const found = await photon.findSpace(clients[0]);
+      if (found) {
+        await deliverer.noteClient({ handle: clients[0], spaceId: found.spaceId, agentId: found.agentId });
+        log("Found the client's existing conversation on this project.");
+      }
+    } catch (err) {
+      log(`Could not look up the client's conversation: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
   if (!deliverer.line) {
     // the office's existing conversation on the project, if it has texted before
     try {
