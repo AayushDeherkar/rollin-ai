@@ -287,24 +287,31 @@ function Stage() {
         const b = floorBounds(floor);
         const span = Math.max(b.maxX - b.minX, b.maxY - b.minY, 4);
         if (ride && drive) {
-          // at seated eye height (a drawing proportion, 1.2 m), just behind the chair, looking down the path
+          // a close chase view: behind the chair and above the walls (2.4 m), looking down past it about a
+          // metre along the path, so the chair stays in view and no wall stands between; into the room once arrived
           const p = progress.get();
-          const [cx, cy, theta] = route.at(p);
-          // the direction of travel: ahead along the path, or the last stretch of it once the chair has arrived
-          const [ax, ay] = route.at(Math.min(1, p + 0.04));
-          const [bx, by] = route.at(Math.max(0, p - 0.04));
+          const [cx, cy] = route.at(p);
+          const ahead = route.length > 0 ? 0.9 / route.length : 1;
+          const [ax, ay] = route.at(Math.min(1, p + ahead));
           let dx = ax - cx;
           let dy = ay - cy;
-          if (Math.hypot(dx, dy) < 1e-3) [dx, dy] = [cx - bx, cy - by];
-          if (Math.hypot(dx, dy) < 1e-3) [dx, dy] = [Math.cos(theta), Math.sin(theta)];
+          if (Math.hypot(dx, dy) < 0.15) {
+            // at the end of the path, or turning in place: face the middle of the room it heads for
+            const f = roomFrame(drive.room);
+            [dx, dy] = [f.centre[0] - cx, f.centre[1] - cy];
+          }
+          if (Math.hypot(dx, dy) < 0.15) {
+            const [bx, by] = route.at(Math.max(0, p - ahead));
+            [dx, dy] = [cx - bx, cy - by];
+          }
           const n = Math.hypot(dx, dy) || 1;
           const [wx, , wz] = modelToWorld(at, c, [cx, cy]);
           const fx = dx / n;
           const fz = -dy / n;
-          out.pos.set(wx - fx * 1.1, 1.2, wz - fz * 1.1);
-          out.target.set(wx + fx * 3, 0.6, wz + fz * 3);
-          out.rate = 6;
-          out.fov = 75;
+          out.pos.set(wx - fx * 1.8, 3.4, wz - fz * 1.8);
+          out.target.set(wx + fx * 0.8, 0.4, wz + fz * 0.8);
+          out.rate = 4;
+          out.fov = 55;
           return;
         }
         const { a } = scratch.current;
@@ -360,7 +367,7 @@ function Stage() {
             <ApartmentScene
               at={at}
               shown={step === "apartment"}
-              ruler={driving ? null : rulerEdge}
+              ruler={driving || ride ? null : rulerEdge}
               unit={unit}
               floor={floor}
               drive={drive}
