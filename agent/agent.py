@@ -754,7 +754,7 @@ class Run:
 
 
 def _queued(msgs: list[dict], since: set[str]) -> list[str]:
-    """Outbox ids of these exact messages that landed after `since` (a listing taken before resuming), oldest first."""
+    """Outbox ids of these exact messages that landed after `since` (a listing taken before resuming), in outbox order."""
     box = data_dir() / "outbox"
     if not box.exists():
         return []
