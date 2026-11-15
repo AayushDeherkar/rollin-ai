@@ -201,7 +201,8 @@ def match_answers(rooms: list[dict], text: str, answers: list[dict], questions: 
             target = None
             if m and 1 <= int(m.group(1)) <= len(questions):    # it answers that question, or no room at all
                 q = (questions[int(m.group(1)) - 1] or "").lower()
-                target = next((by_key[k] for k in sorted(by_key, key=len, reverse=True) if f"the {k} door" in q), None)
+                target = next((by_key[k] for k in sorted(by_key, key=len, reverse=True)
+                               if f"the {k} door" in q or f'marked "{k}"' in q), None)
             else:
                 low = line.lower()
                 target = next((by_key[k] for k in sorted(by_key, key=len, reverse=True)

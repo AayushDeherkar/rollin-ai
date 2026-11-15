@@ -312,11 +312,49 @@ def test_shortlist_is_never_empty_when_the_model_skips_geometry(data):
     assert r.ensure_shortlist((27.0, 42.0)) == []                        # geometry ran: nothing added
 
 
+def numbered(text: str) -> list[str]:
+    return [m.group(2) for m in map(A.NUMBERED_Q.match, text.splitlines()) if m]
+
+
 def test_draft_adds_the_unknowns_itself(data):
     d = A.draft_landlord_message("synthetic_demo")
     assert "closet door" in d["text"] and A.ENTRANCE_Q in d["text"] and d["text"].startswith("Hi, this is an AI")
-    extra = A.draft_landlord_message("synthetic_demo", ["Is there parking?", A.ENTRANCE_Q])
-    assert extra["text"].count(A.ENTRANCE_Q) == 1 and "Is there parking?" in extra["text"]
+    extra = A.draft_landlord_message("synthetic_demo", ["Is there a pool lift for residents?", A.ENTRANCE_Q])
+    assert extra["text"].count(A.ENTRANCE_Q) == 1 and "Is there a pool lift for residents?" in extra["text"]
+
+
+def test_draft_asks_to_widen_a_door_hinges_cannot_fix(data):
+    qs = numbered(A.draft_landlord_message("synthetic_demo", chair_width_in=27)["text"])
+    # synthetic_demo: the bathroom stays blocked with offset hinges; the bedroom is fixed by hinges, so not asked
+    assert qs[0] == ("From the floor plan we estimate a 27-inch-wide wheelchair cannot get through the doorway to the "
+                     "bathroom, even with offset hinges. Would it be possible to widen it?")
+    assert not any("bedroom" in q for q in qs)
+
+
+def test_room_words_for_generic_labels_and_order():
+    assert A._room_words("Bathroom 2") == "the bathroom" and A._room_words("Other") == 'the room marked "Other" on the floor plan'
+    assert A._door_words("Other") == 'the door to the room marked "Other"' and A._door_words("Closet") == "the closet door"
+    assert sorted(["the closet", "the bedroom", "the bathroom"], key=A._room_rank) == ["the bathroom", "the bedroom", "the closet"]
+
+
+def test_draft_questions_are_complete_and_capped_at_four(data):
+    (data / "cache/aerial_x.findings.json").write_text(json.dumps({"findings": [
+        {"item": i, "question": "Are curb ramps visible?", "answer": "unclear"}
+        for i in ("curb_ramps", "accessible_parking", "walkways_to_buildings")]}))
+    (data / "cache/aerial_synthetic_demo.json").write_text(json.dumps(
+        {"sid": "synthetic_demo", "image": "aerial_x.jpg", "findings_file": "aerial_x.findings.json"}))
+    d = A.draft_landlord_message("synthetic_demo", ["curb ramps", "1. elevator", "Elevator?", "Is there a pool lift?"])
+    qs = numbered(d["text"])
+    assert len(qs) == 4
+    for q in qs:
+        assert "?" in q and len(q.split()) >= 6 and "visible" not in q, q     # office wording, not photo wording
+    assert "curb ramps" not in [q.lower() for q in qs] and "elevator" not in [q.lower() for q in qs]
+    assert qs[1] == A.ENTRANCE_Q and "closet door" in qs[2] and qs[3] == A.AERIAL_ASK["curb_ramps"]
+
+
+def test_fragments_are_never_questions():
+    assert A._full_question("curb ramps") is None and A._full_question("Elevator?") is None
+    assert A._full_question("2. is the laundry room step-free?") == "Is the laundry room step-free?"
 
 
 def test_named_uncached_unit_is_reported_not_dropped(data):

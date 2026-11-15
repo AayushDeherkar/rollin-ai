@@ -297,16 +297,76 @@ def _aerial_unclear(sid: str) -> list[dict]:
         return []
 
 
+MAX_QUESTIONS = 4
+# Unclear aerial items, asked the way a leasing office can answer in one line (the aerial wording is for a photo).
+AERIAL_ASK = {
+    "accessible_parking": "Is there an accessible parking space with a striped access aisle near the building?",
+    "curb_ramps": "Is there a curb ramp between the parking area and the walkway to the building entrance?",
+    "walkways_to_buildings": "Is there a continuous paved, step-free path from the parking area to the building entrance?",
+    "exterior_stairs": "Can the unit's front door be reached without using any exterior stairs?",
+}
+FULL_QUESTION = re.compile(r"^(Is|Are|Can|Could|Would|Will|Do|Does|Did|Has|Have|What|Which|Where|When|How|Who)\b"
+                           r"[^?]{8,200}\?$")
+
+
+def _full_question(q) -> str | None:
+    """A complete question a leasing office can answer in one line, or None (fragments like "curb ramps")."""
+    q = re.sub(r"\s+", " ", q).strip() if isinstance(q, str) else ""
+    q = re.sub(r"^\d{1,2}[.)]\s*", "", q)
+    q = q[:1].upper() + q[1:]
+    return q if FULL_QUESTION.match(q) and len(q.split()) >= 4 else None
+
+
 def unit_questions(sid: str, chair_width_in: float, chair_length_in: float) -> list[str]:
-    """What the scan cannot answer for one unit, from engine output and cached checks: every unknown room's door,
-    every unclear aerial item, and the entrance."""
+    """What the scan cannot answer for one unit, most important first, at most MAX_QUESTIONS:
+    1. one question naming the doorways that stay blocked even with offset hinges: can they be widened? (always
+       asked when there are any; the most important rooms first, at most three named)
+    2. the entrance and elevator;
+    3. each unknown room's door width (rooms the office already answered are skipped);
+    4. unclear aerial items, phrased for the office."""
     from agent.outbox import answers_for
     answered = {r["room_id"] for a in answers_for(sid) for r in a.get("rooms", [])}
-    qs = [f"What is the clear width of the {r['label'].lower()} door?"
-          for r in run_fit(sid, chair_width_in, chair_length_in).get("rooms", [])
-          if r["status"] == "unknown" and r.get("room_id") not in answered]
-    qs += [f["question"] for f in _aerial_unclear(sid) if f.get("question")]
-    return list(dict.fromkeys(qs + [ENTRANCE_Q]))
+    blocked = sorted({_room_words(r["label"]): r for r in run_fit(sid, chair_width_in, chair_length_in, True)
+                      .get("rooms", []) if r["status"] == "blocked"}, key=_room_rank)
+    widen = []
+    if blocked:
+        names = blocked[:3]
+        listed = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+        widen = [f"From the floor plan we estimate a {chair_width_in:g}-inch-wide wheelchair cannot get through the "
+                 f"doorway{'s' if len(names) > 1 else ''} to {listed}, even with offset hinges. Would it be possible "
+                 f"to widen {'them' if len(names) > 1 else 'it'}?"]
+    unknown = [f"What is the clear width of {_door_words(r['label'])}, in inches?"
+               for r in run_fit(sid, chair_width_in, chair_length_in).get("rooms", [])
+               if r["status"] == "unknown" and r.get("room_id") not in answered]
+    aerial = [AERIAL_ASK[f["item"]] for f in _aerial_unclear(sid) if f.get("item") in AERIAL_ASK]
+    return list(dict.fromkeys(widen + [ENTRANCE_Q] + unknown + aerial))[:MAX_QUESTIONS]
+
+
+ROOM_RANK = ("bathroom", "bath", "bedroom", "kitchen", "living", "dining", "laundry", "hallway", "office")
+GENERIC = {"other", "unlabelled", "unlabeled", "room", ""}
+
+
+def _plain(label: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[\d#]+", " ", label or "")).strip().lower()
+
+
+def _room_words(label: str) -> str:
+    """'Bathroom 2' -> 'the bathroom'; 'Other' -> 'the room marked "Other" on the floor plan'."""
+    p = _plain(label)
+    return f'the room marked "{(label or "").strip() or "unlabelled"}" on the floor plan' if p in GENERIC else f"the {p}"
+
+
+def _door_words(label: str) -> str:
+    """Keeps 'the <label> door' (POST /api/answers matches numbered replies on it) unless the label is generic."""
+    p = (label or "").strip().lower()
+    return f'the door to the room marked "{(label or "").strip() or "unlabelled"}"' if _plain(label) in GENERIC \
+        else f"the {p} door"
+
+
+def _room_rank(words: str) -> int:
+    if words.startswith("the room marked"):         # unlabelled rooms last
+        return len(ROOM_RANK) + 1
+    return next((i for i, k in enumerate(ROOM_RANK) if k in words), len(ROOM_RANK))
 
 
 _DRAFTED: dict[str, set[str]] = {}              # recipient label -> every unit drafted for it (names repeat)
@@ -315,12 +375,15 @@ NUMBERED_Q = re.compile(r"^\s*(\d{1,2})\.\s+(.+?)\s*$")
 
 def draft_landlord_message(sid: str, questions: list[str] | None = None, chair_width_in: float | None = None) -> dict:
     """Draft (do not send) a short message to a unit's leasing office asking only what the scan cannot answer.
-    The unknown-door, unclear-aerial and entrance questions are added automatically; pass only extra questions."""
+    The widen-doorway, entrance, unknown-door and unclear-aerial questions are added automatically, at most four in
+    all; pass only extra questions, each a complete sentence ending in "?" (fragments are dropped)."""
     w, l = _chair(chair_width_in, None)
     name = get_unit(sid).get("name") or sid
-    qs = list(dict.fromkeys(unit_questions(sid, w, l) + [q for q in questions or [] if isinstance(q, str) and q.strip()]))
-    lines = [with_ai_disclosure(f"My client uses a {w:g}-inch-wide power wheelchair and is interested "
-                                f"in your {name} floor plan."), "Could you help with a few questions?"]
+    extra = [q for q in map(_full_question, questions or []) if q]
+    qs = list(dict.fromkeys(unit_questions(sid, w, l) + extra))[:MAX_QUESTIONS]
+    lines = [with_ai_disclosure(f"My client uses a wheelchair {w:g} inches wide and is interested "
+                                f"in your {name} floor plan."),
+             "Could you help with a few quick questions? A one-line answer to each is plenty."]
     lines += [f"{i}. {q}" for i, q in enumerate(qs, 1)]
     lines.append("Thank you!")
     to = f"Leasing office ({name})"
@@ -386,7 +449,8 @@ def subagents(model: Any) -> list[dict]:
          "tools": [aerial_check], "model": model},
         {"name": "outreach", "description": "Drafts (never sends) a message to a leasing office.",
          "system_prompt": "Call draft_landlord_message once with the unit id (it adds the standard questions itself; pass "
-                          "`questions` only for something extra the person asked) and return the draft text, recipient and sid "
+                          "`questions` only for something extra the person asked, each a complete question ending in ?) and return the "
+                          "draft text, recipient and sid "
                           "verbatim. You cannot send messages.",
          "tools": [draft_landlord_message], "model": model},
     ]
