@@ -16,7 +16,7 @@ export function FallbackNotice() {
     <div role="status" className="fixed bottom-6 left-6 z-50 flex max-w-[64ch] items-start gap-4 border border-rule-strong bg-paper-lift px-5 py-3 text-base">
       <p>
         The 3D stage could not run here: {why}. This is the plain layout with the same results.{" "}
-        <Link href="/" className="font-semibold underline underline-offset-4">
+        <Link href="/app" className="font-semibold underline underline-offset-4">
           Try the 3D stage
         </Link>
       </p>
