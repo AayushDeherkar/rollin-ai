@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Deliverer, sameHandle, type DeliveryState, type LeasingLine, type OutboxApi, type OutboxItem } from "./deliver.ts";
 
+const OFFICE = "+15550100000";
 const T0 = new Date("2026-11-15T01:00:00Z");
 const item = (id: string, queued: string, sid: string | null = "synthetic_demo"): OutboxItem => ({
   id,
@@ -31,6 +32,7 @@ function rig(items: OutboxItem[], state: DeliveryState = { line: null, lastDeliv
     },
   };
   const d = new Deliverer(
+    OFFICE,
     api,
     async (line, text, key) => {
       sent.push({ line, text, key });
@@ -48,7 +50,7 @@ test("nothing is sent until the leasing office has texted the line", async () =>
   await r.d.tick();
   assert.equal(r.sent.length, 0);
   assert.match(r.logs.join("\n"), /has to text this line first/);
-  await r.d.fromOffice("space1", "agent1", "Hi, this is the leasing office");
+  await r.d.fromOffice(OFFICE, "space1", "agent1", "Hi, this is the leasing office");
   await r.d.tick();
   assert.equal(r.sent.length, 1);
   assert.equal(r.sent[0].line.spaceId, "space1");
@@ -59,7 +61,7 @@ test("nothing is sent until the leasing office has texted the line", async () =>
 });
 
 test("messages queued before the bridge started are never sent", async () => {
-  const r = rig([item("20261114T200000_bbbbbb", "2026-11-14T20:00:00Z")], { line: { spaceId: "s", agentId: "a", openedAt: "x" }, lastDelivered: null });
+  const r = rig([item("20261114T200000_bbbbbb", "2026-11-14T20:00:00Z")], { line: { handle: OFFICE, spaceId: "s", agentId: "a", openedAt: "x" }, lastDelivered: null });
   await r.d.start();
   await r.d.tick();
   await r.d.tick();
@@ -68,10 +70,10 @@ test("messages queued before the bridge started are never sent", async () => {
 });
 
 test("a reply after a delivery is forwarded as the answer to that message", async () => {
-  const r = rig([item("20261115T010500_cccccc", "2026-11-15T01:05:00Z")], { line: { spaceId: "s", agentId: "a", openedAt: "x" }, lastDelivered: null });
+  const r = rig([item("20261115T010500_cccccc", "2026-11-15T01:05:00Z")], { line: { handle: OFFICE, spaceId: "s", agentId: "a", openedAt: "x" }, lastDelivered: null });
   await r.d.start();
   await r.d.tick();
-  const said = await r.d.fromOffice("s", "a", "1. The closet door is 30 inches");
+  const said = await r.d.fromOffice(OFFICE, "s", "a", "1. The closet door is 30 inches");
   assert.deepEqual(r.answers[0], { outbox_id: "20261115T010500_cccccc", sid: "synthetic_demo", text: "1. The closet door is 30 inches", from: "leasing office" });
   assert.match(said, /Closet/);
 });
@@ -81,4 +83,15 @@ test("handles compare loosely", () => {
   assert.ok(sameHandle("Office@Example.com", "office@example.com"));
   assert.ok(!sameHandle("+15550100000", "+15550100001"));
   assert.ok(!sameHandle("", ""));
+});
+
+test("a line saved for another number is dropped, so nothing goes to it", async () => {
+  const r = rig([item("20261115T010500_dddddd", "2026-11-15T01:05:00Z")], {
+    line: { handle: "+15550100099", spaceId: "old", agentId: "a", openedAt: "x" },
+    lastDelivered: { id: "20261115T000000_eeeeee", sid: null },
+  });
+  await r.d.start();
+  await r.d.tick();
+  assert.equal(r.sent.length, 0);
+  assert.deepEqual(r.saved(), { line: null, lastDelivered: null });
 });

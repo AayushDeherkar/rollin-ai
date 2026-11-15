@@ -16,6 +16,7 @@ export interface DeliveredEvent {
   to: string;
   via: string | null;
   delivered_at: string;
+  /** a status line ("Delivered to … via …"), not the message */
   text: string;
 }
 
@@ -82,10 +83,13 @@ export function useOutboxEvents(enabled = true): { delivered: DeliveredEvent[]; 
 
 const squash = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
 
-/** The delivery of an approved draft: the bridge sends the text as queued (the AI disclosure may be added in front). */
-export function deliveryOf(draft: string | undefined, delivered: DeliveredEvent[]): DeliveredEvent | null {
-  if (!draft) return null;
-  const d = squash(draft);
-  if (d.length < 20) return null;
-  return delivered.find((e) => squash(e.text).includes(d) || d.includes(squash(e.text))) ?? null;
+/**
+ * The delivery of an approved message, matched by its recipient (the approval's `to.label` is what
+ * send_message queues as `to`), and delivered after the approval was given. The approve result
+ * carries no outbox id yet, so this is the closest match the contract allows.
+ */
+export function deliveryOf(to: string | undefined, decidedAt: number | null, delivered: DeliveredEvent[]): DeliveredEvent | null {
+  if (!to || decidedAt === null) return null;
+  const want = squash(to);
+  return delivered.find((e) => squash(e.to) === want && Date.parse(e.delivered_at) >= decidedAt - 5000) ?? null;
 }

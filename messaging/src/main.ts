@@ -41,6 +41,7 @@ const conversations = new Conversations(webRollin(webUrl), publicUrl, "imsg");
 const log = (s: string) => console.log(`${new Date().toISOString()} ${s}`);
 
 const deliverer = new Deliverer(
+  leasing,
   webOutbox(webUrl),
   (line, text, key) => photon.send(line.spaceId, line.agentId, text, key),
   fileState(stateDir),
@@ -59,7 +60,7 @@ await photon.listen(async (m) => {
   if (leasing && sameHandle(m.from, leasing)) {
     // the leasing office: opens the line, or answers the last message delivered; never a search
     try {
-      log(await deliverer.fromOffice(m.spaceId, m.agentId, m.text));
+      log(await deliverer.fromOffice(m.from, m.spaceId, m.agentId, m.text));
     } catch (err) {
       log(`Could not log the leasing office's reply: ${err instanceof Error ? err.message : String(err)}`);
     }

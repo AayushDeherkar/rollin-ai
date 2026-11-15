@@ -21,7 +21,8 @@ export interface Run {
 
 export type Decision =
   | { state: "sending"; approved: boolean }
-  | { state: "done"; result: ApproveResult }
+  /** `at`: when the person decided (ms), so a later delivery can be matched to it */
+  | { state: "done"; result: ApproveResult; at?: number }
   | { state: "error"; approved: boolean; message: string };
 
 export const ALREADY_DECIDED = "already decided";
@@ -107,6 +108,7 @@ export function useAgentRun() {
   }, []);
 
   const decide = useCallback(async (actionId: string, approved: boolean) => {
+    const at = Date.now();
     setDecisions((d) => ({ ...d, [actionId]: { state: "sending", approved } }));
     try {
       const res = await fetch("/api/approve", {
@@ -121,7 +123,7 @@ export function useAgentRun() {
         return;
       }
       if (!res.ok) throw new Error(body && typeof body.detail === "string" ? body.detail : `HTTP ${res.status}`);
-      setDecisions((d) => ({ ...d, [actionId]: { state: "done", result: body as ApproveResult } }));
+      setDecisions((d) => ({ ...d, [actionId]: { state: "done", result: body as ApproveResult, at } }));
     } catch (err) {
       setDecisions((d) => ({ ...d, [actionId]: { state: "error", approved, message: err instanceof Error ? err.message : String(err) } }));
     }

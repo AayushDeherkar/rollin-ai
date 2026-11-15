@@ -25,6 +25,8 @@ export interface OutboxItem {
 
 /** The conversation with the leasing office, learnt from its first text. */
 export interface LeasingLine {
+  /** who opened it: a saved line is used only while this is still the configured office */
+  handle: string;
   spaceId: string;
   agentId: string;
   /** when the office first texted (ISO 8601) */
@@ -110,6 +112,8 @@ export class Deliverer {
   private busy = false;
 
   constructor(
+    /** the configured leasing office (LEASING_OFFICE_NUMBER) */
+    private office: string,
     private api: OutboxApi,
     /** send a text into the leasing office's conversation; the key makes a retry a no-op */
     private send: (line: LeasingLine, text: string, key: string) => Promise<void>,
@@ -121,6 +125,12 @@ export class Deliverer {
 
   async start(): Promise<void> {
     this.state = await this.store.load();
+    const line = this.state.line;
+    if (line && !(typeof line.handle === "string" && sameHandle(line.handle, this.office))) {
+      // opened by another number (the setting changed): that number is not the office any more
+      this.state = { line: null, lastDelivered: null };
+      await this.store.save(this.state);
+    }
   }
 
   get line(): LeasingLine | null {
@@ -131,9 +141,10 @@ export class Deliverer {
    * A text from the leasing office. The first one opens the line. After a delivery, each one is
    * forwarded as the answer to the last message sent. Returns what happened, for the log.
    */
-  async fromOffice(spaceId: string, agentId: string, text: string): Promise<string> {
+  async fromOffice(handle: string, spaceId: string, agentId: string, text: string): Promise<string> {
+    if (!sameHandle(handle, this.office)) return "Ignored: not the configured leasing office.";
     if (!this.state.line || this.state.line.spaceId !== spaceId) {
-      this.state.line = { spaceId, agentId, openedAt: new Date().toISOString() };
+      this.state.line = { handle, spaceId, agentId, openedAt: new Date().toISOString() };
       await this.store.save(this.state);
       if (!this.state.lastDelivered) return "The leasing office texted: approved messages can now be delivered to it.";
     }
