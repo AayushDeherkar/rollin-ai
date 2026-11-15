@@ -8,6 +8,7 @@
  * motion: the chair is already stopped, no smooth scrolling, no scroll animation.
  */
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
@@ -102,8 +103,8 @@ export function Landing() {
         </div>
 
         <header className="relative z-10 mx-auto flex max-w-[90rem] flex-wrap items-center justify-between gap-4 px-[var(--gutter)] pt-[var(--gutter)]">
-          <Link href="/" className="display text-2xl font-bold">
-            Rollin’
+          <Link href="/" aria-label="Rollin’, home" className="shrink-0">
+            <Image src="/logo.png" alt="" width={56} height={56} priority className="size-14" />
           </Link>
           <nav aria-label="Page" className="flex flex-wrap items-center gap-x-6 gap-y-2 text-base">
             <a href="#how" className="text-ink-soft hover:text-ink max-lg:hidden">

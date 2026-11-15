@@ -23,6 +23,7 @@ export const metadata: Metadata = {
   title: "Rollin'",
   description:
     "Drives your wheelchair through measured floor plans, shows which door stops it, and asks the landlord about the rest.",
+  icons: { icon: "/logo.png", apple: "/apple-touch-icon.png" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
