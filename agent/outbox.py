@@ -32,7 +32,7 @@ OUTBOX_ID = re.compile(r"^\d{8}T\d{6}_[0-9a-f]{6}$")
 INCH = r"(?:\"|”|''|inch(?:es)?\b|in\b\.?(?!\s+(?:the|a|an|our|this|that|unit|building)\b))"
 FT_IN = re.compile(r"\b(\d)\s*(?:'|’|ft\.?|feet|foot)\s*-?\s*(\d{1,2}(?:\.\d+)?)\s*" + INCH + "?", re.I)
 INCHES = re.compile(r"(?<![\d'’.])(\d{2}(?:\.\d+)?)\s*-?\s*" + INCH, re.I)
-NOT_WIDTH = re.compile(r"^[\s,-]*(?:tall|high|height|long|length|deep|depth)\b", re.I)
+NOT_WIDTH = re.compile(r"^[\s-]*(?:tall|high|height|long|length|deep|depth)\b", re.I)
 WIDTH_IN = (18.0, 60.0)                         # plausible door clear widths; anything else is not taken as one
 NUMBERED = re.compile(r"^\s*(\d{1,2})[.)]\s*(.+)$")
 _lock = threading.Lock()
@@ -200,7 +200,7 @@ def match_answers(rooms: list[dict], text: str, answers: list[dict], questions: 
             m = NUMBERED.match(line)
             target = None
             if m and 1 <= int(m.group(1)) <= len(questions):    # it answers that question, or no room at all
-                q = questions[int(m.group(1)) - 1].lower()
+                q = (questions[int(m.group(1)) - 1] or "").lower()
                 target = next((by_key[k] for k in sorted(by_key, key=len, reverse=True) if f"the {k} door" in q), None)
             else:
                 low = line.lower()
@@ -240,6 +240,8 @@ def apply_answers(result: dict, sid: str) -> dict:
     for floor in out.get("floors", []):
         for room in floor.get("rooms", []):
             a = latest.get(room.get("room_id"))
+            if a:
+                a = {**a, "clear_in": plausible(a.get("clear_in"))}     # files written before validation
             if a and room.get("status") == "unknown":
                 room["basis"] = "asked"
                 room["answer"] = {"clear_in": ({"value": a["clear_in"], "unit": "in", "basis": "asked", "source": "landlord"}

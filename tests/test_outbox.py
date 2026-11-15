@@ -119,7 +119,7 @@ def test_send_message_never_guesses_between_units_with_the_same_name(data):
 @pytest.mark.parametrize("line,width", [
     ("It is 2'10\" wide", 34.0), ("80 inches tall and 28 inches wide", 28.0), ("a 32-inch door", 32.0),
     ("29.5\" clear", 29.5), ("3 ft 0 in", 36.0), ("Unit 12 in the building", None),
-    ("28 in wide, 30 in frame", None), ("It's wide enough", None)])
+    ("28 in wide, 30 in frame", None), ("It's wide enough", None), ("Width 30 in, height 80 in", 30.0)])
 def test_reply_widths(line, width):
     from agent.outbox import _inches
     assert _inches(line) == width
@@ -132,6 +132,26 @@ def test_nan_or_absurd_structured_width_is_not_stored(client):
     client.post("/api/answers", json={"sid": "synthetic_demo", "answers": [{"room": "closet", "clear_width_in": 300}]})
     assert client.get("/api/units/synthetic_demo").status_code == 200
     assert closet(client)["answer"]["clear_in"]["value"] is None
+
+
+def test_stored_nan_from_an_old_answer_file_does_not_break_the_unit(data, client):
+    (data / "answers").mkdir(exist_ok=True)
+    (data / "answers" / "20261114T000000_aaaaaa.json").write_text(
+        '{"id": "20261114T000000_aaaaaa", "sid": "synthetic_demo", "rooms": [{"room_id": "closet", "label": "Closet", '
+        '"clear_in": NaN, "said": ""}], "received_at": "2026-11-14T00:00:00Z"}')
+    assert client.get("/api/units/synthetic_demo").status_code == 200
+    assert closet(client)["answer"]["clear_in"] == {"value": None, "basis": "unknown"}
+
+
+def test_reply_numbers_follow_the_numbers_as_sent(data, client):
+    from agent import agent as A
+    A.send_message("Leasing office (Synthetic)", "Hi\n2. What is the clear width of the closet door?\n3. Step-free?",
+                   sid="synthetic_demo")
+    rec_path = next(p for p in (data / "outbox").glob("*.json") if p.stem != OID)
+    assert json.loads(rec_path.read_text())["questions"] == [None, "What is the clear width of the closet door?",
+                                                             "Step-free?"]
+    r = client.post("/api/answers", json={"outbox_id": rec_path.stem, "text": "1. hi\n2. 31 in"}).json()
+    assert [x["room_id"] for x in r["rooms"]] == ["closet"] and r["rooms"][0]["clear_in"] == 31.0
 
 
 def test_numbered_line_for_a_non_door_question_matches_no_room(client):

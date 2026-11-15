@@ -330,7 +330,7 @@ def draft_landlord_message(sid: str, questions: list[str] | None = None, chair_w
 
 def message_unit(to: str, sid: str | None) -> str | None:
     """The unit a message is about: the sid passed with it, else the only unit ever drafted for that recipient."""
-    if sid and (data_dir() / "cache" / f"{sid}.json").exists():
+    if sid and re.fullmatch(r"[A-Za-z0-9_]{3,40}", sid) and (data_dir() / "cache" / f"{sid}.json").exists():
         return sid
     drafted = _DRAFTED.get(to, set())
     return next(iter(drafted)) if len(drafted) == 1 else None
@@ -342,7 +342,9 @@ def send_message(to: str, text: str, sid: str | None = None) -> dict:
     box = data_dir() / "outbox"
     box.mkdir(parents=True, exist_ok=True)
     text = with_ai_disclosure(text)
-    questions = [m.group(2) for m in map(NUMBERED_Q.match, text.splitlines()) if m]   # exactly as the office reads them
+    numbered = {int(m.group(1)): m.group(2) for m in map(NUMBERED_Q.match, text.splitlines()) if m}
+    # questions[n-1] is the line the office reads as "n." (null where the text skips a number)
+    questions = [numbered.get(n) for n in range(1, max(numbered, default=0) + 1)]
     rec = {"to": to, "text": text, "queued_at": datetime.now(timezone.utc).isoformat(), "status": "pending",
            "sid": message_unit(to, sid), "questions": questions}
     path = box / f"{datetime.now(timezone.utc):%Y%m%dT%H%M%S}_{uuid.uuid4().hex[:6]}.json"

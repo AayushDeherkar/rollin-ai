@@ -224,7 +224,7 @@ def answers(body: AnswerIn) -> dict:
     path = data_dir() / "cache" / f"{sid}.json"
     if not path.exists():
         raise HTTPException(404, f"{sid} is not cached")
-    chair = rec.get("chair_in") or [27.0, 42.0]
+    chair = [27.0, 42.0]                            # unknown rooms (no measured door) do not depend on the chair
     fit = _fit(sid, float(chair[0]), float(chair[1]), False, path.stat().st_mtime)
     rooms = [r for f in fit.get("floors", []) for r in f.get("rooms", [])]
     logged = outbox.log_answer(sid, rooms, body.text, body.answers, body.outbox_id, questions, body.sender,
