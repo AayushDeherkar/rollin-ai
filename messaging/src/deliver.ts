@@ -164,6 +164,7 @@ export class Deliverer {
   private skipped = new Set<string>();
   private failed = new Map<string, number>();
   private waitingLogged = false;
+  private waitingTold = false;
   private lastError = "";
   private busy = false;
   /** send the office’s findings into a client’s conversation; unset, they are only logged */
@@ -280,14 +281,17 @@ export class Deliverer {
       if (!fresh.length) return;
       const line = this.state.line;
       if (!line) {
-        if (!this.waitingLogged) {
-          this.log(`${fresh.length} approved message(s) waiting: the leasing office has to text this line first.`);
+        if (!this.waitingLogged) this.log(`${fresh.length} approved message(s) waiting: the leasing office has to text this line first.`);
+        this.waitingLogged = true;
+        // once, as soon as a client conversation is known (it may text after the first tick)
+        if (!this.waitingTold && this.state.client) {
+          this.waitingTold = true;
           await this.tellClient(WAITING_TO_CLIENT, `rollin:waiting:${fresh[0].id}`);
         }
-        this.waitingLogged = true;
         return;
       }
       this.waitingLogged = false;
+      this.waitingTold = false;
       for (const item of fresh) {
         // a failing item is retried a few times, then left pending for a person to look at
         if ((this.failed.get(item.id) ?? 0) >= 3) continue;
