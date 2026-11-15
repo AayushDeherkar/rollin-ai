@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import re
 import threading
 import uuid
@@ -28,7 +29,11 @@ from agent.chat import data_dir, now, sse
 
 router = APIRouter()
 OUTBOX_ID = re.compile(r"^\d{8}T\d{6}_[0-9a-f]{6}$")
-INCHES = re.compile(r"(\d{2}(?:\.\d+)?)\s*(?:in\b|inch(?:es)?\b|\"|”|'')", re.I)
+INCH = r"(?:\"|”|''|inch(?:es)?\b|in\b\.?(?!\s+(?:the|a|an|our|this|that|unit|building)\b))"
+FT_IN = re.compile(r"\b(\d)\s*(?:'|’|ft\.?|feet|foot)\s*-?\s*(\d{1,2}(?:\.\d+)?)\s*" + INCH + "?", re.I)
+INCHES = re.compile(r"(?<![\d'’.])(\d{2}(?:\.\d+)?)\s*-?\s*" + INCH, re.I)
+NOT_WIDTH = re.compile(r"^[\s,-]*(?:tall|high|height|long|length|deep|depth)\b", re.I)
+WIDTH_IN = (18.0, 60.0)                         # plausible door clear widths; anything else is not taken as one
 NUMBERED = re.compile(r"^\s*(\d{1,2})[.)]\s*(.+)$")
 _lock = threading.Lock()
 
@@ -68,11 +73,15 @@ class Hub:
             self.subs.add(sub)
         try:
             yield ": rollin events\n\n"
+            replayed = set()
             for ev in self.since(last_id):
+                replayed.add(ev["id"])
                 yield sse(ev)
             while True:
                 try:
-                    yield sse(await asyncio.wait_for(sub[1].get(), timeout=15))
+                    ev = await asyncio.wait_for(sub[1].get(), timeout=15)
+                    if ev["id"] not in replayed:    # published during the replay: already sent
+                        yield sse(ev)
                 except asyncio.TimeoutError:
                     yield ": keep-alive\n\n"
         finally:
@@ -137,9 +146,27 @@ def mark_delivered(outbox_id: str, via: str, detail: str | None = None) -> dict:
 
 # ---------------------------------------------------------------- answers
 
+def plausible(v) -> float | None:
+    """A finite number in the door-width range, else None (NaN, heights, unit numbers)."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+        return None
+    return float(v) if WIDTH_IN[0] <= v <= WIDTH_IN[1] else None
+
+
 def _inches(text: str) -> float | None:
-    m = INCHES.search(text)
-    return float(m.group(1)) if m else None
+    """The one door width a line states in inches (2'10" = 34). Heights ("80 in tall") are skipped. If a line
+    states two different widths (frame and clear, say) we cannot tell which is meant, so it stays unknown."""
+    vals, spans = set(), []
+    for m in FT_IN.finditer(text):
+        spans.append(m.span())
+        if not NOT_WIDTH.match(text[m.end():]):
+            vals.add(plausible(int(m.group(1)) * 12 + float(m.group(2))))
+    for m in INCHES.finditer(text):
+        if any(a <= m.start() < b for a, b in spans) or NOT_WIDTH.match(text[m.end():]):
+            continue
+        vals.add(plausible(float(m.group(1))))
+    vals.discard(None)
+    return vals.pop() if len(vals) == 1 else None
 
 
 def match_answers(rooms: list[dict], text: str, answers: list[dict], questions: list[str]) -> tuple[list[dict], list[str]]:
@@ -165,19 +192,17 @@ def match_answers(rooms: list[dict], text: str, answers: list[dict], questions: 
     for a in answers:
         rs = by_key.get(str(a.get("room", "")).lower())
         if rs:
-            w = a.get("clear_width_in")
-            hit(rs, float(w) if isinstance(w, (int, float)) and not isinstance(w, bool) else None,
-                str(a.get("answer") or ""))
+            hit(rs, plausible(a.get("clear_width_in")), str(a.get("answer") or ""))
         else:
             unmatched.append(str(a.get("room", "")))
     if not answers:
         for line in (ln for ln in text.splitlines() if ln.strip()):
             m = NUMBERED.match(line)
             target = None
-            if m and 1 <= int(m.group(1)) <= len(questions):
+            if m and 1 <= int(m.group(1)) <= len(questions):    # it answers that question, or no room at all
                 q = questions[int(m.group(1)) - 1].lower()
                 target = next((by_key[k] for k in sorted(by_key, key=len, reverse=True) if f"the {k} door" in q), None)
-            if target is None:
+            else:
                 low = line.lower()
                 target = next((by_key[k] for k in sorted(by_key, key=len, reverse=True)
                                if re.search(rf"\b{re.escape(k)}\b", low)), None)

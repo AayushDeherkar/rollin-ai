@@ -95,12 +95,48 @@ def test_answered_rooms_are_not_asked_again(data, client, monkeypatch):
     assert not any("closet" in q for q in A.unit_questions("synthetic_demo", 27, 42))
 
 
-def test_send_message_records_the_drafted_unit(data):
+def test_send_message_records_unit_and_the_questions_as_sent(data):
     from agent import agent as A
-    A._DRAFTS["Leasing office (Synthetic)"] = {"sid": "synthetic_demo", "questions": ["q1"], "chair_in": [27.0, 42.0]}
-    A.send_message("Leasing office (Synthetic)", "Hello")
-    recs = [json.loads(p.read_text()) for p in (data / "outbox").glob("*.json") if p.stem != OID]
-    assert recs[0]["sid"] == "synthetic_demo" and recs[0]["questions"] == ["q1"] and recs[0]["status"] == "pending"
+    A._DRAFTED.clear()
+    A.send_message("Leasing office (Synthetic)", "Hi\n1. What is the clear width of the closet door?\n2. Step-free?",
+                   sid="synthetic_demo")
+    rec = next(json.loads(p.read_text()) for p in (data / "outbox").glob("*.json") if p.stem != OID)
+    assert rec["sid"] == "synthetic_demo" and rec["status"] == "pending"
+    assert rec["questions"] == ["What is the clear width of the closet door?", "Step-free?"]
+
+
+def test_send_message_never_guesses_between_units_with_the_same_name(data):
+    from agent import agent as A
+    A._DRAFTED.clear()
+    A._DRAFTED["Leasing office (1BR)"] = {"synthetic_demo"}
+    assert A.message_unit("Leasing office (1BR)", None) == "synthetic_demo"
+    A._DRAFTED["Leasing office (1BR)"].add("other_unit")
+    assert A.message_unit("Leasing office (1BR)", None) is None            # two units share the name
+    assert A.message_unit("Leasing office (1BR)", "synthetic_demo") == "synthetic_demo"
+    assert A.message_unit("Somebody else", None) is None
+
+
+@pytest.mark.parametrize("line,width", [
+    ("It is 2'10\" wide", 34.0), ("80 inches tall and 28 inches wide", 28.0), ("a 32-inch door", 32.0),
+    ("29.5\" clear", 29.5), ("3 ft 0 in", 36.0), ("Unit 12 in the building", None),
+    ("28 in wide, 30 in frame", None), ("It's wide enough", None)])
+def test_reply_widths(line, width):
+    from agent.outbox import _inches
+    assert _inches(line) == width
+
+
+def test_nan_or_absurd_structured_width_is_not_stored(client):
+    r = client.post("/api/answers", content='{"sid": "synthetic_demo", "answers": [{"room": "Closet", '
+                    '"clear_width_in": NaN}]}', headers={"content-type": "application/json"})
+    assert r.status_code == 200 and r.json()["rooms"][0]["clear_in"] is None
+    client.post("/api/answers", json={"sid": "synthetic_demo", "answers": [{"room": "closet", "clear_width_in": 300}]})
+    assert client.get("/api/units/synthetic_demo").status_code == 200
+    assert closet(client)["answer"]["clear_in"]["value"] is None
+
+
+def test_numbered_line_for_a_non_door_question_matches_no_room(client):
+    r = client.post("/api/answers", json={"outbox_id": OID, "text": "2. The closet is by the entrance, 30 in."}).json()
+    assert r["rooms"] == [] and r["unmatched"] == ["2. The closet is by the entrance, 30 in."]
 
 
 def test_events_stream_replays_after_last_id_and_pushes_new():
@@ -118,6 +154,16 @@ def test_events_stream_replays_after_last_id_and_pushes_new():
         h.publish("answer", outbox_id="c")
         assert "event: answer" in await asyncio.wait_for(nxt, 2)
         await gen.aclose()
+        gen2 = h.stream(first["id"])                               # an event published mid-replay is sent once
+        await gen2.__anext__()
+        h.publish("delivered", outbox_id="d")
+        seen = [await gen2.__anext__() for _ in range(3)]
+        nxt = asyncio.ensure_future(gen2.__anext__())
+        await asyncio.sleep(0.05)
+        assert sum('"outbox_id":"d"' in x for x in seen) == 1 and not nxt.done()
+        nxt.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await nxt
         assert not h.subs
 
     asyncio.run(go())
