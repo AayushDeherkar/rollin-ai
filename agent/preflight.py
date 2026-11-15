@@ -70,7 +70,7 @@ def check_data(rep: Report) -> None:
     from agent.outbox import archive_unlinked
     stale = archive_unlinked(dry_run=True)
     rep.add("data", not stale, "outbox: no stale messages" if not stale else
-            f"outbox: {len(stale)} pending message(s) with no unit; run `python -m agent.outbox clean`")
+            f"outbox: {len(stale)} old test message(s) with no unit; run `python -m agent.outbox clean`")
     for a in demo_units.ALIASES:
         sid = aliases.get(a)
         if isinstance(sid, str):
