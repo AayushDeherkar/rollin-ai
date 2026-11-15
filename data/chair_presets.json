@@ -1,0 +1,26 @@
+{
+ "about": "Chair sizes for the chair panel, served by GET /api/insights. Width = occupied width (the chair with its user, elbows and hands included), which is what has to pass a door. Length = unoccupied device length. Both come from measured users in the Anthropometry of Wheeled Mobility study, rounded to 0.1 in from mm. No bariatric preset: no manufacturer spec sheet could be verified.",
+ "checked": "2026-11-14",
+ "presets": [
+  {"name": "Manual wheelchair (average user)", "width_in": 27.0, "length_in": 39.8,
+   "source": {"title": "Anthropometry of Wheeled Mobility Project: Final Report (IDeA Center for the U.S. Access Board, 2010), Fig. 3-3 and Fig. 3-2, manual chairs n=276: mean occupied width 685 mm, mean unoccupied length 1012 mm",
+              "url": "https://idea.ap.buffalo.edu/wp-content/uploads/sites/110/2020/01/AnthropometryofWheeledMobilityProject_FinalReport.pdf",
+              "checked": "2026-11-14"}},
+  {"name": "Manual wheelchair (95th percentile)", "width_in": 30.9, "length_in": 49.8,
+   "source": {"title": "Same report, Fig. 3-3 and Fig. 3-2, manual chairs: 95th percentile occupied width 786 mm, unoccupied length 1264 mm",
+              "url": "https://idea.ap.buffalo.edu/wp-content/uploads/sites/110/2020/01/AnthropometryofWheeledMobilityProject_FinalReport.pdf",
+              "checked": "2026-11-14"}},
+  {"name": "Power wheelchair (average user)", "width_in": 27.8, "length_in": 44.0,
+   "source": {"title": "Same report, Fig. 3-3 and Fig. 3-2, power chairs n=189: mean occupied width 707 mm, mean unoccupied length 1117 mm",
+              "url": "https://idea.ap.buffalo.edu/wp-content/uploads/sites/110/2020/01/AnthropometryofWheeledMobilityProject_FinalReport.pdf",
+              "checked": "2026-11-14"}},
+  {"name": "Power wheelchair (95th percentile)", "width_in": 32.6, "length_in": 52.8,
+   "source": {"title": "Same report, Fig. 3-3 and Fig. 3-2, power chairs: 95th percentile occupied width 827 mm, unoccupied length 1340 mm",
+              "url": "https://idea.ap.buffalo.edu/wp-content/uploads/sites/110/2020/01/AnthropometryofWheeledMobilityProject_FinalReport.pdf",
+              "checked": "2026-11-14"}},
+  {"name": "ADA clear floor space", "width_in": 30.0, "length_in": 48.0,
+   "source": {"title": "2010 ADA Standards for Accessible Design, 305.3: clear floor or ground space 30 in minimum by 48 in minimum",
+              "url": "https://www.access-board.gov/ada/",
+              "checked": "2026-11-14"}}
+ ]
+}

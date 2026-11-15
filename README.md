@@ -212,7 +212,8 @@ python -m agent.agent "27x42 in power chair, 1-2 bedrooms near the Texas Medical
   `unknown` and become questions for the leasing office, not verdicts.
 - **Turning between headings is approximated.** The engine does not sweep the chair's corners as it rotates in
   place, so a very tight turn may be judged possible when it is not.
-- **The offset-hinge gain (about 1.75 in) is an assumption.** It is not measured per door.
+- **The offset-hinge gain (about 1.75 in) is an assumption.** It sits inside a hinge maker's stated range of 1.5 to 2
+  in (see Sources), and it is not measured per door.
 - **Ranking.** The batch is ranked for a 27x42 in chair. For other chairs, only the batch's top 8 candidates are
   re-checked live, so a unit that ranks low at 27x42 but well for a smaller chair can be missed.
 - **Single-floor units only for vision.** Panoramas cannot be matched to a storey, so multi-floor units are not
@@ -221,9 +222,40 @@ python -m agent.agent "27x42 in power chair, 1-2 bedrooms near the Texas Medical
   an answer can still be wrong. They are labelled as estimates and never upgraded from `unclear`.
 - **No listing data.** We do not use rent, availability or CoStar listing records. Bedroom counts come from model
   names.
-- **No real outreach.** Approved messages are queued locally and not sent to anyone. The iMessage bridge talks only
-  to the case manager.
+- **Outreach goes only as far as the bridge takes it.** Approved messages are queued in `data/outbox/`, and the API
+  hands them to the messaging bridge (`GET /api/outbox`). The agent itself never delivers anything. A leasing office's
+  reply (`POST /api/answers`) marks rooms `asked`, but it never changes the engine's verdict.
 - **The demo runs from cache on one laptop.** Any replayed run is labelled as a replay.
+
+## Sources
+Each figure below was checked against the source on 14 Nov 2026. Figures we could not open and confirm are listed
+at the end and are not used.
+
+| Claim | Exact figure | Source |
+|---|---|---|
+| Minimum clear width of a door | "Door openings shall provide a clear width of 32 inches (815 mm) minimum." The width is measured between the face of the door and the stop, with the door open 90 degrees. | [2010 ADA Standards, 404.2.3](https://www.access-board.gov/ada/) |
+| Turning space | A circle of 60 in (1525 mm) diameter minimum. | [2010 ADA Standards, 304.3.1](https://www.access-board.gov/ada/) |
+| Clear floor space for one wheelchair | 30 in (760 mm) minimum by 48 in (1220 mm) minimum. | [2010 ADA Standards, 305.3](https://www.access-board.gov/ada/) |
+| Wheelchair widths (measured users, not catalogue sizes) | Occupied width, chair plus user: manual chairs mean 685 mm (27.0 in), 95th percentile 786 mm (30.9 in), n=276. Power chairs mean 707 mm (27.8 in), 95th percentile 827 mm (32.6 in), n=189. "10-20% of individuals measured in our study have an occupied width that is greater than the U.S. standard of 760 mm (30 in.)" | [Anthropometry of Wheeled Mobility Project, Final Report](https://idea.ap.buffalo.edu/wp-content/uploads/sites/110/2020/01/AnthropometryofWheeledMobilityProject_FinalReport.pdf), IDeA Center for the U.S. Access Board, 31 Dec 2010, section 3.3.3 and Fig. 3-3 |
+| Wheelchair lengths | Unoccupied device length: manual mean 1012 mm (39.8 in), 95th percentile 1264 mm (49.8 in). Power mean 1117 mm (44.0 in), 95th percentile 1340 mm (52.8 in). | Same report, section 3.3.2 and Fig. 3-2 |
+| What offset (swing-clear) hinges gain | "typically adds about 1.5 to 2 inches of usable doorway width" | [Waterson (hinge manufacturer), swing-clear hinge page](https://watersonusa.com/solutions/swing-clear-hinge) |
+| Which buildings the Fair Housing Act design rules cover | Buildings of 4 or more dwelling units with one or more elevators, and the ground-floor units of other buildings of 4 or more units ([24 CFR 100.201](https://www.govinfo.gov/content/pkg/CFR-2023-title24-vol1/xml/CFR-2023-title24-vol1-sec100-201.xml)), "for first occupancy after March 13, 1991". Doors must be "sufficiently wide to allow passage by handicapped persons in wheelchairs" (100.205(c)(2)). | [24 CFR 100.205](https://www.govinfo.gov/content/pkg/CFR-2023-title24-vol1/xml/CFR-2023-title24-vol1-sec100-205.xml), CFR edition revised as of 1 Apr 2023 |
+| Housing as a barrier to leaving nursing homes | "Twenty-five states reported finding affordable, accessible housing to be the number one barrier to transitions." | [KFF, Money Follows the Person: A 2015 State Survey of Transitions, Services, and Costs](https://www.kff.org/report-section/money-follows-the-person-a-2015-state-survey-of-transitions-services-and-costs-report/) (Watts, Reaves, Musumeci, 16 Oct 2015) |
+
+The chair presets in the app (`data/chair_presets.json`, served by `GET /api/insights`) are the mean and 95th
+percentile manual and power chairs above, plus the 30x48 in ADA clear floor space. Their width is the occupied width,
+because that is what has to pass a door.
+
+**Not verified, so not used:**
+- **HUD, *Accessibility of America's Housing Stock* (2015): fewer than 1% of units accessible to wheelchair users and
+  fewer than 5% to people with moderate mobility difficulties.** huduser.gov refused our automated requests, so we
+  never saw the text. Search-engine excerpts of the report agree with these figures. Open the
+  [PDF](https://www.huduser.gov/portal/sites/default/files/pdf/accessibility-america-housingStock.pdf) and confirm them
+  before quoting.
+- **Overall width of a bariatric wheelchair.** Only retailer listings were reachable, and they disagree (30 to 32.5 in
+  for a 24 in seat). We found no manufacturer spec sheet, so there is no bariatric preset.
+- **Manufacturer overall widths for particular manual and power models** (Invacare, Permobil). The product pages did
+  not load for us, so we use the measured-user study above instead.
 
 ## What we built vs. what we used
 **We built:**
