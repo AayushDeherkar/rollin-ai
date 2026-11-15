@@ -177,22 +177,14 @@ function RollingChair({ palette, story, reduce }: { palette: Palette; story: Rea
   const g = useRef<THREE.Group>(null);
   const labels = useRef<HTMLDivElement[]>([]);
   const materials = useChairMaterials(palette);
-  const agent = useMemo(() => new THREE.Color(palette.agent), [palette]);
   const t0 = useRef<number | null>(null);
-  const glow = useRef(0);
-  useFrame(({ clock }, dt) => {
+  useFrame(({ clock }) => {
     const body = g.current;
     if (!body) return;
     if (t0.current === null) t0.current = clock.elapsedTime;
     const p = reduce ? 1 : Math.min(1, (clock.elapsedTime - t0.current - 0.4) / ROLL_S);
     const e = p <= 0 ? 0 : 1 - Math.pow(1 - p, 3);
     body.position.x = START_X + (STOP_X - START_X) * e;
-    // the chair glows (the agent's colour) only while it drives, as on the stage
-    glow.current += ((p < 1 ? 0.35 : 0) - glow.current) * (1 - Math.exp(-Math.min(dt, 0.1) * 5));
-    for (const m of [materials.frame, materials.fabric]) {
-      m.emissive.copy(agent);
-      m.emissiveIntensity = glow.current;
-    }
     // the dimensions draw in once it has stopped; the measure beat shows the footprint's
     const s = story.current?.s ?? 0;
     const stopped = p >= 1 ? 1 : 0;
