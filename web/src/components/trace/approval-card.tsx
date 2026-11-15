@@ -3,6 +3,7 @@
 import { Send, X } from "lucide-react";
 import type { ApprovalEvent } from "@/lib/agent-events";
 import { ALREADY_DECIDED, type Decision } from "@/lib/agent";
+import type { DeliveredEvent } from "@/lib/outbox-events";
 
 /**
  * The approval gate, drawn as a card the user must answer. Nothing is sent without "Send".
@@ -12,10 +13,13 @@ export function ApprovalCard({
   event,
   decision,
   onDecide,
+  delivery = null,
 }: {
   event: ApprovalEvent;
   decision: Decision | null;
   onDecide: (actionId: string, approved: boolean) => void;
+  /** the messaging bridge texted it to the leasing office (GET /api/events) */
+  delivery?: DeliveredEvent | null;
 }) {
   const sending = decision?.state === "sending";
   const decided = decision?.state === "done";
@@ -74,7 +78,9 @@ export function ApprovalCard({
             : decision.result.status === ALREADY_DECIDED
               ? "This was already decided."
               : decision.result.approved
-                ? capitalise(decision.result.status)
+                ? delivery
+                  ? `Sent to the leasing office${delivery.via === "imessage" ? " by iMessage" : ""} at ${new Date(delivery.delivered_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`
+                  : capitalise(decision.result.status)
                 : "Not sent. The agent will not contact them."}
         </p>
       )}

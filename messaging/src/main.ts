@@ -7,6 +7,7 @@ import { ApiError } from "@photon-ai/api";
 import { Conversations } from "./conversation.ts";
 import { photonClient } from "./photon.ts";
 import { webRollin } from "./rollin.ts";
+import { Deliverer, fileState, sameHandle, webOutbox } from "./deliver.ts";
 
 const env = (name: string) => process.env[name]?.trim() ?? "";
 const missing = ["PHOTON_API_KEY", "PHOTON_PROJECT_ID"].filter((n) => !env(n));
@@ -22,20 +23,48 @@ if (!env("PHOTON_PROJECT_ID").startsWith("pho_prj_")) {
 
 const webUrl = env("ROLLIN_WEB_URL") || "http://localhost:3000";
 const publicUrl = env("ROLLIN_PUBLIC_WEB_URL") || webUrl;
+/** where approved messages go (E.164 or an iMessage email); delivery is off without it */
+const leasing = env("LEASING_OFFICE_NUMBER");
+const stateDir = path.join(import.meta.dirname, "..", ".state");
 const photon = photonClient({
   apiKey: env("PHOTON_API_KEY"),
   projectId: env("PHOTON_PROJECT_ID"),
   allowedSenders: env("PHOTON_ALLOWED_SENDERS")
     .split(",")
     .map((s) => s.trim())
-    .filter(Boolean),
-  stateDir: path.join(import.meta.dirname, "..", ".state"),
+    .filter(Boolean)
+    // the leasing office is answered too, when senders are restricted
+    .concat(leasing && env("PHOTON_ALLOWED_SENDERS") ? [leasing] : []),
+  stateDir,
 });
 const conversations = new Conversations(webRollin(webUrl), publicUrl, "imsg");
 const log = (s: string) => console.log(`${new Date().toISOString()} ${s}`);
 
+const deliverer = new Deliverer(
+  webOutbox(webUrl),
+  (line, text, key) => photon.send(line.spaceId, line.agentId, text, key),
+  fileState(stateDir),
+  log,
+);
+if (leasing) {
+  await deliverer.start();
+  log(deliverer.line ? "Delivering approved messages to the leasing office." : "Delivery is on; waiting for the leasing office to text this line first.");
+  setInterval(() => void deliverer.tick(), 4000);
+} else {
+  log("LEASING_OFFICE_NUMBER is not set: approved messages stay in the outbox.");
+}
+
 await photon.listen(async (m) => {
   log(`Message ${m.messageId} received.`);
+  if (leasing && sameHandle(m.from, leasing)) {
+    // the leasing office: opens the line, or answers the last message delivered; never a search
+    try {
+      log(await deliverer.fromOffice(m.spaceId, m.agentId, m.text));
+    } catch (err) {
+      log(`Could not log the leasing office's reply: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return;
+  }
   let n = 0;
   await conversations.handle(
     m.spaceId,

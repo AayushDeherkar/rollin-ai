@@ -55,6 +55,17 @@ export interface Room {
   polygon: Point[];
   /** the `edge` of the door where the chair stops on its way to a blocked room, possibly a room on the way (contract v2) */
   blocking_door_edge?: string | null;
+  /** "asked" once the leasing office answered about a room the scan left unknown; `status` stays unknown (round 5) */
+  basis?: string;
+  answer?: RoomAnswer;
+}
+
+/** A leasing office's answer about an unknown room (round 5): a width only when written in inches. */
+export interface RoomAnswer {
+  clear_in: { value: number | null; unit?: string; basis: string; source?: string };
+  said?: string;
+  answer_id?: string;
+  answered_at?: string;
 }
 
 export interface Artifact {
