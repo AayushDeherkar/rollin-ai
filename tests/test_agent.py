@@ -132,12 +132,14 @@ def test_resume_reports_from_the_outbox(data, monkeypatch):
     monkeypatch.setattr(A, "get_agent", lambda: fake)
     res = A.resume({"configurable": {"thread_id": "t"}}, True, 1, msgs)
     assert res["queued"] == 1 and "queued 1 of 1" in res["status"] and "warning" in res
+    assert [res["outbox_id"]] == res["outbox_ids"] == [p.stem for p in (data / "outbox").glob("*.json")]
     assert fake.cmd.resume == {"decisions": [{"type": "approve"}]}
     monkeypatch.setattr(A, "get_agent", lambda: _FakeAgent(fail=True))   # errors before queueing: retryable
     with pytest.raises(RuntimeError):
         A.resume({"configurable": {"thread_id": "t"}}, True, 1, msgs)
     monkeypatch.setattr(A, "get_agent", lambda: _FakeAgent())
-    assert A.resume({"configurable": {"thread_id": "t"}}, False, 1, msgs)["status"] == "declined: nothing sent"
+    declined = A.resume({"configurable": {"thread_id": "t"}}, False, 1, msgs)
+    assert declined["status"] == "declined: nothing sent" and declined["outbox_id"] is None
 
 
 def test_verify_event_matches_contract(data):

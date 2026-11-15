@@ -753,18 +753,19 @@ class Run:
         return self.ev("final", text=" ".join(parts) or agent_text, awaiting_approval=list(self.pending), shortlist=sl)
 
 
-def _queued(msgs: list[dict], since: set[str]) -> int:
-    """How many of these exact messages landed in the outbox after `since` (a listing taken before resuming)."""
+def _queued(msgs: list[dict], since: set[str]) -> list[str]:
+    """Outbox ids of these exact messages that landed after `since` (a listing taken before resuming), oldest first."""
     box = data_dir() / "outbox"
     if not box.exists():
-        return 0
+        return []
     want = {(m["to"], m["draft"]) for m in msgs}
-    n = 0
-    for p in box.glob("*.json"):
+    ids = []
+    for p in sorted(box.glob("*.json")):
         if p.name not in since:
             rec = json.loads(p.read_text())
-            n += (rec.get("to"), rec.get("text")) in want
-    return n
+            if (rec.get("to"), rec.get("text")) in want:
+                ids.append(p.stem)
+    return ids
 
 
 def resume(thread: dict, approved: bool, n_requests: int = 1, msgs: list[dict] | None = None) -> dict:
@@ -781,7 +782,8 @@ def resume(thread: dict, approved: bool, n_requests: int = 1, msgs: list[dict] |
         final_text = text_of(out["messages"][-1].content)
     except Exception as e:                          # decide below whether anything was queued
         error = type(e).__name__
-    queued = _queued(msgs, before) if approved else 0
+    ids = _queued(msgs, before) if approved else []
+    queued = len(ids)
     if error and not queued:
         raise RuntimeError(f"agent failed before queueing: {error}")
     if queued:
@@ -789,7 +791,8 @@ def resume(thread: dict, approved: bool, n_requests: int = 1, msgs: list[dict] |
                   "(not delivered by the agent)")
     else:
         status = "approved, but the agent did not queue a message" if approved else "declined: nothing sent"
-    res = {"status": status, "queued": queued, "final_text": final_text}
+    res = {"status": status, "queued": queued, "final_text": final_text,
+           "outbox_id": ids[0] if ids else None, "outbox_ids": ids}     # the bridge marks delivery by this id
     if error:
         res["warning"] = f"the agent stopped after queueing ({error}); the queued message stands"
     return res

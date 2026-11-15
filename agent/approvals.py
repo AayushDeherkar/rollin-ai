@@ -78,7 +78,8 @@ def resolve(action_id: str, approved: bool) -> dict[str, Any]:
             raise ActionFailed(f"{p.action}: {type(e).__name__}") from e
     else:
         p.result = {"status": "approved, but no live agent is attached" if approved else "declined"}
-    return {"action_id": action_id, "approved": approved, "action": p.action, "run_id": p.run_id, **p.result}
+    return {"action_id": action_id, "approved": approved, "action": p.action, "run_id": p.run_id,
+            "outbox_id": None, "outbox_ids": [], **p.result}      # set by a live run that queued a message
 
 
 def clear() -> None:
