@@ -67,6 +67,10 @@ def check_data(rep: Report) -> None:
     rec = d / "replay" / "run.jsonl"
     rep.add("data", rec.exists(), "replay recording present" if rec.exists() else
             "no data/replay/run.jsonl: replay falls back to the synthetic example")
+    from agent.outbox import archive_unlinked
+    stale = archive_unlinked(dry_run=True)
+    rep.add("data", not stale, "outbox: no stale messages" if not stale else
+            f"outbox: {len(stale)} pending message(s) with no unit; run `python -m agent.outbox clean`")
     for a in demo_units.ALIASES:
         sid = aliases.get(a)
         if isinstance(sid, str):

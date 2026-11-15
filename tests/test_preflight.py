@@ -33,7 +33,7 @@ def data(tmp_path, monkeypatch):
 def test_data_checks_pass_then_fail_without_files(data, capsys):
     rep = P.Report()
     P.check_data(rep)
-    assert rep.failed == 0 and len(rep.rows) == 7
+    assert rep.failed == 0 and len(rep.rows) == 8
     (data / "replay/run.jsonl").unlink()
     (data / "cache/synthetic_1br.json").unlink()
     rep = P.Report()
