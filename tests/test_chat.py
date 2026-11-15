@@ -127,8 +127,19 @@ def test_replay_action_with_a_callback_still_never_sends(client):
     calls = []
     approvals.register(approvals.Pending(action_id="rp", run_id="r", action="send_message", payload={},
                                          replay=True, on_resolve=lambda a: calls.append(a) or {"status": "sent"}))
-    assert client.post("/api/approve", json={"action_id": "rp", "approved": True}).json()["replay"] is True
+    r = client.post("/api/approve", json={"action_id": "rp", "approved": True}).json()
+    assert r["replay"] is True and r["outbox_id"] is None and r["outbox_ids"] == []
     assert calls == []
+
+
+def test_approve_returns_the_outbox_id_of_the_queued_message(client):
+    from agent import approvals
+    approvals.register(approvals.Pending(
+        action_id="live_ob", run_id="r", action="send_message", payload={},
+        on_resolve=lambda a: {"status": "queued 1 of 1", "outbox_id": "20261114T120000_abc123",
+                              "outbox_ids": ["20261114T120000_abc123"]}))
+    r = client.post("/api/approve", json={"action_id": "live_ob", "approved": True}).json()
+    assert r["outbox_id"] == "20261114T120000_abc123" and r["outbox_ids"] == ["20261114T120000_abc123"]
 
 
 def test_replay_speed_plays_faster_and_stays_marked(client):

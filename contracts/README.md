@@ -71,6 +71,7 @@ For the messaging bridge, which delivers approved messages:
 - `answer` event: `{id, ts, run_id: null, type: "answer", answer_id, sid, outbox_id, rooms:[{room_id, label, basis: "asked", source: "landlord", clear_in: Num}], unmatched, text}`.
 - `GET /api/units/{sid}`: once a room that was `unknown` has an answer, it gains `basis: "asked"` and `answer: {clear_in: Num, said, answer_id, answered_at}`. `clear_in` is `{value, unit: "in", basis: "asked", source: "landlord"}`, or `{value: null, basis: "unknown"}` when the reply gave no width. The room's `status` stays `unknown`, because one door's width does not prove the chair can get there. Rooms that already had a verdict are never changed by an answer.
 - The agent stops asking about rooms that have already been answered.
+- `POST /api/approve` also returns `outbox_id` (the queued message's id, for `POST /api/outbox/{id}/delivered`) and `outbox_ids` (all of them, in outbox order, when one approval queues several). Both are `null` and `[]` when nothing was queued: declined, replayed, or no live agent attached.
 
 ## Insights (round 5, additive)
 `GET /api/insights` returns `{sweep, chair_presets, note}`:
