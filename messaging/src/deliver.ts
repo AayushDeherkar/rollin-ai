@@ -8,7 +8,11 @@
  *   queued since the bridge started, and marks it delivered (POST /api/outbox/{id}/delivered).
  *   Older items (from earlier runs) are never sent by surprise; they are listed in the log once.
  * - A text from the office is never a renter’s request. Its first text gets a one-line acknowledgement;
- *   each later one is forwarded to POST /api/answers against the last message delivered.
+ *   each later one is forwarded to POST /api/answers against the last message delivered, and the
+ *   findings are texted back to the client conversation that was active when that message was
+ *   delivered (a separate conversation: nothing the office says is ever taken as an approval).
+ * - If the office already has a conversation on the project (it texted earlier), it is found at start
+ *   and used, so it does not have to text again.
  *
  * All calls go through the web app's routes, like the rest of the bridge.
  */
@@ -38,16 +42,58 @@ export interface LeasingLine {
   openedAt: string;
 }
 
+/** A client’s conversation (a PHOTON_ALLOWED_SENDERS number), where the office’s findings are sent. */
+export interface ClientLine {
+  handle: string;
+  spaceId: string;
+  agentId: string;
+}
+
 export interface DeliveryState {
   line: LeasingLine | null;
-  /** the last message delivered, which a reply answers */
-  lastDelivered: { id: string; sid: string | null } | null;
+  /** the last message delivered, which a reply answers, and the client conversation active when it went */
+  lastDelivered: { id: string; sid: string | null; client?: ClientLine | null } | null;
+  /** the client conversation that texted last */
+  client?: ClientLine | null;
 }
+
+export type Role = "client" | "office";
+
+/**
+ * Who a sender is. The leasing office is its own role and never a client, even with no sender
+ * restriction; anyone else is a client only when listed (or when no list is set). Returns null to ignore.
+ */
+export function roleOf(clients: string[], office: string): (from: string) => Role | null {
+  if (office && clients.some((c) => sameHandle(c, office))) {
+    throw new Error("LEASING_OFFICE_NUMBER is also in PHOTON_ALLOWED_SENDERS: one number cannot be both the client and the leasing office.");
+  }
+  return (from) => {
+    if (!from) return null;
+    if (office && sameHandle(from, office)) return "office";
+    return clients.length === 0 || clients.some((c) => sameHandle(c, from)) ? "client" : null;
+  };
+}
+
+type AnsweredRoom = { label: string; clear_in?: number | null };
+
+/** The text the client gets after the office replies: the reply itself, and what was logged from it. */
+export function findingsText(reply: string, got: { rooms: AnsweredRoom[] } | null): string {
+  const quoted = reply.length > 600 ? `${reply.slice(0, 600)}…` : reply;
+  const lines = [`Rollin’ (AI assistant) here. The leasing office replied to the questions you approved:`, `“${quoted}”`];
+  if (!got) lines.push("I could not log it against the scan, so the floor plan is unchanged.");
+  else if (!got.rooms.length) lines.push("It did not answer any door the scan left unknown, so the floor plan is unchanged.");
+  else {
+    const rooms = got.rooms.map((r) => (typeof r.clear_in === "number" ? `${r.label}: ${r.clear_in} in clear` : `${r.label}: answered, no width given`));
+    lines.push(`Logged on the plan: ${rooms.join("; ")}. As told by the leasing office, not measured.`);
+  }
+  return lines.join("\n");
+}
+
 
 export interface OutboxApi {
   pending(): Promise<OutboxItem[]>;
   markDelivered(id: string): Promise<void>;
-  answer(body: { outbox_id?: string; sid?: string; text: string; from: string }): Promise<{ rooms: { label: string }[]; unmatched: unknown[] }>;
+  answer(body: { outbox_id?: string; sid?: string; text: string; from: string }): Promise<{ rooms: AnsweredRoom[]; unmatched: unknown[] }>;
 }
 
 export function webOutbox(baseUrl: string): OutboxApi {
@@ -77,7 +123,7 @@ export function webOutbox(baseUrl: string): OutboxApi {
     async answer(body) {
       const { res, json } = await post(`${base}/api/answers`, body);
       if (!res.ok || !json) throw new Error(String(json?.detail ?? `HTTP ${res.status}`));
-      return json as { rooms: { label: string }[]; unmatched: unknown[] };
+      return json as { rooms: AnsweredRoom[]; unmatched: unknown[] };
     },
   };
 }
@@ -96,7 +142,7 @@ export function fileState(stateDir: string) {
     async load(): Promise<DeliveryState> {
       try {
         const s = JSON.parse(await readFile(file, "utf8")) as Partial<DeliveryState>;
-        return { line: s.line ?? null, lastDelivered: s.lastDelivered ?? null };
+        return { line: s.line ?? null, lastDelivered: s.lastDelivered ?? null, client: s.client ?? null };
       } catch {
         return { line: null, lastDelivered: null };
       }
@@ -115,6 +161,8 @@ export class Deliverer {
   private waitingLogged = false;
   private lastError = "";
   private busy = false;
+  /** send the office’s findings into a client’s conversation; unset, they are only logged */
+  notifyClient: ((client: ClientLine, text: string, key: string) => Promise<void>) | null = null;
 
   constructor(
     /** the configured leasing office (LEASING_OFFICE_NUMBER) */
@@ -142,12 +190,29 @@ export class Deliverer {
     return this.state.line;
   }
 
+  /** The office’s existing conversation, found on the project at start: used when none is saved yet. */
+  async adopt(line: LeasingLine): Promise<boolean> {
+    if (this.state.line || !sameHandle(line.handle, this.office)) return false;
+    this.state.line = line;
+    await this.store.save(this.state);
+    return true;
+  }
+
+  /** A client texted: findings for messages delivered from now on go back to this conversation. */
+  async noteClient(client: ClientLine): Promise<void> {
+    if (this.office && sameHandle(client.handle, this.office)) return;
+    const c = this.state.client;
+    if (c && c.spaceId === client.spaceId && c.agentId === client.agentId && c.handle === client.handle) return;
+    this.state.client = client;
+    await this.store.save(this.state);
+  }
+
   /**
    * A text from the leasing office. It is never a renter’s request. The very first one opens the line
    * and gets a one-line acknowledgement (returned as `reply`; the caller sends it). Every later one is
    * forwarded to /api/answers as the answer to the last message delivered. `log` says what happened.
    */
-  async fromOffice(handle: string, spaceId: string, agentId: string, text: string): Promise<{ log: string; reply: string | null }> {
+  async fromOffice(handle: string, spaceId: string, agentId: string, text: string, messageId = ""): Promise<{ log: string; reply: string | null }> {
     if (!sameHandle(handle, this.office)) return { log: "Ignored: not the configured leasing office.", reply: null };
     if (!this.state.line) {
       this.state.line = { handle, spaceId, agentId, openedAt: new Date().toISOString() };
@@ -161,13 +226,27 @@ export class Deliverer {
     }
     const last = this.state.lastDelivered;
     if (!last) return { log: "The leasing office texted again; nothing has been delivered to it yet, so there is nothing to answer.", reply: null };
-    const got = await this.api.answer({ outbox_id: last.id, ...(last.sid ? { sid: last.sid } : {}), text, from: "leasing office" });
-    return {
-      log: got.rooms.length
-        ? `Leasing office answered about ${got.rooms.map((r) => r.label).join(", ")}.`
-        : "Leasing office replied; it answered no room the scan left unknown (logged).",
-      reply: null,
-    };
+    let got: { rooms: AnsweredRoom[] } | null = null;
+    let failed = "";
+    try {
+      got = await this.api.answer({ outbox_id: last.id, ...(last.sid ? { sid: last.sid } : {}), text, from: "leasing office" });
+    } catch (err) {
+      failed = err instanceof Error ? err.message : String(err);
+    }
+    const said = failed
+      ? `Leasing office replied; logging it failed (${failed}).`
+      : got!.rooms.length
+        ? `Leasing office answered about ${got!.rooms.map((r) => r.label).join(", ")}.`
+        : "Leasing office replied; it answered no room the scan left unknown (logged).";
+    // the findings go to the client whose conversation was active when the question went out
+    const client = last.client ?? this.state.client ?? null;
+    if (!client || !this.notifyClient) return { log: `${said} No client conversation to text the findings to.`, reply: null };
+    try {
+      await this.notifyClient(client, findingsText(text, got), `rollin:findings:${messageId || `${last.id}:${text.length}`}`);
+      return { log: `${said} Findings texted to the client.`, reply: null };
+    } catch (err) {
+      return { log: `${said} Texting the findings to the client failed: ${err instanceof Error ? err.message : String(err)}`, reply: null };
+    }
   }
 
   /** One pass over the outbox. Never throws. */
@@ -195,7 +274,7 @@ export class Deliverer {
         if ((this.failed.get(item.id) ?? 0) >= 3) continue;
         try {
           await this.send(line, item.text, `rollin:outbox:${item.id}`);
-          this.state.lastDelivered = { id: item.id, sid: item.sid };
+          this.state.lastDelivered = { id: item.id, sid: item.sid, client: this.state.client ?? null };
           await this.store.save(this.state);
           await this.api.markDelivered(item.id);
           this.log(`Delivered ${item.id} to the leasing office.`);

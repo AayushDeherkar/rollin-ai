@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Deliverer, OFFICE_ACK, sameHandle, type DeliveryState, type LeasingLine, type OutboxApi, type OutboxItem } from "./deliver.ts";
+import { Deliverer, OFFICE_ACK, findingsText, roleOf, sameHandle, type DeliveryState, type LeasingLine, type OutboxApi, type OutboxItem } from "./deliver.ts";
 
 const OFFICE = "+15550100000";
 const T0 = new Date("2026-11-15T01:00:00Z");
@@ -127,4 +127,70 @@ test("a line saved for another number is dropped, so nothing goes to it", async 
   await r.d.tick();
   assert.equal(r.sent.length, 0);
   assert.deepEqual(r.saved(), { line: null, lastDelivered: null });
+});
+
+const CLIENT = "+15550100001";
+const clientLine = { handle: CLIENT, spaceId: "client-space", agentId: "agent-c" };
+
+test("roles: the office is never a client, and one number cannot be both", () => {
+  const role = roleOf([CLIENT], OFFICE);
+  assert.equal(role(CLIENT), "client");
+  assert.equal(role(OFFICE), "office");
+  assert.equal(role("+1 (555) 010-0000"), "office");
+  assert.equal(role("+15550100002"), null);
+  // no client list: anyone else is a client, the office still is not
+  assert.equal(roleOf([], OFFICE)(OFFICE), "office");
+  assert.equal(roleOf([], OFFICE)("+15550100002"), "client");
+  assert.throws(() => roleOf([CLIENT, OFFICE], OFFICE), /cannot be both/);
+});
+
+test("an office reply is logged and its findings go to the client's own conversation", async () => {
+  const r = rig([item("20261115T010500_aaaaaa", "2026-11-15T01:05:00Z")]);
+  const told: { client: typeof clientLine; text: string; key: string }[] = [];
+  r.d.notifyClient = async (client, text, key) => void told.push({ client, text, key });
+  await r.d.start();
+  await r.d.noteClient(clientLine);
+  await r.d.fromOffice(OFFICE, "office-space", "agent-o", "Hi, leasing office here");
+  await r.d.tick();
+  assert.equal(r.sent[0].line.spaceId, "office-space");
+  assert.deepEqual(r.saved().lastDelivered?.client, clientLine);
+  const out = await r.d.fromOffice(OFFICE, "office-space", "agent-o", "The closet door is 30 inches.", "msg-9");
+  assert.equal(r.answers.length, 1);
+  assert.equal(told.length, 1);
+  assert.equal(told[0].client.spaceId, "client-space");
+  assert.equal(told[0].key, "rollin:findings:msg-9");
+  assert.match(told[0].text, /The closet door is 30 inches/);
+  assert.match(told[0].text, /AI assistant/);
+  assert.match(out.log, /Findings texted to the client/);
+  // nothing went to the office in reply to its answer
+  assert.equal(r.sent.length, 1);
+});
+
+test("a failed log still forwards the reply, saying the plan is unchanged", async () => {
+  const r = rig([], { line: { handle: OFFICE, spaceId: "s", agentId: "a", openedAt: "" }, lastDelivered: { id: "x", sid: null, client: clientLine } });
+  const told: string[] = [];
+  r.d.notifyClient = async (_c, text) => void told.push(text);
+  await r.d.start();
+  (r.d as unknown as { api: OutboxApi }).api.answer = async () => {
+    throw new Error("API down");
+  };
+  const out = await r.d.fromOffice(OFFICE, "s", "a", "Yes, step-free.");
+  assert.match(told[0], /could not log it/);
+  assert.match(out.log, /logging it failed/);
+});
+
+test("the office's existing conversation is adopted at start; another number's is not", async () => {
+  const r = rig([]);
+  await r.d.start();
+  assert.equal(await r.d.adopt({ handle: "+15550100002", spaceId: "x", agentId: "y", openedAt: "" }), false);
+  assert.equal(await r.d.adopt({ handle: OFFICE, spaceId: "office-space", agentId: "agent-o", openedAt: "" }), true);
+  assert.equal(r.d.line?.spaceId, "office-space");
+  // the office is never remembered as a client
+  await r.d.noteClient({ handle: OFFICE, spaceId: "office-space", agentId: "agent-o" });
+  assert.equal(r.saved().client ?? null, null);
+});
+
+test("findings say where a width came from", () => {
+  assert.match(findingsText("ok", { rooms: [{ label: "Bath", clear_in: 31 }] }), /Bath: 31 in clear.*not measured/);
+  assert.match(findingsText("ok", { rooms: [] }), /unchanged/);
 });
