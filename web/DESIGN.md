@@ -22,13 +22,14 @@ The token names keep their jobs from the drafting sheet: `paper` is the ground a
 | `--reach` | `#80d69a` | Reachable: flat wash, check icon |
 | `--block` | `#ff8f80` | Blocked / not passable: 45° hatch, ban icon |
 | `--unknown` | `#c2b8a6` | Not measured: stipple, question icon |
+| `--scene-lamp` / `--scene-lawn` | `#f4d7a1` / `#2c4637` | The landing's doorway scene only: warm light in the window and porch lamp, and the lawn strip. Never used in the interface. |
 | `--glow` | `0.22` | How much a status floor glows in the model. Restrained: a status is a lit floor, not a neon sign. |
 
 Status is never colour alone. Every status has a colour, a fill pattern (`PatternDefs` in `src/components/sheet/status.tsx`; the same hatch and stipple are painted on the model's floors), an icon and a word.
 
 ## Type
 
-- **Display:** Big Shoulders (a condensed sans in the spirit of drafting lettering) for panel titles, the wordmark and empty-state titles.
+- **Display:** Big Shoulders (a condensed sans in the spirit of drafting lettering) for panel titles, the landing headline and empty-state titles. The top bar and landing header show the logo (`public/logo.png`), not a text wordmark.
 - **Text:** Public Sans (US Web Design System, built for legibility) for everything you read.
 - **Measure:** IBM Plex Mono with tabular, slashed-zero figures for every number that is a measurement (`.measure`).
 - Scale, in rem so it follows the reader's font size and browser zoom: 1 / 1.125 rem, then 22 / 28 / 36 / 52 px at 1440x900 for the four larger steps, which `clamp()` down a little on smaller screens. **Nothing is below 1 rem (16 px).** Body text is 1.125 rem (18 px). The root is the reader's own size (`html { font-size: 100% }`); spacing is rem too (`--space: 0.25rem`).
@@ -100,7 +101,7 @@ One procedural model (`src/components/chair/wheelchair.tsx`) in every scene, dra
 
 The stage moved to `/app`; `/` is the landing (`src/components/landing/`). `/?demo=1` redirects to `/app?demo=1` in next.config.ts, query intact, so presenter mode still opens the pitch directly.
 
-- Hero: one 3D scene fixed behind the page. The sourced average manual chair (27.0 × 39.8 in) rolls to an example 26 in doorway and stops; the clear width and the shortfall are dimensioned and the doorway is labelled as an illustration. Headline in Big Shoulders at `--text-4xl` (landing only), one line for who it is for, one button, "Size your chair".
+- Hero: one 3D scene fixed behind the page. The sourced average manual chair (27.0 × 39.8 in) rolls up a step-free path to an example 26 in doorway in the front of a home (cased door, lit window, porch lamp, lawn) and stops; the clear width and the shortfall are dimensioned and the doorway is labelled as an illustration. Headline: "Rollin’" in Big Shoulders at `--text-4xl` (landing only), the rest of the sentence as a smaller supporting line at `--text-2xl`; one line for who it is for, one button, "Size your chair".
 - Scrolling moves the camera through the same scene, one pose per beat: the problem (the listing's one checkbox), then measure, test-drive, ask. GSAP ScrollTrigger maps each beat's scroll to the camera; Lenis smooths scrolling. Both run on the landing only.
 - The numbers are read from `/api/insights` and nothing else, with basis, scope and definitions printed beside them; with no batch (the public build) the section says so and shows no figure.
 - Then the way into the app, and About: measured, estimated, unknown, data, limitations, team.

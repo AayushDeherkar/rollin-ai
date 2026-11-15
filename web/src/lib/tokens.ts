@@ -23,6 +23,8 @@ export interface Palette {
   chairFrame: string;
   chairFabric: string;
   chairTyre: string;
+  sceneLamp: string;
+  sceneLawn: string;
   glow: number;
 }
 
@@ -48,6 +50,8 @@ export function readPalette(): Palette {
     chairFrame: v("--chair-frame"),
     chairFabric: v("--chair-fabric"),
     chairTyre: v("--chair-tyre"),
+    sceneLamp: v("--scene-lamp"),
+    sceneLawn: v("--scene-lawn"),
     glow: Number(v("--glow")) || 0,
   };
 }

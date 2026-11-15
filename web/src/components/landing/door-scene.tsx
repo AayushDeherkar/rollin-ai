@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * The landing's one 3D scene, fixed behind the story: a wall with a doorway, and the chair rolling up
- * to it and stopping because the opening is narrower than the chair. The door is an example, labelled
+ * The landing's one 3D scene, fixed behind the story: the front of a home (a door in its frame, a lit
+ * window, a porch lamp, a step-free path between strips of lawn), and the chair rolling up the path and
+ * stopping because the doorway is narrower than the chair. The dimensioned gap is the subject. The door is an example, labelled
  * as one; the chair is the sourced "manual wheelchair, average user" preset (27.0 × 39.8 in).
  *
  * The page writes how far the story has scrolled into `story.s` (0 hero, 1 the problem, 2 measure,
@@ -11,7 +12,7 @@
  */
 import { useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Edges, Grid, Html, Line } from "@react-three/drei";
+import { Grid, Html, Line } from "@react-three/drei";
 import * as THREE from "three";
 import { Boundary, ChairBody } from "@/components/dollhouse/dollhouse";
 import { useChairMaterials } from "@/components/chair/wheelchair";
@@ -33,7 +34,7 @@ const W = CHAIR[0] * M;
 const L = CHAIR[1] * M;
 const OPEN = DOOR_IN * M;
 const WALL_T = 0.12;
-const WALL_H = 2.2;
+const WALL_H = 2.9;
 /** where the chair's centre stops: its front 6 cm short of the wall */
 const STOP_X = -L / 2 - 0.06;
 const START_X = STOP_X - 3.2;
@@ -42,7 +43,7 @@ const ROLL_S = 2.6;
 type Pose = { pos: [number, number, number]; look: [number, number, number] };
 /** one camera pose per beat of the story */
 const POSES: Pose[] = [
-  { pos: [-4.6, 2.1, 3.3], look: [-0.5, 0.75, 0] }, // hero: behind and to the side, the gap in view
+  { pos: [-5.3, 2.2, 3.9], look: [-0.6, 0.9, 0] }, // hero: behind and to the side, the gap in view
   { pos: [-2.6, 1.2, 0.45], look: [0.1, 0.75, 0] }, // the problem: low behind the chair, at the opening
   { pos: [STOP_X - 0.02, 3.6, 0.001], look: [STOP_X, 0, 0] }, // measure: straight down (a hair behind, on the same side as the poses around it, so the heading never flips)
   { pos: [STOP_X - 0.4, 1.4, 3.1], look: [STOP_X + 0.4, 0.55, 0] }, // test-drive: from the side
@@ -82,6 +83,7 @@ export function DoorScene({ story, reduce, live }: { story: React.RefObject<Stor
           followCamera={false}
         />
         <Camera story={story} reduce={reduce} />
+        <Grounds palette={palette} />
         <Wall palette={palette} />
         <RollingChair palette={palette} story={story} reduce={reduce} />
       </Canvas>
@@ -123,11 +125,16 @@ function Camera({ story, reduce }: { story: React.RefObject<Story>; reduce: bool
   return null;
 }
 
-/** a wall across the chair's path with the doorway in it, and the door swung open */
+/** the facade: a door in its frame, swung open into a lit room, a window with warm light, a porch lamp */
 function Wall({ palette }: { palette: Palette }) {
-  const side = 2.6;
+  const side = 3.4;
   const halfOpen = OPEN / 2;
   const jamb = 0.05;
+  const head = 2.03;
+  const trim = 0.09;
+  /** the window, on the far side of the door from the lamp */
+  const win = { z: -(halfOpen + 1.25), y: 1.45, w: 1.1, h: 1.15 };
+  const lampZ = halfOpen + jamb + 0.32;
   return (
     <group>
       {([-1, 1] as const).map((k) => {
@@ -135,28 +142,95 @@ function Wall({ palette }: { palette: Palette }) {
         return (
           <mesh key={k} position={[WALL_T / 2, WALL_H / 2, k * (halfOpen + jamb + len / 2)]}>
             <boxGeometry args={[WALL_T, WALL_H, len]} />
-            <meshStandardMaterial color={palette.ink} roughness={0.95} />
-            <Edges color={palette.ruleStrong} />
+            <meshStandardMaterial color={palette.inkSoft} roughness={0.95} />
           </mesh>
         );
       })}
-      {/* jambs and head */}
+      {/* jambs and head, inside the opening */}
       {([-1, 1] as const).map((k) => (
-        <mesh key={`j${k}`} position={[WALL_T / 2, 2.03 / 2, k * (halfOpen + jamb / 2)]}>
-          <boxGeometry args={[WALL_T + 0.02, 2.03, jamb]} />
+        <mesh key={`j${k}`} position={[WALL_T / 2, head / 2, k * (halfOpen + jamb / 2)]}>
+          <boxGeometry args={[WALL_T + 0.02, head, jamb]} />
           <meshStandardMaterial color={palette.ruleStrong} roughness={0.6} />
         </mesh>
       ))}
-      <mesh position={[WALL_T / 2, (2.03 + WALL_H) / 2, 0]}>
-        <boxGeometry args={[WALL_T, WALL_H - 2.03, OPEN + jamb * 2]} />
-        <meshStandardMaterial color={palette.ink} roughness={0.95} />
-        <Edges color={palette.ruleStrong} />
+      <mesh position={[WALL_T / 2, (head + WALL_H) / 2, 0]}>
+        <boxGeometry args={[WALL_T, WALL_H - head, OPEN + jamb * 2]} />
+        <meshStandardMaterial color={palette.inkSoft} roughness={0.95} />
+      </mesh>
+      {/* the door frame's casing on the outside face */}
+      {([-1, 1] as const).map((k) => (
+        <mesh key={`c${k}`} position={[-0.015, (head + trim) / 2, k * (halfOpen + jamb + trim / 2)]}>
+          <boxGeometry args={[0.03, head + trim, trim]} />
+          <meshStandardMaterial color={palette.paperDeep} roughness={0.7} />
+        </mesh>
+      ))}
+      <mesh position={[-0.015, head + trim / 2, 0]}>
+        <boxGeometry args={[0.03, trim, OPEN + (jamb + trim) * 2]} />
+        <meshStandardMaterial color={palette.paperDeep} roughness={0.7} />
       </mesh>
       {/* the leaf, open 90° into the room beyond */}
       <mesh position={[WALL_T + OPEN / 2, 2.0 / 2, halfOpen + 0.02]}>
-        <boxGeometry args={[OPEN + 0.04, 2.0, 0.035]} />
-        <meshStandardMaterial color={palette.inkSoft} roughness={0.7} />
+        <boxGeometry args={[OPEN + 0.04, 2.0, 0.04]} />
+        <meshStandardMaterial color={palette.paperDeep} roughness={0.6} />
       </mesh>
+      {/* the room beyond, lit warm: seen through the doorway */}
+      <mesh position={[2.4, WALL_H / 2, 0]} rotation={[0, -Math.PI / 2, 0]}>
+        <planeGeometry args={[side * 2, WALL_H]} />
+        <meshStandardMaterial color={palette.sceneLamp} emissive={palette.sceneLamp} emissiveIntensity={0.35} roughness={1} />
+      </mesh>
+      <mesh position={[1.25, 0.001, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[2.3, side * 2]} />
+        <meshStandardMaterial color={palette.paperDeep} roughness={0.9} />
+      </mesh>
+      {/* the window: warm interior light behind four panes, in a frame with a sill */}
+      <mesh position={[-0.004, win.y, win.z]} rotation={[0, -Math.PI / 2, 0]}>
+        <planeGeometry args={[win.w, win.h]} />
+        <meshBasicMaterial color={palette.sceneLamp} />
+      </mesh>
+      {[
+        { p: [-0.02, win.y + win.h / 2, win.z], a: [0.04, trim * 0.7, win.w + trim] },
+        { p: [-0.02, win.y - win.h / 2, win.z], a: [0.04, trim * 0.7, win.w + trim] },
+        { p: [-0.02, win.y, win.z - win.w / 2], a: [0.04, win.h, trim * 0.7] },
+        { p: [-0.02, win.y, win.z + win.w / 2], a: [0.04, win.h, trim * 0.7] },
+        { p: [-0.02, win.y, win.z], a: [0.03, win.h, 0.035] },
+        { p: [-0.02, win.y, win.z], a: [0.03, 0.035, win.w] },
+        { p: [-0.06, win.y - win.h / 2 - 0.04, win.z], a: [0.12, 0.04, win.w + trim * 2] },
+      ].map((b, i) => (
+        <mesh key={`w${i}`} position={b.p as [number, number, number]}>
+          <boxGeometry args={b.a as [number, number, number]} />
+          <meshStandardMaterial color={palette.paperDeep} roughness={0.7} />
+        </mesh>
+      ))}
+      {/* the porch lamp beside the door, and the light it throws on the path */}
+      <mesh position={[-0.05, 1.95, lampZ]}>
+        <boxGeometry args={[0.1, 0.24, 0.13]} />
+        <meshStandardMaterial color={palette.paperDeep} roughness={0.5} />
+      </mesh>
+      <mesh position={[-0.105, 1.95, lampZ]} rotation={[0, -Math.PI / 2, 0]}>
+        <planeGeometry args={[0.09, 0.17]} />
+        <meshBasicMaterial color={palette.sceneLamp} />
+      </mesh>
+      <pointLight position={[-0.45, 1.9, lampZ]} color={palette.sceneLamp} intensity={1.3} distance={4.5} decay={1.8} />
+    </group>
+  );
+}
+
+/** the step-free path to the door, flush with the threshold, between strips of lawn */
+function Grounds({ palette }: { palette: Palette }) {
+  const pathW = 1.3;
+  const len = 6;
+  return (
+    <group>
+      <mesh position={[-len / 2, 0.002, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[len, pathW]} />
+        <meshStandardMaterial color={palette.ruleStrong} roughness={0.95} />
+      </mesh>
+      {([-1, 1] as const).map((k) => (
+        <mesh key={k} position={[-len / 2, 0.001, k * (pathW / 2 + 0.9)]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[len, 1.8]} />
+          <meshStandardMaterial color={palette.sceneLawn} roughness={1} />
+        </mesh>
+      ))}
     </group>
   );
 }
