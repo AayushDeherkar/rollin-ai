@@ -691,20 +691,26 @@ function Apartment({
 }) {
   if (pair.status === "error") {
     return (
+      <>
       <div className="stage-left">
         <p role="alert" className="pointer-events-auto border border-rule-strong bg-paper-lift px-5 py-3 text-base">
           This apartment’s plan could not be loaded: {pair.message}. Go back to Search and open another.
         </p>
       </div>
+      {notice && <div className="stage-right justify-end">{notice}</div>}
+    </>
     );
   }
   if (!unit || !scannedFloor || !sid) {
     return (
+      <>
       <div className="stage-left">
         <p role="status" className="pointer-events-auto self-start border border-rule-strong bg-paper-lift px-5 py-3 text-base">
           Building the apartment…
         </p>
       </div>
+      {notice && <div className="stage-right justify-end">{notice}</div>}
+    </>
     );
   }
   const v = verdict(scannedFloor, hingesFloor, hinges);
