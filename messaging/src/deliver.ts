@@ -196,6 +196,11 @@ export class Deliverer {
     return this.state.line;
   }
 
+  /** the client conversation the office's findings and status notes go to, if known */
+  get client(): ClientLine | null {
+    return this.state.client ?? null;
+  }
+
   /** The office’s existing conversation, found on the project at start: used when none is saved yet. */
   async adopt(line: LeasingLine): Promise<boolean> {
     if (this.state.line || !sameHandle(line.handle, this.office)) return false;
