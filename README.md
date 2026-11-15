@@ -224,6 +224,15 @@ SKIP line per check. Everything except the live run works with no internet.
 python -m agent.preflight                 # add --no-live to skip the live run, --url to check a running API
 ```
 
+**Old test messages in the outbox.** Messages queued before round 5 have no `status`, no `questions` and no unit.
+They are old test messages that the bridge should never send. This command moves them to `data/outbox/archive/`,
+where they are kept, not deleted. It never touches a message the agent queues today, even one whose unit is unknown.
+Preflight fails until it has been run.
+```bash
+python -m agent.outbox clean --dry-run    # list what would be archived
+python -m agent.outbox clean
+```
+
 **Web app** on http://localhost:3000:
 ```bash
 cd web && npm install && cp .env.example .env.local && npm run dev    # ROLLIN_API_URL=http://localhost:8000

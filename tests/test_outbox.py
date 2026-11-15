@@ -187,3 +187,22 @@ def test_events_stream_replays_after_last_id_and_pushes_new():
         assert not h.subs
 
     asyncio.run(go())
+
+
+def test_clean_archives_only_pending_messages_without_a_unit(data, capsys):
+    from agent import outbox
+    box = data / "outbox"
+    old = {"to": "Leasing office", "text": "old test", "queued_at": "2026-11-14T10:00:00+00:00"}
+    (box / "20261114T100000_aaaaaa.json").write_text(json.dumps(old))                        # no sid, pending
+    (box / "20261114T100001_bbbbbb.json").write_text(json.dumps({**old, "status": "delivered"}))
+    (box / "20261114T100002_cccccc.json").write_text(json.dumps(                            # approved now, unit unknown
+        {**old, "status": "pending", "sid": None, "questions": []}))
+    assert outbox.main(["clean", "--dry-run"]) == 0 and "would archive 1" in capsys.readouterr().out
+    assert (box / "20261114T100000_aaaaaa.json").exists()
+    assert outbox.main(["clean"]) == 0
+    assert not (box / "20261114T100000_aaaaaa.json").exists()
+    kept = json.loads((box / "archive/20261114T100000_aaaaaa.json").read_text())
+    assert kept["status"] == "archived" and kept["text"] == "old test"                      # kept, not deleted
+    assert (box / "20261114T100001_bbbbbb.json").exists() and (box / f"{OID}.json").exists()  # delivered / has a unit
+    assert [i["id"] for i in outbox.pending()] == ["20261114T100002_cccccc", OID]   # a real message is never archived
+    assert outbox.archive_unlinked() == []                                                  # idempotent

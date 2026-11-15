@@ -294,3 +294,58 @@ def post_delivered(outbox_id: str, body: Delivered | None = None) -> dict:
 async def events(request: Request) -> StreamingResponse:
     return StreamingResponse(hub.stream(request.headers.get("last-event-id")), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+# ---------------------------------------------------------------- clean-up (command line)
+
+def stale(rec: dict | None) -> bool:
+    """An old test message: written before outbox records carried `status` and `questions` (round 5), and with no
+    unit recorded. Every message the agent queues now has both keys, even when its unit is unknown, so a real
+    approved message is never stale."""
+    return isinstance(rec, dict) and "status" not in rec and "questions" not in rec and not rec.get("sid")
+
+
+def archive_unlinked(dry_run: bool = False) -> list[str]:
+    """Move every stale outbox item (see `stale`) to outbox/archive/, so the bridge never sends it. Nothing is
+    deleted: each file is kept with status "archived". Returns the archived ids."""
+    box = _box()
+    done = []
+    with _lock:
+        for p in sorted(box.glob("*.json")) if box.exists() else []:
+            rec = _read(p)
+            if not stale(rec):
+                continue
+            done.append(p.stem)
+            if dry_run:
+                continue
+            arch = {**rec, "status": "archived", "archived_at": now(), "archive_reason": "old test message, no unit"}
+            dest = box / "archive" / p.name
+            dest.parent.mkdir(exist_ok=True)
+            dest.write_text(json.dumps(arch, indent=1), encoding="utf-8")
+            if stale(_read(p)):                     # the server may have marked it delivered meanwhile: keep that
+                p.unlink()
+            else:
+                dest.unlink()
+                done.pop()
+    return done
+
+
+def main(argv: list[str]) -> int:
+    """python -m agent.outbox clean [--dry-run]"""
+    import argparse
+    ap = argparse.ArgumentParser(prog="python -m agent.outbox",
+                                 description="Archive old test messages (pre-round-5 records with no unit) so the bridge never sends them.")
+    ap.add_argument("command", choices=["clean"])
+    ap.add_argument("--dry-run", action="store_true", help="list what would be archived; change nothing")
+    a = ap.parse_args(argv)
+    ids = archive_unlinked(a.dry_run)
+    verb = "would archive" if a.dry_run else "archived"
+    print(f"{verb} {len(ids)} old test message(s) with no unit recorded" + (f": {', '.join(ids)}" if ids else ""))
+    if ids and not a.dry_run:
+        print(f"moved to {_box() / 'archive'} (kept, not deleted); {len(pending())} message(s) still pending")
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    raise SystemExit(main(sys.argv[1:]))
