@@ -104,7 +104,13 @@ def wait_up(url: str, proc: subprocess.Popen | None, timeout_s: float = 90) -> s
 
 def check_api(rep: Report, url: str) -> None:
     h = httpx.get(f"{url}/api/health", timeout=10).json()
-    missing = (h.get("demo") or {}).get("missing") or []
+    alias_of = {sid: a for a, sid in demo_units.load().items() if a in demo_units.ALIASES and isinstance(sid, str)}
+
+    def by_alias(item: str) -> str:                 # "<sid>:aerial" -> "demo-main:aerial"; never print a model id
+        sid, _, what = item.partition(":")
+        return f"{alias_of.get(sid, 'extra unit')}:{what}" if what else item
+
+    missing = [by_alias(m) for m in (h.get("demo") or {}).get("missing") or []]
     rep.add("api", True, f"/api/health ok: {h.get('cached_models')} cached models"
             + (f"; demo missing {len(missing)} item(s): {', '.join(missing[:3])}" if missing else ""))
     r = httpx.get(f"{url}/api/units", timeout=30)

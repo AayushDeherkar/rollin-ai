@@ -47,4 +47,5 @@ def test_end_to_end_without_live_run(data, capsys):
     code = P.main(["--no-live"])
     out = capsys.readouterr().out
     assert "PASS  replay" in out and "SKIP  live" in out and "PASS  api     demo-main plan" in out
+    assert "demo missing" in out and "synthetic_demo" not in out and "synthetic_1br" not in out   # aliases only
     assert code == 0, out
