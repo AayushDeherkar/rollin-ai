@@ -65,7 +65,7 @@ await photon.listen(async (m) => {
       log(said);
       if (reply) await photon.reply(m, reply, 1);
     } catch (err) {
-      log(`Could not log the leasing office's reply: ${err instanceof Error ? err.message : String(err)}`);
+      log(`Handling the leasing office's text failed (logging its answer or sending the acknowledgement): ${err instanceof Error ? err.message : String(err)}`);
     }
     return;
   }
