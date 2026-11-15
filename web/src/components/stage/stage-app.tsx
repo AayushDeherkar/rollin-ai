@@ -33,6 +33,7 @@ import { PUBLIC_REPLAY } from "@/lib/public";
 import { useOutboxEvents, type AnswerEvent } from "@/lib/outbox-events";
 import { ChairPlate } from "./chair-plate";
 import { ChairScene } from "./chair-scene";
+import { MoreScreen } from "./more-screen";
 
 const StageCanvas = dynamic(() => import("./stage-canvas").then((m) => m.StageCanvas), { ssr: false });
 
@@ -320,6 +321,20 @@ function Stage() {
       .catch(() => {});
     return () => ac.abort();
   }, [entry.demo]);
+  /** "More" (M): everything the pitch leaves out, one keypress away */
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "m" && e.key !== "M") return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      e.preventDefault();
+      setMore((m) => !m);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   useEffect(() => {
     if (!entry.demo) return;
     const onKey = (e: KeyboardEvent) => {
@@ -329,6 +344,7 @@ function Stage() {
       const el = e.target as HTMLElement | null;
       if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
       e.preventDefault();
+      setMore(false);
       goBeat(b);
     };
     window.addEventListener("keydown", onKey);
@@ -532,6 +548,45 @@ function Stage() {
           onHinges={toggleHinges}
           onRide={toggleRide}
           onEvidence={showEvidence}
+        />
+      )}
+      {more && (
+        <MoreScreen
+          units={units}
+          onClose={() => setMore(false)}
+          actions={{
+            // each opens the real feature on the demo unit (the pitch's prepared states), then leaves the pitch
+            aerial: live
+              ? () => {
+                  setMore(false);
+                  goBeat(1);
+                  setBeat(null);
+                  setEvidence("aerial");
+                }
+              : null,
+            panorama: () => {
+              setMore(false);
+              goBeat(3);
+            },
+            memory: () => {
+              setMore(false);
+              goBeat(4);
+            },
+            labels: () => {
+              setMore(false);
+              goBeat(1);
+            },
+            tour:
+              live && rulerEdge
+                ? () => {
+                    setMore(false);
+                    goBeat(1);
+                    setBeat(null);
+                    setTourEdge(rulerEdge);
+                    setEvidence("tour");
+                  }
+                : null,
+          }}
         />
       )}
       {latestAnswer && seenAnswer !== latestAnswer.id && (
