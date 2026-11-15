@@ -16,6 +16,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import Lenis from "lenis";
+import { ChevronDown } from "lucide-react";
 import presetsJson from "../../../../data/chair_presets.json";
 import type { Story } from "./door-scene";
 import { SweepChart, useSweep, type Sweep } from "./numbers";
@@ -308,38 +309,37 @@ function Numbers({ sweep, state, lineRef }: { sweep: Sweep | null; state: "loadi
 function About() {
   return (
     <section id="about" className="relative z-10 border-t border-rule bg-paper">
-      <div className="mx-auto flex max-w-[90rem] flex-col gap-12 px-[var(--gutter)] py-24">
+      <div className="mx-auto flex max-w-[90rem] flex-col gap-10 px-[var(--gutter)] py-24">
         <h2 className="display text-3xl font-bold">About</h2>
-        <dl className="grid gap-x-10 gap-y-8 xl:grid-cols-3">
-          <Fact term="Measured">Walls, doorways and rooms from each 3D scan. Your chair’s size, or a sourced one.</Fact>
-          <Fact term="Estimated, and labelled">Door clear widths, hinge gains, bathrooms from photos, entrances from aerial images.</Fact>
-          <Fact term="What Rollin’ does not know">Missed doors, steps, thresholds, furniture: questions, sent only when you approve.</Fact>
-        </dl>
-        <div className="flex flex-col gap-3 border-t border-rule-strong pt-4">
-          <h3 className="display text-xl font-bold">Data</h3>
-          <ul className="flex flex-wrap gap-x-8 gap-y-2 text-base text-ink-soft">
-            <li>Matterport scans and panoramas</li>
-            <li>CoStar hackathon models index</li>
-            <li>Vexcel aerial imagery</li>
-            <li>None of it is republished here</li>
-          </ul>
-        </div>
-        <div className="flex flex-col gap-3 border-t border-rule-strong pt-4">
-          <h3 className="display text-xl font-bold">Team</h3>
-          <p className="text-base text-ink-soft">
-            Aayush Deherkar, engine, agent and data. Aarohi Agrawal, web and messaging. HackPrinceton Fall 2026, CoStar track.
-          </p>
+        {/* one list, one below another; each part opens on its own */}
+        <div className="flex max-w-[48rem] flex-col border-b border-rule-strong">
+          <Part title="Measured">Walls, doorways and rooms from each 3D scan. Your chair’s size, or a sourced one.</Part>
+          <Part title="Estimated, and labelled">Door clear widths, hinge gains, bathrooms from photos, entrances from aerial images.</Part>
+          <Part title="What Rollin’ does not know">Missed doors, steps, thresholds, furniture: questions, sent only when you approve.</Part>
+          <Part title="Data">
+            <ul className="flex flex-col gap-1">
+              <li>Matterport scans and panoramas</li>
+              <li>CoStar hackathon models index</li>
+              <li>Vexcel aerial imagery</li>
+              <li>None of it is republished here</li>
+            </ul>
+          </Part>
+          <Part title="Team">Aayush Deherkar and Aarohi Agrawal</Part>
         </div>
       </div>
     </section>
   );
 }
 
-function Fact({ term, children }: { term: string; children: React.ReactNode }) {
+/** one part of About: a native disclosure, so it opens with a click, Enter or Space and is announced as expandable */
+function Part({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex max-w-[38rem] flex-col gap-2 border-t border-rule-strong pt-4">
-      <dt className="display text-xl font-bold">{term}</dt>
-      <dd className="text-base text-ink-soft">{children}</dd>
-    </div>
+    <details className="group border-t border-rule-strong">
+      <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 py-3 hover:text-ink-soft [&::-webkit-details-marker]:hidden">
+        <h3 className="display text-xl font-bold">{title}</h3>
+        <ChevronDown aria-hidden className="size-6 shrink-0 transition-transform duration-[var(--dur-2)] group-open:rotate-180" />
+      </summary>
+      <div className="pb-5 text-base text-ink-soft">{children}</div>
+    </details>
   );
 }
