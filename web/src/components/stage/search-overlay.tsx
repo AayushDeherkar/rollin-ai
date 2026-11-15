@@ -1,7 +1,7 @@
 "use client";
 
 import { deliveryOf, type DeliveredEvent } from "@/lib/outbox-events";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Bot, ChevronDown, X } from "lucide-react";
 import type { Decision, Run } from "@/lib/agent";
 import type { SearchView } from "@/lib/search";
@@ -14,81 +14,89 @@ import { cn } from "@/lib/utils";
 export function Narration({ text, acting }: { text: string; acting: boolean }) {
   if (!text) return null;
   return (
-    <p role="status" aria-live="polite" className="pointer-events-auto flex max-w-[64ch] items-start gap-3 border border-rule-strong bg-paper-lift px-5 py-3 text-lg">
+    <p role="status" aria-live="polite" className="pointer-events-auto flex max-w-full items-start gap-3 border border-rule-strong bg-paper-lift px-5 py-3 text-lg">
       <span aria-hidden className={cn("mt-2 size-2.5 shrink-0 rounded-full", acting ? "bg-agent motion-safe:animate-pulse" : "bg-ink-soft")} />
       <span className="line-clamp-2">{text}</span>
     </p>
   );
 }
 
-/** The full trace, folded into a small pill top-right; it opens on click and closes on Esc. */
+/** The agent's state as a small pill top-right; it opens the full trace, which docks in the right rail. */
 export function AgentPill({
   run,
-  decisions,
   acting,
   steps,
-  onDecide,
-  onEvidence,
+  open,
+  onOpen,
 }: {
   run: Run;
-  decisions: Record<string, Decision>;
   acting: boolean;
   steps: number;
-  onDecide: (actionId: string, approved: boolean) => void;
-  onEvidence: (e: Evidence) => void;
+  open: boolean;
+  onOpen: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const button = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setOpen(false);
-        button.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
   if (run.status === "idle") return null;
   const state =
     run.status === "running" ? "Agent working" : run.status === "error" ? "Agent stopped with an error" : run.status === "stopped" ? "Agent stopped" : "Agent finished";
   return (
-    <div className="pointer-events-auto flex flex-col items-end gap-2">
-      <button
-        ref={button}
-        type="button"
-        aria-expanded={open}
-        aria-controls="agent-trace"
-        onClick={() => setOpen((o) => !o)}
-        className={cn(
-          "flex h-11 items-center gap-2 border bg-paper-lift px-4 text-base font-semibold transition-colors transition-draft hover:bg-paper-deep",
-          acting ? "border-agent text-agent" : "border-rule-strong text-ink",
-        )}
-      >
-        <Bot aria-hidden className="size-5" strokeWidth={2.25} />
-        {state}
-        <span className="measure text-ink-soft">{steps} steps</span>
-        {run.origin === "replay" && <span className="border border-ink-soft px-1.5 text-sm text-ink-soft">Replay</span>}
-        <ChevronDown aria-hidden className={cn("size-4 transition-transform transition-draft", open && "rotate-180")} strokeWidth={2.25} />
-      </button>
-      {open && (
-        <section id="agent-trace" aria-label="Agent trace" className="flex max-h-[70vh] w-[440px] flex-col border border-rule-strong bg-paper-lift">
-          <div className="flex items-center justify-between border-b border-rule px-4 py-2">
-            <h2 className="display text-lg font-semibold">What the agent did</h2>
-            <button type="button" onClick={() => setOpen(false)} aria-label="Close the trace" className="flex size-9 items-center justify-center hover:bg-paper-deep">
-              <X aria-hidden className="size-5" strokeWidth={2.25} />
-            </button>
-          </div>
-          {run.origin === "replay" && (
-            <p className="border-b border-rule px-4 py-2 text-sm text-ink-soft">{run.reason ? `Replay of a recorded run. ${run.reason}` : "Replay of a recorded run."}</p>
-          )}
-          <div className="min-h-0 overflow-y-auto px-4 py-3">
-            <Timeline events={run.events} decisions={decisions} onDecide={onDecide} onEvidence={onEvidence} shownEvidence={null} />
-          </div>
-        </section>
+    <button
+      id="agent-pill"
+      type="button"
+      aria-expanded={open}
+      aria-controls="agent-trace"
+      onClick={() => onOpen(!open)}
+      className={cn(
+        "pointer-events-auto flex min-h-11 flex-wrap items-center gap-x-2 border bg-paper-lift px-4 py-1 text-base font-semibold transition-colors transition-draft hover:bg-paper-deep",
+        acting ? "border-agent text-agent" : "border-rule-strong text-ink",
       )}
-    </div>
+    >
+      <Bot aria-hidden className="size-5" strokeWidth={2.25} />
+      {state}
+      <span className="measure text-ink-soft">{steps} steps</span>
+      {run.origin === "replay" && <span className="border border-ink-soft px-1.5 text-sm text-ink-soft">Replay</span>}
+      <ChevronDown aria-hidden className={cn("size-4 transition-transform transition-draft", open && "rotate-180")} strokeWidth={2.25} />
+    </button>
+  );
+}
+
+/** The full trace, in the right rail while open (it replaces the shortlist there); Esc closes it. */
+export function AgentTrace({
+  run,
+  decisions,
+  onDecide,
+  onEvidence,
+  onClose,
+}: {
+  run: Run;
+  decisions: Record<string, Decision>;
+  onDecide: (actionId: string, approved: boolean) => void;
+  onEvidence: (e: Evidence) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      onClose();
+      document.getElementById("agent-pill")?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <section id="agent-trace" aria-label="Agent trace" className="pointer-events-auto flex min-h-0 flex-col border border-rule-strong bg-paper-lift">
+      <div className="flex items-center justify-between gap-2 border-b border-rule px-4 py-2">
+        <h2 className="display text-lg font-semibold">What the agent did</h2>
+        <button type="button" onClick={onClose} aria-label="Close the trace" className="flex size-9 shrink-0 items-center justify-center hover:bg-paper-deep">
+          <X aria-hidden className="size-5" strokeWidth={2.25} />
+        </button>
+      </div>
+      {run.origin === "replay" && (
+        <p className="border-b border-rule px-4 py-2 text-sm text-ink-soft">{run.reason ? `Replay of a recorded run. ${run.reason}` : "Replay of a recorded run."}</p>
+      )}
+      <div className="stage-panel min-h-0 px-4 py-3">
+        <Timeline events={run.events} decisions={decisions} onDecide={onDecide} onEvidence={onEvidence} shownEvidence={null} />
+      </div>
+    </section>
   );
 }
 
@@ -96,7 +104,7 @@ export function AgentPill({
 export function BestFits({ view, onOpen }: { view: SearchView; onOpen: (sid: string) => void }) {
   if (!view.shortlist.length) return null;
   return (
-    <section aria-labelledby="best-title" className="pointer-events-auto flex w-[400px] flex-col gap-3">
+    <section aria-labelledby="best-title" className="stage-panel pointer-events-auto flex w-full flex-col gap-3">
       <div className="border border-rule-strong bg-paper-lift px-4 py-3">
         <h2 id="best-title" className="display text-xl font-bold">
           Best fits for your chair
@@ -165,7 +173,7 @@ export function ApprovalFocus({
   if (!a) return null;
   const decision = decisions[a.action_id] ?? null;
   return (
-    <div ref={ref} tabIndex={-1} className="pointer-events-auto flex w-[520px] flex-col gap-2 outline-none">
+    <div ref={ref} tabIndex={-1} className="stage-panel pointer-events-auto flex w-full flex-col gap-2 outline-none">
       <ApprovalCard event={a} decision={decision} onDecide={onDecide} delivery={decision?.state === "done" && decision.result.approved && !decision.result.replay ? deliveryOf(a.to?.label, decision.at ?? null, delivered) : null} />
       {decision?.state === "done" && (
         <button type="button" onClick={onDismiss} className="h-10 self-start border border-rule-strong bg-paper-lift px-4 text-base font-semibold hover:bg-paper-deep">

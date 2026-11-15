@@ -22,7 +22,7 @@ import type { Floor, Room } from "@/lib/contract";
 import { readSearch } from "@/lib/search";
 import type { UnitRow } from "@/lib/contract";
 import { readAgentReplay, webSenderId } from "@/components/workbench";
-import { AgentPill, ApprovalFocus, BestFits, FieldLegend, Narration } from "./search-overlay";
+import { AgentPill, AgentTrace, ApprovalFocus, BestFits, FieldLegend, Narration } from "./search-overlay";
 import { FieldScene, unitPosition } from "./field-scene";
 import { ApartmentScene, modelCentre, modelToWorld } from "./apartment-scene";
 import { ApartmentLegend, EvidencePanel, RoomCard, RoomStrip, VerdictLine, type EvidenceKind } from "./apartment-overlay";
@@ -326,6 +326,8 @@ function Stage() {
       .catch(() => {});
     return () => ac.abort();
   }, [entry.demo]);
+  /** the agent's trace, opened from the pill: it takes the right rail while open */
+  const [traceOpen, setTraceOpen] = useState(false);
   /** "More" (M): everything the pitch leaves out, one keypress away */
   const [more, setMore] = useState(false);
   useEffect(() => {
@@ -438,6 +440,20 @@ function Stage() {
     [step, at, floor, ride, drive, driving, picked, progress, route, rulerEdge, still],
   );
 
+  const notice =
+    latestAnswer && seenAnswer !== latestAnswer.id ? (
+      <AnswerNotice
+        answer={latestAnswer}
+        onOpen={() => {
+          setSeenAnswer(latestAnswer.id);
+          const room = latestAnswer.rooms[0]?.room_id;
+          open(latestAnswer.sid);
+          if (room) setPick({ sid: latestAnswer.sid, room });
+        }}
+        onDismiss={() => setSeenAnswer(latestAnswer.id)}
+      />
+    ) : null;
+
   return (
     <div className="fixed inset-0 overflow-clip bg-paper">
       <PatternDefs />
@@ -481,80 +497,86 @@ function Stage() {
           )}
         </StageCanvas>
       </div>
-      <header className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-6 p-6">
-        <div className="flex items-center gap-3">
-          <StepBar
-            step={step}
-            available={available}
-            onStep={(next) => {
-              leaveBeat();
-              setStep(next);
-            }}
-          />
-          <PublicBadge />
-        </div>
+      {/* the overlay: four grid regions over the scene (globals.css .stage-grid); nothing is absolutely placed */}
+      <div className="stage-grid">
+        <header className="stage-top">
+          <div className="flex flex-wrap items-center gap-3">
+            <StepBar
+              step={step}
+              available={available}
+              onStep={(next) => {
+                leaveBeat();
+                setStep(next);
+              }}
+            />
+            <PublicBadge />
+          </div>
+          {step === "search" && <AgentPill run={agent.run} acting={agent.acting} steps={view.steps} open={traceOpen} onOpen={setTraceOpen} />}
+        </header>
+        {step === "chair" && (
+          <>
+            <div className="stage-left justify-end" data-wide>
+              <ChairPlate chair={chair} onChair={setChair} onFind={find} />
+            </div>
+            {notice && <div className="stage-right justify-end">{notice}</div>}
+          </>
+        )}
         {step === "search" && (
-          <AgentPill
-            run={agent.run}
-            decisions={agent.decisions}
-            acting={agent.acting}
-            steps={view.steps}
-            onDecide={agent.decide}
-            onEvidence={(e) => open(e.sid)}
+          <>
+            <div className="stage-left">
+              {view.approval && dismissed !== view.approval.action_id && (
+                // docked in the left rail: the field in the middle stays clear
+                <ApprovalFocus
+                  view={view}
+                  decisions={agent.decisions}
+                  onDecide={agent.decide}
+                  onDismiss={() => setDismissed(view.approval?.action_id ?? null)}
+                  delivered={outbox.delivered}
+                />
+              )}
+              <div data-fixed className="mt-auto flex flex-col items-start gap-3">
+                {/* the approval card has the rail first: the legend steps aside while it is open */}
+                {!(view.approval && dismissed !== view.approval.action_id) && <FieldLegend acting={agent.acting} />}
+                <Narration text={view.narration} acting={agent.acting} />
+              </div>
+            </div>
+            {(traceOpen && agent.run.status !== "idle") || view.shortlist.length > 0 || notice ? (
+              <div className="stage-right">
+                {traceOpen && agent.run.status !== "idle" ? (
+                  <AgentTrace run={agent.run} decisions={agent.decisions} onDecide={agent.decide} onEvidence={(e) => open(e.sid)} onClose={() => setTraceOpen(false)} />
+                ) : (
+                  <BestFits view={view} onOpen={open} />
+                )}
+                {notice}
+              </div>
+            ) : null}
+          </>
+        )}
+        {step === "apartment" && (
+          <Apartment
+            sid={sid}
+            pair={pair}
+            unit={unit}
+            scannedFloor={scannedFloor}
+            hingesFloor={hingesFloor}
+            hinges={hinges}
+            target={target}
+            picked={picked}
+            drive={drive}
+            ride={ride}
+            live={live}
+            evidence={shownEvidence}
+            photoFor={photoFor}
+            rulerEdge={rulerEdge}
+            tourEdge={tourEdge === RULER_DOOR ? rulerEdge : tourEdge}
+            notice={notice}
+            onRoom={selectRoom}
+            onHinges={toggleHinges}
+            onRide={toggleRide}
+            onEvidence={showEvidence}
           />
         )}
-      </header>
-      {step === "chair" && (
-        <div className="pointer-events-none absolute bottom-6 left-6">
-          <ChairPlate chair={chair} onChair={setChair} onFind={find} />
-        </div>
-      )}
-      {step === "search" && (
-        <>
-          <div className="pointer-events-none absolute top-28 right-6">
-            <BestFits view={view} onOpen={open} />
-          </div>
-          <div className="pointer-events-none absolute bottom-6 left-6 flex flex-col items-start gap-3">
-            <FieldLegend acting={agent.acting} />
-            <Narration text={view.narration} acting={agent.acting} />
-          </div>
-          {view.approval && dismissed !== view.approval.action_id && (
-            // left, under the step bar: the middle of the field stays visible
-            <div className="pointer-events-none absolute top-28 left-6">
-              <ApprovalFocus
-                view={view}
-                decisions={agent.decisions}
-                onDecide={agent.decide}
-                onDismiss={() => setDismissed(view.approval?.action_id ?? null)}
-                delivered={outbox.delivered}
-              />
-            </div>
-          )}
-        </>
-      )}
-      {step === "apartment" && (
-        <Apartment
-          sid={sid}
-          pair={pair}
-          unit={unit}
-          scannedFloor={scannedFloor}
-          hingesFloor={hingesFloor}
-          hinges={hinges}
-          target={target}
-          picked={picked}
-          drive={drive}
-          ride={ride}
-          live={live}
-          evidence={shownEvidence}
-          photoFor={photoFor}
-          rulerEdge={rulerEdge}
-          tourEdge={tourEdge === RULER_DOOR ? rulerEdge : tourEdge}
-          onRoom={selectRoom}
-          onHinges={toggleHinges}
-          onRide={toggleRide}
-          onEvidence={showEvidence}
-        />
-      )}
+      </div>
       {more && (
         <MoreScreen
           units={units}
@@ -595,20 +617,6 @@ function Stage() {
           }}
         />
       )}
-      {latestAnswer && seenAnswer !== latestAnswer.id && (
-        <div className="pointer-events-none absolute right-6 bottom-28">
-          <AnswerNotice
-            answer={latestAnswer}
-            onOpen={() => {
-              setSeenAnswer(latestAnswer.id);
-              const room = latestAnswer.rooms[0]?.room_id;
-              open(latestAnswer.sid);
-              if (room) setPick({ sid: latestAnswer.sid, room });
-            }}
-            onDismiss={() => setSeenAnswer(latestAnswer.id)}
-          />
-        </div>
-      )}
     </div>
   );
 }
@@ -617,7 +625,7 @@ function Stage() {
 function AnswerNotice({ answer, onOpen, onDismiss }: { answer: AnswerEvent; onOpen: () => void; onDismiss: () => void }) {
   const rooms = answer.rooms.map((r) => `${r.label}${r.clear_in.value != null ? `: ${r.clear_in.value.toFixed(1)} in clear` : ""}`);
   return (
-    <section role="status" aria-live="polite" className="pointer-events-auto flex w-[400px] flex-col gap-2 border-2 border-ink bg-paper-lift p-4">
+    <section role="status" aria-live="polite" data-fixed className="pointer-events-auto mt-auto flex w-full flex-col gap-2 border-2 border-ink bg-paper-lift p-4">
       <h2 className="text-base font-semibold">The leasing office replied</h2>
       <p className="text-base">
         {rooms.length ? `${rooms.join("; ")} (asked, not measured).` : "Its reply answered no room the scan left unknown, so nothing changed."}
@@ -652,6 +660,7 @@ function Apartment({
   photoFor,
   rulerEdge,
   tourEdge,
+  notice,
   onRoom,
   onHinges,
   onRide,
@@ -673,6 +682,8 @@ function Apartment({
   rulerEdge: string | null;
   /** the door the open tour is about */
   tourEdge: string | null;
+  /** the leasing office's reply, under the room card */
+  notice: React.ReactNode;
   onRoom: (id: string) => void;
   onHinges: (on: boolean) => void;
   onRide: () => void;
@@ -680,18 +691,26 @@ function Apartment({
 }) {
   if (pair.status === "error") {
     return (
-      <div className="pointer-events-none absolute top-28 left-6">
-        <p role="alert" className="pointer-events-auto max-w-[56ch] border border-rule-strong bg-paper-lift px-5 py-3 text-base">
+      <>
+      <div className="stage-left">
+        <p role="alert" className="pointer-events-auto border border-rule-strong bg-paper-lift px-5 py-3 text-base">
           This apartment’s plan could not be loaded: {pair.message}. Go back to Search and open another.
         </p>
       </div>
+      {notice && <div className="stage-right justify-end">{notice}</div>}
+    </>
     );
   }
   if (!unit || !scannedFloor || !sid) {
     return (
-      <p role="status" className="pointer-events-none absolute top-28 left-6 border border-rule-strong bg-paper-lift px-5 py-3 text-base">
-        Building the apartment…
-      </p>
+      <>
+      <div className="stage-left">
+        <p role="status" className="pointer-events-auto self-start border border-rule-strong bg-paper-lift px-5 py-3 text-base">
+          Building the apartment…
+        </p>
+      </div>
+      {notice && <div className="stage-right justify-end">{notice}</div>}
+    </>
     );
   }
   const v = verdict(scannedFloor, hingesFloor, hinges);
@@ -702,7 +721,8 @@ function Apartment({
   const hint = !picked ? "Pick a room below to fly there." : v.fixable && !hinges ? "A red door frame can often be fixed: try offset hinges." : null;
   return (
     <>
-      <div className="pointer-events-none absolute top-28 left-6 flex flex-col items-start gap-3">
+      {/* evidence widens the left region into the middle column; the room card keeps the right rail */}
+      <div className="stage-left" data-span={evidence ? "mid" : undefined}>
         <VerdictLine unit={unit} verdict={v} replay={pair.status === "ready" && pair.origin === "replay" ? (pair.reason ?? "") : null} />
         {!evidence && <ApartmentLegend hint={hint} />}
         {evidence && (
@@ -716,25 +736,28 @@ function Apartment({
           />
         )}
       </div>
-      {room && (
-        <div className="pointer-events-none absolute top-28 right-6">
-          <RoomCard
-            room={room}
-            hingesRoom={hingesRoom}
-            drive={drive}
-            chairIn={unit.chair_in}
-            withHinges={hinges}
-            photo={photo}
-            hasTour={live && rulerEdge !== null}
-            hasAerial={live}
-            riding={ride}
-            onHinges={onHinges}
-            onRide={onRide}
-            onEvidence={onEvidence}
-          />
+      {(room || notice) && (
+        <div className="stage-right">
+          {room && (
+            <RoomCard
+              room={room}
+              hingesRoom={hingesRoom}
+              drive={drive}
+              chairIn={unit.chair_in}
+              withHinges={hinges}
+              photo={photo}
+              hasTour={live && rulerEdge !== null}
+              hasAerial={live}
+              riding={ride}
+              onHinges={onHinges}
+              onRide={onRide}
+              onEvidence={onEvidence}
+            />
+          )}
+          {notice}
         </div>
       )}
-      <div className="pointer-events-none absolute inset-x-6 bottom-6 flex items-end">
+      <div className="stage-bottom">
         <RoomStrip rooms={(hinges && hingesFloor ? hingesFloor : scannedFloor).rooms} selected={target} onSelect={onRoom} />
       </div>
     </>

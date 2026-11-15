@@ -119,9 +119,9 @@ export function MoreScreen({
       }}
       className="pointer-events-auto absolute inset-0 z-50 overflow-y-auto bg-paper outline-none"
     >
-      <div className="mx-auto flex max-w-[1280px] flex-col gap-6 px-8 py-8">
-        <header className="flex items-baseline justify-between gap-6">
-          <div className="flex items-baseline gap-4">
+      <div className="mx-auto flex max-w-[80rem] flex-col gap-[var(--gutter)] p-[var(--gutter)]">
+        <header className="flex flex-wrap items-baseline justify-between gap-4">
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <h1 id="more-title" className="display text-3xl font-bold">
               More
             </h1>
@@ -134,8 +134,8 @@ export function MoreScreen({
           </button>
         </header>
 
-        <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-6">
-          <section aria-labelledby="sweep-title" className="flex flex-col gap-3 border border-rule-strong bg-paper-lift p-6">
+        <div className="flex flex-wrap gap-[var(--gutter)] [&>*]:min-w-0">
+          <section aria-labelledby="sweep-title" className="flex flex-[2_1_30rem] flex-col gap-3 border border-rule-strong bg-paper-lift p-6">
             <h2 id="sweep-title" className="display text-2xl font-bold">
               Chair width against units that fit
             </h2>
@@ -150,7 +150,7 @@ export function MoreScreen({
             )}
           </section>
 
-          <section aria-labelledby="owner-title" className="flex flex-col gap-3 border-2 border-ink bg-paper-lift p-6">
+          <section aria-labelledby="owner-title" className="flex flex-[1_1_17rem] flex-col gap-3 border-2 border-ink bg-paper-lift p-6">
             <h2 id="owner-title" className="text-base font-semibold text-ink-soft">
               For an owner
             </h2>
@@ -182,7 +182,7 @@ export function MoreScreen({
           </section>
         </div>
 
-        <section aria-label="Everything else" className="grid grid-cols-3 gap-4">
+        <section aria-label="Everything else" className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-4">
           <Tile title="Aerial check" body="The building from above (Vexcel): entrance, ramps and paved paths, each answer labelled from aerial, estimated." action={actions.aerial} cta="See the building" off="Only for a live unit, not the replay." />
           <Tile title="Panorama check" body="A vision model reads the defurnished panoramas for the bathroom: tub or shower, grab bars, thresholds." action={actions.panorama} cta="See the bathroom" />
           <Tile title="Memory across texts" body="Text Rollin’ again and it uses the chair you gave last time, and says so. Each sender’s chair is kept apart." action={actions.memory} cta="Start a search" />
@@ -236,7 +236,7 @@ function Limits() {
     "Match panoramas to storeys, so multi-floor units get the vision check.",
   ];
   return (
-    <section aria-label="Limitations and what is next" className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-6 border border-rule-strong bg-paper-lift p-6">
+    <section aria-label="Limitations and what is next" className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,20rem),1fr))] gap-6 border border-rule-strong bg-paper-lift p-6">
       <div className="flex flex-col gap-2">
         <h3 className="text-lg font-semibold">Limitations</h3>
         <ul className="flex list-disc flex-col gap-1.5 pl-5 text-base">
@@ -259,8 +259,17 @@ function Limits() {
 
 /** Units with every room reachable against chair width: as scanned (solid) and with offset hinges (dashed), each labelled at its end. */
 function SweepChart({ sweep }: { sweep: Sweep }) {
-  const W = 760;
-  const H = 300;
+  // the viewBox is the figure's real width in CSS pixels, so the 16px labels render at 16px at any size
+  const fig = useRef<HTMLElement>(null);
+  const [W, setW] = useState(760);
+  useEffect(() => {
+    const el = fig.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setW(Math.max(320, Math.round(e.contentRect.width))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const H = Math.round(Math.min(300, Math.max(220, W * 0.4)));
   const pad = { l: 56, r: 120, t: 16, b: 44 };
   const pts = sweep.points;
   const x0 = pts[0].width;
@@ -284,7 +293,7 @@ function SweepChart({ sweep }: { sweep: Sweep }) {
   let yHinges = sy(last.hinges);
   if (Math.abs(yScanned - yHinges) < 20) [yHinges, yScanned] = [Math.min(yScanned, yHinges) - 10, Math.max(yScanned, yHinges) + 10];
   return (
-    <figure className="flex flex-col gap-2">
+    <figure ref={fig} className="flex flex-col gap-2">
       <p className="text-base">
         As scanned, every room is reachable in <span className="measure font-semibold">{first.scanned}</span> units for a{" "}
         <span className="measure font-semibold">{first.width} in</span> chair and in <span className="measure font-semibold">{last.scanned}</span> for a{" "}

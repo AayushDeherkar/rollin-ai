@@ -37,26 +37,32 @@
   --font-text: var(--font-public-sans), "Helvetica Neue", sans-serif;
   --font-measure: var(--font-plex-mono), ui-monospace, monospace;
 
-  /* ── Type scale (projector at 1440x900: nothing below 16px) ── */
-  --text-sm: 16px; /* smallest allowed: captions, labels */
-  --text-base: 18px; /* body */
-  --text-lg: 22px; /* panel headings, callout figures */
-  --text-xl: 28px;
-  --text-2xl: 36px;
-  --text-3xl: 52px; /* wordmark / empty-state titles */
+  /* ── Type scale: rem, so it follows the reader's font size and browser zoom; nothing below 1rem (16px).
+     The three largest steps grow a little with the viewport (clamp), never past their 1440x900 size. ── */
+  --text-sm: 1rem; /* smallest allowed: captions, labels */
+  --text-base: 1.125rem; /* body */
+  --text-lg: clamp(1.25rem, 1.1rem + 0.35vw, 1.375rem); /* panel headings, callout figures */
+  --text-xl: clamp(1.375rem, 1.1rem + 0.6vw, 1.75rem);
+  --text-2xl: clamp(1.625rem, 1.2rem + 1vw, 2.25rem);
+  --text-3xl: clamp(2.25rem, 1.4rem + 2vw, 3.25rem); /* wordmark / empty-state titles */
   --leading-tight: 1.1;
   --leading-text: 1.45;
   --tracking-display: 0.02em;
 
   /* ── Space, line and radius ──────────────────────────── */
-  --space: 4px; /* Tailwind spacing unit: p-4 = 16px */
+  --space: 0.25rem; /* Tailwind spacing unit: p-4 = 1rem */
   --line-hair: 1px;
   --line-wall: 3px; /* plan walls at the default zoom */
   --line-frame: 2px;
   --radius: 2px; /* drafting: nearly square */
-  --panel-left: 300px;
-  --panel-right: 360px;
-  --titleblock-h: 76px;
+  --panel-left: 18.75rem;
+  --panel-right: 22.5rem;
+  --titleblock-h: 4.75rem;
+  /* ── Stage overlay grid (see .stage-grid in globals.css) ── */
+  --gutter: clamp(0.75rem, 0.4rem + 1vw, 1.5rem); /* edge and gap between overlay regions */
+  --rail-left: clamp(17rem, 30vw, 26rem);
+  --rail-left-wide: clamp(18rem, 36vw, 32rem); /* step 1's controls */
+  --rail-right: clamp(16rem, 26vw, 25rem);
 
   /* ── Motion: one curve, one duration scale, nothing bounces ── */
   --ease-draft: cubic-bezier(0.22, 1, 0.36, 1);
