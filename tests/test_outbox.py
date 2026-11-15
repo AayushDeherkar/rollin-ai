@@ -102,7 +102,7 @@ def test_send_message_records_unit_and_the_questions_as_sent(data):
                    sid="synthetic_demo")
     rec = next(json.loads(p.read_text()) for p in (data / "outbox").glob("*.json") if p.stem != OID)
     assert rec["sid"] == "synthetic_demo" and rec["status"] == "pending"
-    assert rec["questions"] == ["What is the clear width of the closet door?", "Step-free?"]
+    assert rec["questions"] == ["What is the clear width of the closet door?"]       # the fragment is not sent
 
 
 def test_send_message_never_guesses_between_units_with_the_same_name(data):
@@ -145,12 +145,13 @@ def test_stored_nan_from_an_old_answer_file_does_not_break_the_unit(data, client
 
 def test_reply_numbers_follow_the_numbers_as_sent(data, client):
     from agent import agent as A
-    A.send_message("Leasing office (Synthetic)", "Hi\n2. What is the clear width of the closet door?\n3. Step-free?",
-                   sid="synthetic_demo")
+    A.send_message("Leasing office (Synthetic)", "Hi\n2. Is the building entrance step-free today?\n"
+                   "5. What is the clear width of the closet door?", sid="synthetic_demo")
     rec_path = next(p for p in (data / "outbox").glob("*.json") if p.stem != OID)
-    assert json.loads(rec_path.read_text())["questions"] == [None, "What is the clear width of the closet door?",
-                                                             "Step-free?"]
-    r = client.post("/api/answers", json={"outbox_id": rec_path.stem, "text": "1. hi\n2. 31 in"}).json()
+    rec = json.loads(rec_path.read_text())
+    assert rec["questions"] == ["Is the building entrance step-free today?", "What is the clear width of the closet door?"]
+    assert "\n1. Is the building" in rec["text"] and "\n2. What is" in rec["text"]       # renumbered as sent
+    r = client.post("/api/answers", json={"outbox_id": rec_path.stem, "text": "1. yes\n2. 31 in"}).json()
     assert [x["room_id"] for x in r["rooms"]] == ["closet"] and r["rooms"][0]["clear_in"] == 31.0
 
 
@@ -206,3 +207,15 @@ def test_clean_archives_only_pending_messages_without_a_unit(data, capsys):
     assert (box / "20261114T100001_bbbbbb.json").exists() and (box / f"{OID}.json").exists()  # delivered / has a unit
     assert [i["id"] for i in outbox.pending()] == ["20261114T100002_cccccc", OID]   # a real message is never archived
     assert outbox.archive_unlinked() == []                                                  # idempotent
+
+
+def test_a_reply_to_a_non_width_question_never_answers_a_room():
+    from agent.outbox import match_answers
+    rooms = [{"room_id": "o1", "label": "Other", "status": "blocked"}, {"room_id": "o2", "label": "Other", "status": "unknown"}]
+    qs = ['Would it be possible to widen the doorway to the room marked "Other" on the floor plan? From the plan...',
+          "Is the building entrance step-free, and is there an elevator?",
+          'What is the clear width of the door to the room marked "Other", in inches?']
+    hit, _ = match_answers(rooms, "1. No, the building does not allow that.", [], qs)
+    assert hit == []
+    hit, _ = match_answers(rooms, "3. 30 inches", [], qs)
+    assert [(h["room_id"], h["clear_in"]) for h in hit] == [("o2", 30.0)]

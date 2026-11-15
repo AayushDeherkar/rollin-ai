@@ -305,8 +305,10 @@ AERIAL_ASK = {
     "walkways_to_buildings": "Is there a continuous paved, step-free path from the parking area to the building entrance?",
     "exterior_stairs": "Can the unit's front door be reached without using any exterior stairs?",
 }
-FULL_QUESTION = re.compile(r"^(Is|Are|Can|Could|Would|Will|Do|Does|Did|Has|Have|What|Which|Where|When|How|Who)\b"
-                           r"[^?]{8,200}\?$")
+ASKS = r"(Is|Are|Can|Could|Would|Will|Do|Does|Did|Has|Have|What|Which|Where|When|How|Who)\b"
+FULL_QUESTION = re.compile(ASKS + r"[^?]{8,200}\?$")
+QUESTION_LINE = re.compile(ASKS + r"[^?]{8,200}\?")     # a question, possibly followed by one short sentence
+NARROW = "widest way in"                                 # fit.py: the room's own doorway is narrower than the chair
 
 
 def _full_question(q) -> str | None:
@@ -317,29 +319,62 @@ def _full_question(q) -> str | None:
     return q if FULL_QUESTION.match(q) and len(q.split()) >= 4 else None
 
 
-def unit_questions(sid: str, chair_width_in: float, chair_length_in: float) -> list[str]:
-    """What the scan cannot answer for one unit, most important first, at most MAX_QUESTIONS:
-    1. one question naming the doorways that stay blocked even with offset hinges: can they be widened? (always
-       asked when there are any; the most important rooms first, at most three named)
-    2. the entrance and elevator;
-    3. each unknown room's door width (rooms the office already answered are skipped);
-    4. unclear aerial items, phrased for the office."""
+def _question_line(q: str) -> bool:
+    return bool(QUESTION_LINE.match(q)) and len(q.split()) >= 4
+
+
+def outbound_text(text: str) -> str:
+    """Exactly what a leasing office receives: the AI disclosure first, and numbered lines kept only when they are
+    complete questions, renumbered, at most MAX_QUESTIONS. The approval card shows this same text, and
+    send_message queues it, so a person approves what is sent even if the model reworded the draft."""
+    out, n = [], 0
+    for line in with_ai_disclosure(text).splitlines():
+        m = NUMBERED_Q.match(line)
+        if not m:
+            out.append(line)
+        elif n < MAX_QUESTIONS and _question_line(m.group(2)):
+            n += 1
+            out.append(f"{n}. {m.group(2)}")
+    return "\n".join(out)
+
+
+def _widen_question(sid: str, w: float, l: float, chair_known: bool) -> list[str]:
+    """One question naming the doorways that are too narrow even with offset hinges (fit.py's "widest way in"
+    reason: the room's own doorway is the shortfall), most important rooms first, at most three named. Rooms
+    blocked for another reason (only reachable through a blocked room, a turn that is too tight) are not named."""
+    names = sorted({_room_words(r["label"]) for r in run_fit(sid, w, l, True).get("rooms", [])
+                    if r["status"] == "blocked" and str(r.get("reason") or "").startswith(NARROW)}, key=_room_rank)
+    if not names:
+        return []
+    names = names[:3]
+    listed = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+    many = len(names) > 1
+    chair = f"a {w:g}-inch-wide wheelchair" if chair_known else f"a typical {w:g}-inch-wide wheelchair"
+    return [f"Would it be possible to widen the doorway{'s' if many else ''} to {listed}? From the floor plan we "
+            f"estimate {chair} cannot get through {'them' if many else 'it'}, even with offset hinges."]
+
+
+def _question_parts(sid: str, w: float, l: float, chair_known: bool = True) -> tuple[list[str], list[str], list[str]]:
+    """(first, unknown-door, aerial) questions for one unit. `first` is the widen question (if any) and the entrance."""
     from agent.outbox import answers_for
     answered = {r["room_id"] for a in answers_for(sid) for r in a.get("rooms", [])}
-    blocked = sorted({_room_words(r["label"]): r for r in run_fit(sid, chair_width_in, chair_length_in, True)
-                      .get("rooms", []) if r["status"] == "blocked"}, key=_room_rank)
-    widen = []
-    if blocked:
-        names = blocked[:3]
-        listed = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
-        widen = [f"From the floor plan we estimate a {chair_width_in:g}-inch-wide wheelchair cannot get through the "
-                 f"doorway{'s' if len(names) > 1 else ''} to {listed}, even with offset hinges. Would it be possible "
-                 f"to widen {'them' if len(names) > 1 else 'it'}?"]
     unknown = [f"What is the clear width of {_door_words(r['label'])}, in inches?"
-               for r in run_fit(sid, chair_width_in, chair_length_in).get("rooms", [])
+               for r in run_fit(sid, w, l).get("rooms", [])
                if r["status"] == "unknown" and r.get("room_id") not in answered]
     aerial = [AERIAL_ASK[f["item"]] for f in _aerial_unclear(sid) if f.get("item") in AERIAL_ASK]
-    return list(dict.fromkeys(widen + [ENTRANCE_Q] + unknown + aerial))[:MAX_QUESTIONS]
+    return _widen_question(sid, w, l, chair_known) + [ENTRANCE_Q], unknown, aerial
+
+
+def unit_questions(sid: str, chair_width_in: float, chair_length_in: float, extra: list[str] | None = None,
+                   chair_known: bool = True) -> list[str]:
+    """What the scan cannot answer for one unit, most important first, at most MAX_QUESTIONS:
+    1. the widen question for doorways too narrow even with offset hinges (always asked when there are any);
+    2. the entrance and elevator;
+    3. the person's own extra questions (complete questions only);
+    4. each unknown room's door width (rooms the office already answered are skipped);
+    5. unclear aerial items, phrased for the office."""
+    first, unknown, aerial = _question_parts(sid, chair_width_in, chair_length_in, chair_known)
+    return list(dict.fromkeys(first + (extra or []) + unknown + aerial))[:MAX_QUESTIONS]
 
 
 ROOM_RANK = ("bathroom", "bath", "bedroom", "kitchen", "living", "dining", "laundry", "hallway", "office")
@@ -377,18 +412,23 @@ def draft_landlord_message(sid: str, questions: list[str] | None = None, chair_w
     """Draft (do not send) a short message to a unit's leasing office asking only what the scan cannot answer.
     The widen-doorway, entrance, unknown-door and unclear-aerial questions are added automatically, at most four in
     all; pass only extra questions, each a complete sentence ending in "?" (fragments are dropped)."""
+    chair_known = bool(chair_width_in) or _CHAIR.get() is not None    # else the batch chair is only assumed
     w, l = _chair(chair_width_in, None)
     name = get_unit(sid).get("name") or sid
     extra = [q for q in map(_full_question, questions or []) if q]
-    qs = list(dict.fromkeys(unit_questions(sid, w, l) + extra))[:MAX_QUESTIONS]
-    lines = [with_ai_disclosure(f"My client uses a wheelchair {w:g} inches wide and is interested "
-                                f"in your {name} floor plan."),
+    qs = unit_questions(sid, w, l, extra, chair_known)
+    dropped = [q for q in extra if q not in qs] + [q for q in questions or [] if not _full_question(q)]
+    who = f"My client uses a wheelchair {w:g} inches wide" if chair_known else "My client uses a wheelchair"
+    lines = [with_ai_disclosure(f"{who} and is interested in your {name} floor plan."),
              "Could you help with a few quick questions? A one-line answer to each is plenty."]
     lines += [f"{i}. {q}" for i, q in enumerate(qs, 1)]
     lines.append("Thank you!")
     to = f"Leasing office ({name})"
     _DRAFTED.setdefault(to, set()).add(sid)
-    return {"sid": sid, "to": to, "text": "\n".join(lines)}
+    out = {"sid": sid, "to": to, "text": "\n".join(lines)}
+    if dropped:                                     # say so, never drop a question silently
+        out["not_asked"] = {"questions": dropped, "why": f"at most {MAX_QUESTIONS} complete questions per message"}
+    return out
 
 
 def message_unit(to: str, sid: str | None) -> str | None:
@@ -404,8 +444,8 @@ def send_message(to: str, text: str, sid: str | None = None) -> dict:
     Pass the unit's `sid` from the draft so the office's reply can be matched to its rooms."""
     box = data_dir() / "outbox"
     box.mkdir(parents=True, exist_ok=True)
-    text = with_ai_disclosure(text)
-    numbered = {int(m.group(1)): m.group(2) for m in map(NUMBERED_Q.match, text.splitlines()) if m}
+    text = outbound_text(text)
+    numbered ={int(m.group(1)): m.group(2) for m in map(NUMBERED_Q.match, text.splitlines()) if m}
     # questions[n-1] is the line the office reads as "n." (null where the text skips a number)
     questions = [numbered.get(n) for n in range(1, max(numbered, default=0) + 1)]
     rec = {"to": to, "text": text, "queued_at": datetime.now(timezone.utc).isoformat(), "status": "pending",
@@ -746,7 +786,7 @@ class Run:
     def from_interrupt(self, interrupt: Any, thread: dict) -> list[dict]:
         """One approval per interrupt: the middleware needs one decision per batched request, all at once."""
         reqs = interrupt.value.get("action_requests", [])
-        msgs = [{"to": r["args"].get("to"), "draft": with_ai_disclosure(r["args"].get("text", ""))}
+        msgs = [{"to": r["args"].get("to"), "draft": outbound_text(r["args"].get("text", ""))}
                 for r in reqs if r.get("name") == "send_message"]
         if not msgs:
             return []
@@ -886,7 +926,7 @@ async def run_agent(message: str, profile: dict, run_id: str) -> AsyncIterator[d
     chair = profile.get("chair_in") or []
     chair_asked = len(chair) == 2
     chair = (float(chair[0]), float(chair[1])) if chair_asked else BATCH_CHAIR
-    _CHAIR.set(chair)                           # tools default to this run's chair if the model omits it
+    _CHAIR.set(chair if chair_asked else None)  # tools default to this run's chair; None = assumed batch chair
     r = Run(run_id)
     plan = {"text": "Orchestrator pipeline", "source": "orchestrator",
             "todos": [{"id": f"t{i}", "text": t, "status": "pending"} for i, t in enumerate(PIPELINE, 1)]}
