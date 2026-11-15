@@ -47,7 +47,6 @@ From the official HackPrinceton judging document (Fall 2026):
 **Today:** listing sites offer a single accessibility checkbox that the landlord self-reports. Case managers call around, ask "is it accessible?", get "yes", and the patient discovers a 24" bathroom door on move-in day — or never leaves the facility.
 
 **Stats we may use on stage — each marked VERIFY must be checked against the primary source before quoting:**
-- < 1% of US housing units are wheelchair accessible; < 5% suit someone with moderate mobility difficulty — HUD, *Accessibility of America's Housing Stock* (2015). **NOT VERIFIED (14 Nov): huduser.gov blocked our fetches. Do not quote until someone opens the PDF.**
 - **Verified 14 Nov:** "Twenty-five states reported finding affordable, accessible housing to be the number one barrier to transitions." KFF, *Money Follows the Person: A 2015 State Survey* (16 Oct 2015).
 - **Verified 14 Nov:** Fair Housing Act design rules cover buildings of 4+ units with an elevator, and the ground-floor units of other 4+ unit buildings, "for first occupancy after March 13, 1991". Doors must be "sufficiently wide to allow passage by handicapped persons in wheelchairs" (24 CFR 100.201, 100.205(a) and 100.205(c)(2)).
 See the README's "Sources" section for links.
