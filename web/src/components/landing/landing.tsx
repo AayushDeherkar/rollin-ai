@@ -129,6 +129,7 @@ export function Landing() {
           <div data-hero-text className="flex max-w-[40rem] flex-col gap-6 max-lg:border max-lg:border-rule-strong max-lg:bg-paper-lift max-lg:p-5">
             <h1 className="flex flex-col gap-3">
               <span className="display text-4xl font-bold">Rollin’</span>
+              {" "}
               <span className="max-w-[30rem] text-2xl leading-snug font-semibold">test-drives your wheelchair through an apartment before you visit.</span>
             </h1>
             <p className="max-w-[34rem] text-lg text-ink-soft">

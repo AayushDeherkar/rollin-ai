@@ -101,7 +101,7 @@ One procedural model (`src/components/chair/wheelchair.tsx`) in every scene, dra
 
 The stage moved to `/app`; `/` is the landing (`src/components/landing/`). `/?demo=1` redirects to `/app?demo=1` in next.config.ts, query intact, so presenter mode still opens the pitch directly.
 
-- Hero: one 3D scene fixed behind the page. The sourced average manual chair (27.0 × 39.8 in) rolls to an example 26 in doorway and stops; the clear width and the shortfall are dimensioned and the doorway is labelled as an illustration. Headline in Big Shoulders at `--text-4xl` (landing only), one line for who it is for, one button, "Size your chair".
+- Hero: one 3D scene fixed behind the page. The sourced average manual chair (27.0 × 39.8 in) rolls up a step-free path to an example 26 in doorway in the front of a home (cased door, lit window, porch lamp, lawn) and stops; the clear width and the shortfall are dimensioned and the doorway is labelled as an illustration. Headline: "Rollin’" in Big Shoulders at `--text-4xl` (landing only), the rest of the sentence as a smaller supporting line at `--text-2xl`; one line for who it is for, one button, "Size your chair".
 - Scrolling moves the camera through the same scene, one pose per beat: the problem (the listing's one checkbox), then measure, test-drive, ask. GSAP ScrollTrigger maps each beat's scroll to the camera; Lenis smooths scrolling. Both run on the landing only.
 - The numbers are read from `/api/insights` and nothing else, with basis, scope and definitions printed beside them; with no batch (the public build) the section says so and shows no figure.
 - Then the way into the app, and About: measured, estimated, unknown, data, limitations, team.
