@@ -543,7 +543,7 @@ function Chair({
     g.position.set(x, 0, -y);
     // theta turns the chair's length axis from +x (model, y up); in three that is a turn about Y
     g.rotation.y = theta;
-    glow.current += ((p < 1 ? 0.55 : 0) - glow.current) * (1 - Math.exp(-Math.min(dt, 0.1) * 5));
+    glow.current += ((p < 1 ? 0.35 : 0) - glow.current) * (1 - Math.exp(-Math.min(dt, 0.1) * 5));
     for (const m of mats.current) {
       if (!m) continue;
       m.color.copy(colours.body);
