@@ -106,7 +106,8 @@ export function Landing() {
           <Link href="/" aria-label="Rollin’, home" className="shrink-0">
             <Image src="/logo.png" alt="" width={56} height={56} priority className="size-14" />
           </Link>
-          <nav aria-label="Page" className="flex flex-wrap items-center gap-x-6 gap-y-2 text-base">
+          {/* an opaque plate: the scene behind it can be the light facade */}
+          <nav aria-label="Page" className="flex flex-wrap items-center gap-x-6 gap-y-2 border border-rule bg-paper py-1 pr-1 pl-5 text-base max-lg:border-0 max-lg:bg-transparent max-lg:p-0">
             <a href="#how" className="text-ink-soft hover:text-ink max-lg:hidden">
               How it works
             </a>
@@ -116,7 +117,7 @@ export function Landing() {
             <a href="#about" className="text-ink-soft hover:text-ink max-lg:hidden">
               About
             </a>
-            <a href="/app" className="border border-rule-strong bg-paper px-4 py-2 font-semibold hover:border-ink">
+            <a href="/app" className="border border-rule-strong bg-paper-lift px-4 py-2 font-semibold hover:border-ink">
               Open the app
             </a>
           </nav>
@@ -126,7 +127,10 @@ export function Landing() {
         <section className="relative z-10 mx-auto flex min-h-[calc(100svh-5rem)] max-w-[90rem] flex-col justify-center px-[var(--gutter)] pb-16">
           {/* on a narrow screen the scene is behind the text, so the text sits on an opaque plate */}
           <div data-hero-text className="flex max-w-[40rem] flex-col gap-6 max-lg:border max-lg:border-rule-strong max-lg:bg-paper-lift max-lg:p-5">
-            <h1 className="display text-4xl font-bold">Rollin’ test-drives your wheelchair through an apartment before you visit.</h1>
+            <h1 className="flex flex-col gap-3">
+              <span className="display text-4xl font-bold">Rollin’</span>
+              <span className="max-w-[30rem] text-2xl leading-snug font-semibold">test-drives your wheelchair through an apartment before you visit.</span>
+            </h1>
             <p className="max-w-[34rem] text-lg text-ink-soft">
               For wheelchair users looking for a place to rent: see the door that stops your chair, and ask the landlord about the rest.
             </p>
@@ -164,7 +168,7 @@ export function Landing() {
 
         {/* how it works: a real sequence, so the steps are numbered */}
         <div id="how" className="relative z-10 mx-auto max-w-[90rem] scroll-mt-8 px-[var(--gutter)] pt-16">
-          <h2 className="display max-w-[30rem] text-3xl font-bold">How it works</h2>
+          <h2 className="display inline-block border border-rule-strong bg-paper-lift px-4 py-2 text-3xl font-bold">How it works</h2>
         </div>
         <Beat beat={2} n={1} title="Measure">
           <p className="text-lg text-ink-soft">
@@ -305,29 +309,26 @@ function About() {
     <section id="about" className="relative z-10 border-t border-rule bg-paper">
       <div className="mx-auto flex max-w-[90rem] flex-col gap-12 px-[var(--gutter)] py-24">
         <h2 className="display text-3xl font-bold">About</h2>
-        <dl className="grid gap-x-12 gap-y-10 md:grid-cols-2">
-          <Fact term="Measured">
-            Walls, doorways and rooms come from each apartment’s Matterport scan. The chair’s size is yours, or a published measured size with its source.
-          </Fact>
-          <Fact term="Estimated, and labelled so">
-            A door’s clear width (the scanned opening less 5 cm for the leaf and stop), what offset hinges would gain (about 1.75 in, assumed), bathroom details read from
-            panoramas, and the outside of the building read from aerial images.
-          </Fact>
-          <Fact term="Unknown, and left unknown">
-            A room behind a doorway the scan did not measure is never called blocked or reachable. It becomes a question for the leasing office.
-          </Fact>
-          <Fact term="Data">
-            Matterport scans and defurnished panoramas, the CoStar hackathon models index to find units near the Texas Medical Center, and Vexcel aerial
-            imagery. None of it is republished here.
-          </Fact>
-          <Fact term="Limitations">
-            The scan has walls but no furniture, thresholds or steps, so turning space is an upper bound. A door within an inch of your chair needs a tape
-            measure. Image answers are model estimates. The agent never sends anything without your approval.
-          </Fact>
-          <Fact term="Team">
-            Aayush Deherkar (engine, agent, data) and Aarohi Agrawal (web, messaging). Built at HackPrinceton, Fall 2026, for the CoStar track.
-          </Fact>
+        <dl className="grid gap-x-10 gap-y-8 xl:grid-cols-3">
+          <Fact term="Measured">Walls, doorways and rooms from each 3D scan. Your chair’s size, or a sourced one.</Fact>
+          <Fact term="Estimated, and labelled">Door clear widths, hinge gains, bathrooms from photos, entrances from aerial images.</Fact>
+          <Fact term="What Rollin’ does not know">Missed doors, steps, thresholds, furniture: questions, sent only when you approve.</Fact>
         </dl>
+        <div className="flex flex-col gap-3 border-t border-rule-strong pt-4">
+          <h3 className="display text-xl font-bold">Data</h3>
+          <ul className="flex flex-wrap gap-x-8 gap-y-2 text-base text-ink-soft">
+            <li>Matterport scans and panoramas</li>
+            <li>CoStar hackathon models index</li>
+            <li>Vexcel aerial imagery</li>
+            <li>None of it is republished here</li>
+          </ul>
+        </div>
+        <div className="flex flex-col gap-3 border-t border-rule-strong pt-4">
+          <h3 className="display text-xl font-bold">Team</h3>
+          <p className="text-base text-ink-soft">
+            Aayush Deherkar, engine, agent and data. Aarohi Agrawal, web and messaging. HackPrinceton Fall 2026, CoStar track.
+          </p>
+        </div>
       </div>
     </section>
   );

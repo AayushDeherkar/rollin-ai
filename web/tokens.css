@@ -34,6 +34,8 @@
   --chair-frame: #d9dfe7; /* the chair: a light neutral that stands off the floor */
   --chair-fabric: #9eabbd;
   --chair-tyre: #222c3a;
+  --scene-lamp: #f4d7a1; /* landing scene only: warm light in a window and a porch lamp, never UI */
+  --scene-lawn: #2c4637; /* landing scene only: the strip of lawn by the path, muted so it never reads as a status */
   /* how much a status floor glows in the 3D model (emissive intensity, 0..1) */
   --glow: 0.22;
 

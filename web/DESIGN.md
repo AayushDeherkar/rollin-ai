@@ -22,6 +22,7 @@ The token names keep their jobs from the drafting sheet: `paper` is the ground a
 | `--reach` | `#80d69a` | Reachable: flat wash, check icon |
 | `--block` | `#ff8f80` | Blocked / not passable: 45° hatch, ban icon |
 | `--unknown` | `#c2b8a6` | Not measured: stipple, question icon |
+| `--scene-lamp` / `--scene-lawn` | `#f4d7a1` / `#2c4637` | The landing's doorway scene only: warm light in the window and porch lamp, and the lawn strip. Never used in the interface. |
 | `--glow` | `0.22` | How much a status floor glows in the model. Restrained: a status is a lit floor, not a neon sign. |
 
 Status is never colour alone. Every status has a colour, a fill pattern (`PatternDefs` in `src/components/sheet/status.tsx`; the same hatch and stipple are painted on the model's floors), an icon and a word.
