@@ -4,13 +4,26 @@ import { useId, useState } from "react";
 import { CHAIR_LIMITS, TURNING_IN, sweptIn, type ChairIn } from "@/lib/stage";
 import { shortName, useSourcedPresets, type SourcedPreset } from "@/lib/presets";
 import { cn } from "@/lib/utils";
+import type { ChairKind } from "@/components/chair/wheelchair";
 
 /**
  * Step 1's controls, bottom-left over the scene: sourced presets (the source of the one under the
  * pointer, or the one chosen, shown beneath them), width and length, what the rings on the floor
  * mean, and the one primary action.
  */
-export function ChairPlate({ chair, onChair, onFind }: { chair: ChairIn; onChair: (c: ChairIn) => void; onFind: () => void }) {
+export function ChairPlate({
+  chair,
+  onChair,
+  kind,
+  onKind,
+  onFind,
+}: {
+  chair: ChairIn;
+  onChair: (c: ChairIn) => void;
+  kind: ChairKind;
+  onKind: (k: ChairKind) => void;
+  onFind: () => void;
+}) {
   const presets = useSourcedPresets();
   const chosen = presets.find((p) => p.width_in === chair[0] && p.length_in === chair[1]) ?? null;
   const [hover, setHover] = useState<SourcedPreset | null>(null);
@@ -33,7 +46,12 @@ export function ChairPlate({ chair, onChair, onFind }: { chair: ChairIn; onChair
               type="button"
               aria-pressed={chosen?.name === p.name}
               aria-describedby="preset-source"
-              onClick={() => onChair([p.width_in, p.length_in])}
+              onClick={() => {
+                onChair([p.width_in, p.length_in]);
+                // the measured sizes name their chair; the drawing follows (the engine only tests the footprint)
+                if (/^power/i.test(p.name)) onKind("power");
+                else if (/^manual/i.test(p.name)) onKind("manual");
+              }}
               onMouseEnter={() => setHover(p)}
               onFocus={() => setHover(p)}
               onBlur={() => setHover(null)}
@@ -67,6 +85,25 @@ export function ChairPlate({ chair, onChair, onFind }: { chair: ChairIn; onChair
         </p>
       </div>
       <div className="flex flex-col gap-3">
+        <div role="group" aria-label="Chair drawn" className="grid grid-cols-[4rem_minmax(0,1fr)] items-center gap-3">
+          <span className="text-base font-semibold">Chair</span>
+          <div className="flex">
+            {(["manual", "power"] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={kind === k}
+                onClick={() => onKind(k)}
+                className={cn(
+                  "min-h-10 flex-1 border px-3 text-base transition-colors transition-draft first:border-r-0",
+                  kind === k ? "border-ink bg-paper-deep font-semibold text-ink" : "border-rule-strong text-ink-soft hover:text-ink",
+                )}
+              >
+                {k === "manual" ? "Manual" : "Power"}
+              </button>
+            ))}
+          </div>
+        </div>
         <Slider label="Width" value={chair[0]} range={CHAIR_LIMITS.width} onChange={(w) => onChair([w, chair[1]])} />
         <Slider label="Length" value={chair[1]} range={CHAIR_LIMITS.length} onChange={(l) => onChair([chair[0], l])} />
         <p className="text-sm text-ink-soft">Width is the chair with its user (what has to pass a door). Set your own chair’s width and length.</p>

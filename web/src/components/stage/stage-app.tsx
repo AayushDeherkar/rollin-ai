@@ -33,6 +33,7 @@ import { PUBLIC_REPLAY } from "@/lib/public";
 import { useOutboxEvents, type AnswerEvent } from "@/lib/outbox-events";
 import { ChairPlate } from "./chair-plate";
 import { ChairScene } from "./chair-scene";
+import type { ChairKind } from "@/components/chair/wheelchair";
 import { MoreScreen } from "./more-screen";
 
 const StageCanvas = dynamic(() => import("./stage-canvas").then((m) => m.StageCanvas), { ssr: false });
@@ -108,6 +109,8 @@ function Stage() {
   const [entry] = useState(readEntry);
   const [step, setStep] = useState<Step>(entry.sid || entry.demo ? "apartment" : entry.search ? "search" : "chair");
   const [chair, setChair] = useState<ChairIn>(START_CHAIR);
+  /** which chair is drawn on the footprint: a picture only, the engine tests width × length */
+  const [chairKind, setChairKind] = useState<ChairKind>("manual");
   /** the chair the search was started with: the profile sent to /api/chat */
   const [profile, setProfile] = useState<ChairIn | null>(entry.search ? START_CHAIR : null);
   /** the unit the apartment step shows */
@@ -460,7 +463,7 @@ function Stage() {
       {/* isolate: the scene's labels stack inside the canvas layer, under every plate */}
       <div className="absolute inset-0 isolate">
         <StageCanvas pose={pose} onFallback={fallBack}>
-          <ChairScene chair={step === "chair" ? chair : (profile ?? chair)} visible={step !== "apartment"} />
+          <ChairScene chair={step === "chair" ? chair : (profile ?? chair)} kind={chairKind} visible={step !== "apartment"} />
           {origin && (
             <FieldScene
               units={units}
@@ -479,6 +482,7 @@ function Stage() {
               ruler={driving || ride ? null : rulerEdge}
               unit={unit}
               floor={floor}
+              chairKind={chairKind}
               drive={drive}
               driving={driving}
               progress={progress}
@@ -517,7 +521,7 @@ function Stage() {
         {step === "chair" && (
           <>
             <div className="stage-left justify-end" data-wide>
-              <ChairPlate chair={chair} onChair={setChair} onFind={find} />
+              <ChairPlate chair={chair} onChair={setChair} kind={chairKind} onKind={setChairKind} onFind={find} />
             </div>
             {notice && <div className="stage-right justify-end">{notice}</div>}
           </>

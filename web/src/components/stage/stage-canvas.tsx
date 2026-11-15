@@ -56,6 +56,8 @@ export function StageCanvas({ pose, onFallback, children }: { pose: Pose; onFall
         <color attach="background" args={[palette.paper]} />
         <hemisphereLight args={[palette.ink, palette.paper, 0.75]} />
         <directionalLight position={[-6, 12, 6]} intensity={1.1} color={palette.ink} />
+        {/* one rim light from behind and low, so the chair's tubes and wheels read against the dark ground */}
+        <directionalLight position={[5, 3.5, -8]} intensity={0.9} color={palette.ink} />
         <Guards onFallback={onFallback} />
         <Director pose={pose} />
         <Table rule={palette.rule} ruleStrong={palette.ruleStrong} />

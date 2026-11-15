@@ -21,6 +21,7 @@ import { M_PER_IN, centroid, doorGeometry, floorBounds, wallSegments } from "@/l
 import { readPalette, type Palette } from "@/lib/tokens";
 import { STATUS } from "@/components/sheet/status";
 import { CalloutBody } from "@/components/plan/chair-callout";
+import { Wheelchair, useChairMaterials, type ChairKind, type ChairMaterials } from "@/components/chair/wheelchair";
 
 export const WALL_H = 2.4;
 const DOOR_H = 2.03;
@@ -63,6 +64,7 @@ export function Dollhouse(props: DollhouseProps) {
           <color attach="background" args={[palette.paper]} />
           <hemisphereLight args={[palette.ink, palette.paper, 0.75]} />
           <directionalLight position={[-span, span * 1.6, span * 0.8]} intensity={1.1} color={palette.ink} />
+          <directionalLight position={[span * 0.6, span * 0.45, -span]} intensity={0.9} color={palette.ink} />
           <Guards onFallback={props.onFallback} />
           <Rig {...props} centre={centre} span={span} />
           <Model {...props} />
@@ -77,10 +79,12 @@ export interface ModelProps extends Omit<DollhouseProps, "onFallback"> {
   callout?: boolean;
   /** room names over the floors (HTML, so they do not follow the walls lying flat; the stage hides them off its step) */
   labels?: boolean;
+  /** which chair to draw on the footprint (a picture only: the engine tests the footprint) */
+  chairKind?: ChairKind;
 }
 
 /** The model itself, in model coordinates centred on the base board: shared by the classic view and the stage. */
-export function Model({ callout = true, labels = true, ...props }: ModelProps) {
+export function Model({ callout = true, labels = true, chairKind = "manual", ...props }: ModelProps) {
   const [palette] = useState(readPalette);
   const b = useMemo(() => floorBounds(props.floor), [props.floor]);
   const centre: Point = [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2];
@@ -93,7 +97,7 @@ export function Model({ callout = true, labels = true, ...props }: ModelProps) {
       <Doors floor={props.floor} palette={palette} hinges={hinges} drive={props.drive} driving={props.driving} onOpen={props.onDoorOpen} />
       <TurningCircles floor={props.floor} palette={palette} />
       {labels && <RoomLabels floor={props.floor} />}
-      {props.drive && <Chair chairIn={props.unit.chair_in} drive={props.drive} progress={props.progress} s={props.s} palette={palette} />}
+      {props.drive && <Chair chairIn={props.unit.chair_in} kind={chairKind} drive={props.drive} progress={props.progress} s={props.s} palette={palette} />}
       {callout && props.drive && !props.driving && <Callout drive={props.drive} chairIn={props.unit.chair_in} hinges={hinges} />}
     </group>
   );
@@ -508,31 +512,27 @@ function RoomLabels({ floor }: { floor: Floor }) {
   );
 }
 
-/** The chair: seat, back and wheels on the width × length footprint the engine tested. */
+/** The chair, on the width × length footprint the engine tested, driven along the engine's path. */
 function Chair({
   chairIn,
+  kind,
   drive,
   progress,
   s,
   palette,
 }: {
   chairIn: [number, number];
+  kind: ChairKind;
   drive: Drive;
   progress: MotionValue<number>;
   s: RouteSampler;
   palette: Palette;
 }) {
   const body = useRef<THREE.Group>(null);
-  const mats = useRef<THREE.MeshStandardMaterial[]>([]);
-  // the body keeps one colour; driving shows as a cobalt glow that eases in and out. (It used to swap the
+  const materials = useChairMaterials(palette);
+  // the chair keeps its own colours; driving shows as a cobalt glow that eases in and out. (It used to swap the
   // body colour from cobalt to ink at every stop: under the key light the pale ink read as a white flash.)
-  const colours = useMemo(
-    () => ({
-      agent: new THREE.Color(palette.agent),
-      body: new THREE.Color(palette.inkSoft),
-    }),
-    [palette],
-  );
+  const agent = useMemo(() => new THREE.Color(palette.agent), [palette]);
   const glow = useRef(0);
   const track = useMemo(() => drive.route.map(([x, y]) => v3(x, y, 0.015)), [drive.route]);
   useFrame((_, dt) => {
@@ -544,10 +544,8 @@ function Chair({
     // theta turns the chair's length axis from +x (model, y up); in three that is a turn about Y
     g.rotation.y = theta;
     glow.current += ((p < 1 ? 0.35 : 0) - glow.current) * (1 - Math.exp(-Math.min(dt, 0.1) * 5));
-    for (const m of mats.current) {
-      if (!m) continue;
-      m.color.copy(colours.body);
-      m.emissive.copy(colours.agent);
+    for (const m of [materials.frame, materials.fabric]) {
+      m.emissive.copy(agent);
       m.emissiveIntensity = glow.current;
     }
   });
@@ -555,25 +553,29 @@ function Chair({
     <>
       <Line points={track} color={palette.ruleStrong} lineWidth={1.5} dashed dashSize={0.15} gapSize={0.1} />
       <group ref={body}>
-        <ChairBody chairIn={chairIn} palette={palette} mats={mats} />
+        <ChairBody chairIn={chairIn} kind={kind} palette={palette} materials={materials} />
       </group>
     </>
   );
 }
 
 /**
- * The chair drawn on its width × length footprint (the shape the engine tests). Seat, back and
- * wheels are drawing proportions, not measurements. `mats` collects the materials for recolouring.
+ * The chair drawn on its width × length footprint (the shape the engine tests, outlined on the floor).
+ * The modelled chair inside it is a drawing, not a measurement (components/chair/wheelchair.tsx).
  */
 export function ChairBody({
   chairIn,
+  kind = "manual",
   palette,
-  mats,
+  materials,
 }: {
   chairIn: [number, number];
+  kind?: ChairKind;
   palette: Palette;
-  mats?: { current: THREE.MeshStandardMaterial[] };
+  /** pass the materials to drive them (the glow); otherwise the chair makes its own */
+  materials?: ChairMaterials;
 }) {
+  const own = useChairMaterials(palette);
   const W = chairIn[0] * M_PER_IN;
   const L = chairIn[1] * M_PER_IN;
   const footprint = useMemo(
@@ -587,42 +589,10 @@ export function ChairBody({
       ] as [number, number, number][],
     [W, L],
   );
-  const mat = (i: number) => (
-    <meshStandardMaterial
-      ref={(m) => {
-        if (m && mats) mats.current[i] = m;
-      }}
-      color={palette.ink}
-      roughness={0.6}
-    />
-  );
-  const wheelR = Math.min(0.3, W / 2);
   return (
     <>
       <Line points={footprint} color={palette.ink} lineWidth={1.5} />
-      {/* seat */}
-      <mesh position={[0, 0.5, 0]}>
-        <boxGeometry args={[L * 0.6, 0.07, W * 0.8]} />
-        {mat(0)}
-      </mesh>
-      {/* back, at one end: the engine's chair has no front, so this is only a picture */}
-      <mesh position={[-L * 0.3, 0.78, 0]}>
-        <boxGeometry args={[0.06, 0.5, W * 0.8]} />
-        {mat(1)}
-      </mesh>
-      {/* drive wheels and casters */}
-      {[-1, 1].map((k) => (
-        <mesh key={`w${k}`} position={[-L * 0.15, wheelR, (k * (W - 0.05)) / 2]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[wheelR, wheelR, 0.04, 28]} />
-          {mat(2 + (k + 1) / 2)}
-        </mesh>
-      ))}
-      {[-1, 1].map((k) => (
-        <mesh key={`c${k}`} position={[L * 0.4, 0.08, (k * (W - 0.12)) / 2]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.08, 0.08, 0.04, 16]} />
-          {mat(4 + (k + 1) / 2)}
-        </mesh>
-      ))}
+      <Wheelchair chairIn={chairIn} kind={kind} materials={materials ?? own} />
     </>
   );
 }
