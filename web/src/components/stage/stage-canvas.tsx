@@ -98,7 +98,18 @@ function Director({ pose }: { pose: Pose }) {
     look: new THREE.Vector3(0, 0.45, 0),
     first: true,
   });
-  useFrame(({ camera, clock }, dt) => {
+  // the scene's centre is drawn in the middle of the open space between the overlay's rails
+  // (a shifted projection, not a moved camera), so the chair and its door are never under a panel
+  const zone = useRef({ x: 0, y: 0, tx: 0, ty: 0, n: 0 });
+  useFrame(({ camera, clock, size }, dt) => {
+    const z = zone.current;
+    if (z.n++ % 12 === 0) [z.tx, z.ty] = openSpaceCentre(size.width, size.height);
+    const kz = reduce || st.current.first ? 1 : 1 - Math.exp(-Math.min(dt, 0.1) * 4);
+    z.x += (z.tx - z.x) * kz;
+    z.y += (z.ty - z.y) * kz;
+    const pc = camera as THREE.PerspectiveCamera;
+    if (Math.abs(z.x) > 0.5 || Math.abs(z.y) > 0.5) pc.setViewOffset(size.width, size.height, -z.x, -z.y, size.width, size.height);
+    else if (pc.view?.enabled) pc.clearViewOffset();
     const s = st.current;
     s.goal.rate = undefined;
     s.goal.fov = undefined;
@@ -118,4 +129,24 @@ function Director({ pose }: { pose: Pose }) {
     }
   });
   return null;
+}
+
+/**
+ * Offset (px, from the canvas centre) of the middle of the space the overlay leaves open: between
+ * the left region (unless evidence spans into the middle) and the right rail, under the top bar
+ * and over the bottom strip. When that space is too small to matter, the plain centre.
+ */
+function openSpaceCentre(w: number, h: number): [number, number] {
+  const rect = (sel: string) => document.querySelector(sel)?.getBoundingClientRect() ?? null;
+  const L = rect(".stage-left:not([data-span])");
+  const R = rect(".stage-right");
+  const T = rect(".stage-top");
+  const B = rect(".stage-bottom");
+  let x0 = L ? L.right : 0;
+  let x1 = R ? R.left : w;
+  if (x1 - x0 < w * 0.3) [x0, x1] = [0, w];
+  let y0 = T ? T.bottom : 0;
+  let y1 = B ? B.top : h;
+  if (y1 - y0 < h * 0.3) [y0, y1] = [0, h];
+  return [(x0 + x1) / 2 - w / 2, (y0 + y1) / 2 - h / 2];
 }

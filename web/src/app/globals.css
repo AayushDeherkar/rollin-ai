@@ -117,7 +117,8 @@
     @apply border-border outline-ring;
   }
   html {
-    font-size: var(--text-base);
+    /* the reader's own size (16px by default): rem in tokens.css is relative to this */
+    font-size: 100%;
   }
   body {
     background: var(--paper);
@@ -197,5 +198,92 @@
   .transition-draft {
     transition-timing-function: var(--ease-draft);
     transition-duration: var(--dur-2);
+  }
+}
+
+/*
+ * The stage overlay grid: four regions over the full-screen scene (web/DESIGN.md, "Stage layout").
+ * Collision rules: regions never overlap, because they are grid areas, not absolute boxes;
+ * a panel never leaves its region: it shrinks and scrolls inside (min-height: 0 + overflow);
+ * the left region may widen into the middle column (evidence), never into the right rail;
+ * a region that is empty gives its column or row back to the scene.
+ */
+@layer components {
+  .stage-grid {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    pointer-events: none;
+    padding: var(--gutter);
+    gap: var(--gutter);
+    grid-template-columns: minmax(0, var(--rail-l, var(--rail-left))) minmax(0, 1fr) minmax(0, var(--rail-r, var(--rail-right)));
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "top top top"
+      "left mid right"
+      "bottom bottom bottom";
+  }
+  /* no right rail: its column goes back to the scene */
+  .stage-grid:not(:has(> .stage-right)) {
+    --rail-r: 0px;
+    column-gap: 0;
+  }
+  .stage-grid:not(:has(> .stage-right)) > .stage-left {
+    margin-right: var(--gutter);
+  }
+  .stage-grid:has(> .stage-left[data-wide]) {
+    --rail-l: var(--rail-left-wide);
+  }
+  .stage-top {
+    grid-area: top;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--gutter);
+    min-width: 0;
+  }
+  .stage-left,
+  .stage-right {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--gutter) * 0.75);
+    min-height: 0;
+    min-width: 0;
+  }
+  .stage-left {
+    grid-area: left;
+  }
+  .stage-right {
+    grid-area: right;
+  }
+  /* evidence opens across the left and middle columns, never over the right rail */
+  .stage-left[data-span="mid"] {
+    grid-column: left-start / mid-end;
+  }
+  /* no bottom strip: the side regions take that row too */
+  .stage-grid:not(:has(> .stage-bottom)) > .stage-left,
+  .stage-grid:not(:has(> .stage-bottom)) > .stage-right {
+    grid-row: 2 / 4;
+  }
+  .stage-bottom {
+    grid-area: bottom;
+    display: flex;
+    align-items: flex-end;
+    min-width: 0;
+  }
+  /* every panel in a region can shrink, and scrolls inside rather than overflowing */
+  .stage-left > *,
+  .stage-right > * {
+    min-height: 0;
+    flex-shrink: 1;
+  }
+  .stage-left > [data-fixed],
+  .stage-right > [data-fixed] {
+    flex-shrink: 0;
+  }
+  .stage-panel {
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 }

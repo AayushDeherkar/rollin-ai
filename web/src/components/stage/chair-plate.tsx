@@ -16,7 +16,9 @@ export function ChairPlate({ chair, onChair, onFind }: { chair: ChairIn; onChair
   const [hover, setHover] = useState<SourcedPreset | null>(null);
   const shown = hover ?? chosen;
   return (
-    <section aria-labelledby="chair-title" className="pointer-events-auto flex w-[520px] flex-col gap-5 border border-rule-strong bg-paper-lift p-6">
+    <section aria-labelledby="chair-title" className="pointer-events-auto flex w-full flex-col border border-rule-strong bg-paper-lift">
+      {/* the body scrolls in a short window; the one action stays below it, always in view */}
+      <div className="stage-panel flex min-h-0 flex-col gap-[clamp(0.75rem,2.2vh,1.25rem)] p-[clamp(1rem,2.5vh,1.5rem)]">
       <div className="flex flex-col gap-1">
         <h1 id="chair-title" className="display text-2xl font-bold">
           Size your chair
@@ -24,7 +26,7 @@ export function ChairPlate({ chair, onChair, onFind }: { chair: ChairIn; onChair
         <p className="text-base text-ink-soft">Rollin’ drives this footprint through each apartment’s doorways.</p>
       </div>
       <div className="flex flex-col gap-2">
-        <div role="group" aria-label="Measured sizes" className="grid grid-cols-2 gap-2" onMouseLeave={() => setHover(null)}>
+        <div role="group" aria-label="Measured sizes" className="grid grid-cols-[repeat(auto-fill,minmax(11.5rem,1fr))] gap-2" onMouseLeave={() => setHover(null)}>
           {presets.map((p) => (
             <button
               key={p.name}
@@ -36,11 +38,11 @@ export function ChairPlate({ chair, onChair, onFind }: { chair: ChairIn; onChair
               onFocus={() => setHover(p)}
               onBlur={() => setHover(null)}
               className={cn(
-                "flex h-14 flex-col items-start justify-center border px-3 text-left transition-colors transition-draft",
+                "flex min-h-14 flex-col items-start justify-center border px-3 py-1 text-left transition-colors transition-draft",
                 chosen?.name === p.name ? "border-ink bg-paper-deep text-ink" : "border-rule-strong text-ink-soft hover:border-ink hover:text-ink",
               )}
             >
-              <span className="text-sm leading-tight font-semibold whitespace-nowrap">{shortName(p.name)}</span>
+              <span className="text-sm leading-tight font-semibold">{shortName(p.name)}</span>
               <span className="measure text-sm leading-tight">
                 {p.width_in.toFixed(1)} × {p.length_in.toFixed(1)} in
               </span>
@@ -82,13 +84,16 @@ export function ChairPlate({ chair, onChair, onFind }: { chair: ChairIn; onChair
           </span>
         </li>
       </ul>
+      </div>
+      <div className="shrink-0 border-t border-rule px-[clamp(1rem,2.5vh,1.5rem)] py-[clamp(0.75rem,2vh,1rem)]">
       <button
         type="button"
         onClick={onFind}
-        className="h-12 bg-ink px-5 text-left text-lg font-semibold text-paper transition-colors transition-draft hover:bg-ink-soft"
+        className="min-h-12 w-full bg-ink px-5 text-left text-lg font-semibold text-paper transition-colors transition-draft hover:bg-ink-soft"
       >
         Find where this fits
       </button>
+      </div>
     </section>
   );
 }
@@ -96,7 +101,7 @@ export function ChairPlate({ chair, onChair, onFind }: { chair: ChairIn; onChair
 function Slider({ label, value, range, onChange }: { label: string; value: number; range: readonly [number, number]; onChange: (v: number) => void }) {
   const id = useId();
   return (
-    <div className="grid grid-cols-[64px_minmax(0,1fr)_88px] items-center gap-3">
+    <div className="grid grid-cols-[4rem_minmax(0,1fr)_5.5rem] items-center gap-3">
       <label htmlFor={id} className="text-base font-semibold">
         {label}
       </label>

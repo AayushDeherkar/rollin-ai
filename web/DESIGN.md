@@ -29,7 +29,7 @@ Status is never colour alone. Every status has a colour, a fill pattern (`Patter
 - **Display:** Big Shoulders (a condensed sans in the spirit of drafting lettering) for panel titles, the wordmark and empty-state titles.
 - **Text:** Public Sans (US Web Design System, built for legibility) for everything you read.
 - **Measure:** IBM Plex Mono with tabular, slashed-zero figures for every number that is a measurement (`.measure`).
-- Scale: 16 / 18 / 22 / 28 / 36 / 52 px. **Nothing is below 16 px.** Body text is 18 px.
+- Scale, in rem so it follows the reader's font size and browser zoom: 1 / 1.125 rem, then 22 / 28 / 36 / 52 px at 1440x900 for the four larger steps, which `clamp()` down a little on smaller screens. **Nothing is below 1 rem (16 px).** Body text is 1.125 rem (18 px). The root is the reader's own size (`html { font-size: 100% }`); spacing is rem too (`--space: 0.25rem`).
 - Sentence case. No tracked-out caps eyebrows.
 
 ## The model (3D, main view)
@@ -89,6 +89,13 @@ The steps are a real sequence, so the step bar numbers them.
 - Status is never colour alone: points carry a shape (post, cross-bar, hollow ring), rooms carry hatch, icon and word.
 - The accent cobalt appears only while the agent is acting: the pill while streaming, the narration bullet, the checking pulse on a point, the chair while it drives.
 - Keyboard: steps, presets, sliders, cards, room strip and every evidence link are real buttons and inputs. Esc closes the pill, the evidence and the approval card's details.
+
+### Stage layout
+
+- The interface is one CSS grid over the scene (`.stage-grid` in globals.css), never absolutely placed boxes. Four regions: **top** (step bar, agent pill), **left** panel, **right** rail, **bottom** strip, around an open middle where the scene shows. Rail widths and the gutter are `clamp()`ed tokens (`--rail-left`, `--rail-left-wide` for step 1, `--rail-right`, `--gutter`).
+- Collision rules: regions never overlap (they are grid areas); a panel never leaves its region, it shrinks and scrolls inside (`.stage-panel`); evidence widens the left region into the middle, never over the right rail; the agent trace takes the right rail while open (it replaces the shortlist there); the approval card has the left rail first, so the field legend steps aside while it is open; an empty region gives its space back to the scene; step 1's action sits below the scrolling body, always in view.
+- The camera's projection is shifted so the scene's centre is drawn in the middle of the open space (`setViewOffset`), so the chair and its door are not under a panel.
+- Checked in a production build at 1280x720, 1366x768, 1440x900, 1536x864 and 1920x1080, each at 100, 125 and 150% zoom, in every scene: nothing overlaps or leaves the viewport.
 
 ### Camera choreography
 

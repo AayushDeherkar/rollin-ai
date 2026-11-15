@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 /** The headline verdict, top-left under the step bar. */
 export function VerdictLine({ unit, verdict, replay }: { unit: UnitResult; verdict: Verdict; replay: string | null }) {
   return (
-    <section aria-label="Verdict" className="pointer-events-auto flex max-w-[640px] flex-col gap-1 border border-rule-strong bg-paper-lift px-5 py-3">
+    <section aria-label="Verdict" data-fixed className="pointer-events-auto flex max-w-[40rem] flex-col gap-1 border border-rule-strong bg-paper-lift px-5 py-3">
       <p className="text-base text-ink-soft">{unit.name}</p>
       <h1 className="display text-2xl font-bold" aria-live="polite">
         {verdict.text}
@@ -110,7 +110,7 @@ export function RoomCard({
     return shown.reason ?? "The chair cannot reach this room.";
   })();
   return (
-    <section aria-labelledby="room-title" className="pointer-events-auto flex max-h-[calc(100vh-15rem)] w-[400px] flex-col gap-4 overflow-y-auto border-2 border-ink bg-paper-lift p-5">
+    <section aria-labelledby="room-title" className="stage-panel pointer-events-auto flex w-full flex-col gap-4 border-2 border-ink bg-paper-lift p-5">
       <header className="flex flex-col gap-1">
         <h2 id="room-title" className="display text-2xl font-bold">
           {room.label}
@@ -221,13 +221,13 @@ export function EvidencePanel({
   }, [kind, onClose]);
   if (kind === "tour") {
     return (
-      <div className="pointer-events-auto relative h-[560px] w-[760px]">
+      <div className="pointer-events-auto relative min-h-[clamp(14rem,45vh,35rem)] w-full flex-1">
         <TourPanel sid={sid} unitName={unit.name} door={door} onClose={onClose} />
       </div>
     );
   }
   return (
-    <section ref={box} tabIndex={-1} aria-label={kind === "photo" ? "Panorama" : "Aerial"} className="pointer-events-auto flex w-[640px] flex-col gap-3 border-2 border-ink bg-paper-lift p-4 outline-none">
+    <section ref={box} tabIndex={-1} aria-label={kind === "photo" ? "Panorama" : "Aerial"} className="stage-panel pointer-events-auto flex w-full max-w-[44rem] flex-col gap-3 border-2 border-ink bg-paper-lift p-4 outline-none">
       <header className="flex items-center justify-between">
         <h2 className="display text-xl font-bold">{kind === "photo" ? `Panorama near the ${photo?.room?.toLowerCase() ?? "room"}` : "The building from the air"}</h2>
         <button type="button" onClick={onClose} aria-label="Close" className="flex size-10 items-center justify-center hover:bg-paper-deep">
@@ -272,7 +272,7 @@ function Panorama({ sid, item }: { sid: string; item: VisionItem }) {
 /** What the model's marks mean, and one-line hints the first time. */
 export function ApartmentLegend({ hint }: { hint: string | null }) {
   return (
-    <div className="pointer-events-auto flex flex-col gap-2 border border-rule-strong bg-paper-lift px-4 py-3 text-sm">
+    <div className="stage-panel pointer-events-auto flex flex-col gap-2 self-start border border-rule-strong bg-paper-lift px-4 py-3 text-sm">
       <ul aria-label="Legend" className="flex flex-col gap-1.5">
         {(["reachable", "blocked", "unknown"] as const).map((s) => (
           <li key={s} className="flex items-center gap-2">
