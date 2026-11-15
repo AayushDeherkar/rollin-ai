@@ -58,9 +58,12 @@ if (leasing) {
 await photon.listen(async (m) => {
   log(`Message ${m.messageId} received.`);
   if (leasing && sameHandle(m.from, leasing)) {
-    // the leasing office: opens the line, or answers the last message delivered; never a search
+    // the leasing office: never a renter’s request. Its first text is acknowledged in one line; later ones
+    // answer the last message delivered
     try {
-      log(await deliverer.fromOffice(m.from, m.spaceId, m.agentId, m.text));
+      const { log: said, reply } = await deliverer.fromOffice(m.from, m.spaceId, m.agentId, m.text);
+      log(said);
+      if (reply) await photon.reply(m, reply, 1);
     } catch (err) {
       log(`Could not log the leasing office's reply: ${err instanceof Error ? err.message : String(err)}`);
     }
