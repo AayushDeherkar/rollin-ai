@@ -293,7 +293,7 @@ function Numbers({ sweep, state, lineRef }: { sweep: Sweep | null; state: "loadi
       </div>
       {/* the summary under the graph, full width: what one point means, and that it is estimated */}
       <p className="max-w-[60rem] text-base text-ink-soft">
-        Each point is how many of {sweep.units} apartments near {sweep.area} a chair that wide can reach in every room, estimated from the scans. The dashed
+        Each point is how many of {sweep.units} apartments near {sweep.area} a chair that wide can reach in every room (its length assumed to scale with width), estimated from the scans. The dashed
         line adds offset hinges on every door{sweep.generated ? `. Our batch, run ${sweep.generated}.` : "."}
       </p>
     </>
