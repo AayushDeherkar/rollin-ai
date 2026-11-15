@@ -289,19 +289,13 @@ function Numbers({ sweep, state, lineRef }: { sweep: Sweep | null; state: "loadi
               </p>
             </div>
           )}
-          <div className="flex flex-col gap-2 text-sm text-ink-soft">
-            <p>
-              <span className="text-ink">Basis:</span> {sweep.basis}. Our batch over {sweep.units} units in {sweep.area}
-              {sweep.radiusKm !== null ? ` (within ${sweep.radiusKm} km)` : ""}
-              {sweep.generated ? `, run ${sweep.generated}` : ""}.
-            </p>
-            {sweep.unitsMeans && <p>Units: {sweep.unitsMeans}.</p>}
-            {sweep.fullyMeans && <p>Fully reachable: {sweep.fullyMeans}.</p>}
-            {sweep.hingesMeans && <p>Unlocked by hinges: {sweep.hingesMeans}; the hinge gain is an assumption.</p>}
-            {sweep.lengthRule && <p>Chair length: {sweep.lengthRule}.</p>}
-          </div>
         </div>
       </div>
+      {/* the summary under the graph, full width: what one point means, and that it is estimated */}
+      <p className="max-w-[60rem] text-base text-ink-soft">
+        Each point is how many of {sweep.units} apartments near {sweep.area} a chair that wide can reach in every room, estimated from the scans. The dashed
+        line adds offset hinges on every door{sweep.generated ? `. Our batch, run ${sweep.generated}.` : "."}
+      </p>
     </>
   );
 }
