@@ -290,7 +290,7 @@ function Stage() {
           // a close chase view: behind the chair and above the walls (2.4 m), looking down past it about a
           // metre along the path, so the chair stays in view and no wall stands between; into the room once arrived
           const p = progress.get();
-          const [cx, cy] = route.at(p);
+          const [cx, cy, theta] = route.at(p);
           const ahead = route.length > 0 ? 0.9 / route.length : 1;
           const [ax, ay] = route.at(Math.min(1, p + ahead));
           let dx = ax - cx;
@@ -304,6 +304,8 @@ function Stage() {
             const [bx, by] = route.at(Math.max(0, p - ahead));
             [dx, dy] = [cx - bx, cy - by];
           }
+          // a one-point route at the room's middle (no path from the engine): the chair's own heading
+          if (Math.hypot(dx, dy) < 1e-3) [dx, dy] = [Math.cos(theta), Math.sin(theta)];
           const n = Math.hypot(dx, dy) || 1;
           const [wx, , wz] = modelToWorld(at, c, [cx, cy]);
           const fx = dx / n;
