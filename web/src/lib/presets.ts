@@ -55,8 +55,9 @@ export function useSourcedPresets(): SourcedPreset[] {
     const ac = new AbortController();
     fetch("/api/insights", { signal: ac.signal })
       .then((r) => (r.ok ? r.json() : null))
-      .then((b: { presets?: unknown } | null) => {
-        const p = parsePresets(b?.presets);
+      // the API calls them chair_presets (contracts/README.md, "Insights")
+      .then((b: { chair_presets?: unknown } | null) => {
+        const p = parsePresets(b?.chair_presets);
         if (p && !ac.signal.aborted) setPresets(namedSources(p));
       })
       .catch(() => {});
