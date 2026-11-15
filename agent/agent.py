@@ -405,7 +405,7 @@ def _room_rank(words: str) -> int:
 
 
 _DRAFTED: dict[str, set[str]] = {}              # recipient label -> every unit drafted for it (names repeat)
-NUMBERED_Q = re.compile(r"^\s*(\d{1,2})\.\s+(.+?)\s*$")
+NUMBERED_Q = re.compile(r"^\s*(\d{1,2})[.)]\s+(.+?)\s*$")     # "1." or "1)"; outbound_text rewrites both as "1."
 
 
 def draft_landlord_message(sid: str, questions: list[str] | None = None, chair_width_in: float | None = None) -> dict:
@@ -417,7 +417,8 @@ def draft_landlord_message(sid: str, questions: list[str] | None = None, chair_w
     name = get_unit(sid).get("name") or sid
     extra = [q for q in map(_full_question, questions or []) if q]
     qs = unit_questions(sid, w, l, extra, chair_known)
-    dropped = [q for q in extra if q not in qs] + [q for q in questions or [] if not _full_question(q)]
+    over_cap = [q for q in extra if q not in qs]
+    fragments = [q for q in questions or [] if not _full_question(q)]
     who = f"My client uses a wheelchair {w:g} inches wide" if chair_known else "My client uses a wheelchair"
     lines = [with_ai_disclosure(f"{who} and is interested in your {name} floor plan."),
              "Could you help with a few quick questions? A one-line answer to each is plenty."]
@@ -426,8 +427,10 @@ def draft_landlord_message(sid: str, questions: list[str] | None = None, chair_w
     to = f"Leasing office ({name})"
     _DRAFTED.setdefault(to, set()).add(sid)
     out = {"sid": sid, "to": to, "text": "\n".join(lines)}
-    if dropped:                                     # say so, never drop a question silently
-        out["not_asked"] = {"questions": dropped, "why": f"at most {MAX_QUESTIONS} complete questions per message"}
+    if over_cap or fragments:                       # say so, never drop a question silently
+        out["not_asked"] = {"questions": over_cap + fragments, "why": "; ".join(
+            ([f"at most {MAX_QUESTIONS} questions per message"] if over_cap else []) +
+            (["not a complete question ending in '?'"] if fragments else []))}
     return out
 
 
